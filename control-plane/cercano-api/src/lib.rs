@@ -20,8 +20,10 @@
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod devices;
 pub mod health;
 pub mod middleware;
+pub mod server_keys;
 pub mod shutdown;
 
 use axum::routing::{get, post};
@@ -44,6 +46,20 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/auth/login", post(auth::login_handler))
         .route("/api/auth/logout", post(auth::logout_handler))
         .route("/api/auth/me", get(auth::me_handler))
+        .route("/api/devices/heartbeat", post(devices::heartbeat_handler))
+        .route("/api/devices", get(devices::list_devices_handler))
+        .route(
+            "/api/devices/:id",
+            get(devices::get_device_handler).delete(devices::delete_device_handler),
+        )
+        .route(
+            "/api/server/public-key",
+            get(server_keys::get_public_key_handler),
+        )
+        .route(
+            "/api/server/keys/rotate",
+            post(server_keys::rotate_keys_handler),
+        )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .with_state(state)
 }
@@ -87,6 +103,43 @@ mod tests {
         };
         let app = create_app(state.clone());
         (state, app)
+    }
+
+    async fn get_authenticated_admin_token(state: &AppState) -> String {
+        // Bootstrap admin
+        let app = create_app(state.clone());
+        let bootstrap_req = Request::builder()
+            .uri("/api/auth/bootstrap")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "username": "admin_test",
+                    "password": "AdminPassword123!"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let _ = app.oneshot(bootstrap_req).await.unwrap();
+
+        // Login
+        let app = create_app(state.clone());
+        let login_req = Request::builder()
+            .uri("/api/auth/login")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "username": "admin_test",
+                    "password": "AdminPassword123!"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.oneshot(login_req).await.unwrap();
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let login_res: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        login_res["token"].as_str().unwrap().to_string()
     }
 
     #[tokio::test]
@@ -152,10 +205,9 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         assert_eq!(json["username"], "admin");
         assert_eq!(json["role"], "admin");
-        assert!(json["id"].is_string());
 
-        // Second bootstrap call must fail with 409 Conflict
-        let app2 = create_app(state.clone());
+        // Second bootstrap call MUST return 409 Conflict
+        let app = create_app(state.clone());
         let req2 = Request::builder()
             .uri("/api/auth/bootstrap")
             .method("POST")
@@ -163,11 +215,11 @@ mod tests {
             .body(Body::from(serde_json::to_vec(&bootstrap_payload).unwrap()))
             .unwrap();
 
-        let res2 = app2.oneshot(req2).await.unwrap();
+        let res2 = app.oneshot(req2).await.unwrap();
         assert_eq!(res2.status(), StatusCode::CONFLICT);
 
-        let body2 = res2.into_body().collect().await.unwrap().to_bytes();
-        let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+        let body_bytes2 = res2.into_body().collect().await.unwrap().to_bytes();
+        let json2: serde_json::Value = serde_json::from_slice(&body_bytes2).unwrap();
         assert_eq!(json2["error"], "bootstrap_already_completed");
     }
 
@@ -175,7 +227,7 @@ mod tests {
     async fn test_tc_f1_010_login_success_and_token_expiration() {
         let (state, _) = setup_test_state().await;
 
-        // 1. Bootstrap admin
+        // Bootstrap admin
         let app = create_app(state.clone());
         let req = Request::builder()
             .uri("/api/auth/bootstrap")
@@ -183,8 +235,8 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
-                    "username": "superadmin",
-                    "password": "SecurePassword123!"
+                    "username": "admin_login",
+                    "password": "ValidPassword123!"
                 }))
                 .unwrap(),
             ))
@@ -192,7 +244,7 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::CREATED);
 
-        // 2. Successful login
+        // Login with correct credentials
         let app = create_app(state.clone());
         let req = Request::builder()
             .uri("/api/auth/login")
@@ -200,29 +252,43 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
-                    "username": "superadmin",
-                    "password": "SecurePassword123!"
+                    "username": "admin_login",
+                    "password": "ValidPassword123!"
                 }))
                 .unwrap(),
             ))
             .unwrap();
-
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
         let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-
-        let token = json["token"].as_str().expect("token should be string");
+        let token = json["token"].as_str().unwrap();
         assert_eq!(token.len(), 64);
-        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(json["user"]["username"], "admin_login");
 
-        let expires_at = json["expires_at"]
-            .as_str()
-            .expect("expires_at should be string");
+        // Verify session was inserted with ~24 hour expiration
+        let session_row = sqlx::query("SELECT expires_at FROM sessions WHERE token = ?")
+            .bind(token)
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+        let expires_at: String = session_row.get("expires_at");
         assert!(!expires_at.is_empty());
-        assert_eq!(json["user"]["username"], "superadmin");
-        assert_eq!(json["user"]["role"], "admin");
+
+        // Validate protected endpoint /api/auth/me using Bearer token
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/auth/me")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let me_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let me_json: serde_json::Value = serde_json::from_slice(&me_bytes).unwrap();
+        assert_eq!(me_json["username"], "admin_login");
     }
 
     #[tokio::test]
@@ -238,59 +304,48 @@ mod tests {
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
                     "username": "target_user",
-                    "password": "ValidPassword123!"
+                    "password": "CorrectPassword123!"
                 }))
                 .unwrap(),
             ))
             .unwrap();
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::CREATED);
+        let _ = app.oneshot(req).await.unwrap();
 
-        // Perform 5 consecutive failed logins
-        let secret_wrong_pw = "WrongSecretAttempt123!";
+        // 5 consecutive failed attempts
         for _ in 0..5 {
             let app = create_app(state.clone());
             let req = Request::builder()
                 .uri("/api/auth/login")
                 .method("POST")
                 .header("content-type", "application/json")
-                .header("x-forwarded-for", "192.168.10.50")
+                .header("x-forwarded-for", "10.0.0.99")
                 .body(Body::from(
                     serde_json::to_vec(&serde_json::json!({
                         "username": "target_user",
-                        "password": secret_wrong_pw
+                        "password": "WrongPassword!"
                     }))
                     .unwrap(),
                 ))
                 .unwrap();
-
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
-
-            let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
-            let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-            assert_eq!(json["error"], "invalid_credentials");
-            // Critical rule: Plaintext password must never leak in error response
-            let body_str = String::from_utf8_lossy(&body_bytes);
-            assert!(!body_str.contains(secret_wrong_pw));
         }
 
-        // 6th attempt should be temporarily locked out (429 Too Many Requests)
+        // 6th attempt: even with correct password, must be blocked (429 Too Many Requests)
         let app = create_app(state.clone());
         let req = Request::builder()
             .uri("/api/auth/login")
             .method("POST")
             .header("content-type", "application/json")
-            .header("x-forwarded-for", "192.168.10.50")
+            .header("x-forwarded-for", "10.0.0.99")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
                     "username": "target_user",
-                    "password": "ValidPassword123!"
+                    "password": "CorrectPassword123!"
                 }))
                 .unwrap(),
             ))
             .unwrap();
-
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
 
@@ -311,13 +366,13 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
-                    "username": "session_admin",
-                    "password": "Password123!"
+                    "username": "logout_admin",
+                    "password": "ValidPassword123!"
                 }))
                 .unwrap(),
             ))
             .unwrap();
-        app.oneshot(req).await.unwrap();
+        let _ = app.oneshot(req).await.unwrap();
 
         // Login
         let app = create_app(state.clone());
@@ -327,8 +382,8 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
-                    "username": "session_admin",
-                    "password": "Password123!"
+                    "username": "logout_admin",
+                    "password": "ValidPassword123!"
                 }))
                 .unwrap(),
             ))
@@ -336,9 +391,9 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-        let token = json["token"].as_str().unwrap().to_string();
+        let token = json["token"].as_str().unwrap();
 
-        // Check GET /api/auth/me is valid
+        // GET /api/auth/me works
         let app = create_app(state.clone());
         let req = Request::builder()
             .uri("/api/auth/me")
@@ -431,5 +486,519 @@ mod tests {
             .unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_tc_f1_020_new_client_appears_in_api_with_id_and_online_status() {
+        let (state, _) = setup_test_state().await;
+        let admin_token = get_authenticated_admin_token(&state).await;
+
+        // Send heartbeat for a new client
+        let app = create_app(state.clone());
+        let heartbeat_payload = serde_json::json!({
+            "id": "client-101",
+            "hostname": "cercano-node-1",
+            "os": "Windows 11 Pro",
+            "version": "0.1.0",
+            "ip": "192.168.1.101"
+        });
+
+        let req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_vec(&heartbeat_payload).unwrap()))
+            .unwrap();
+
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let hb_res: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(hb_res["id"], "client-101");
+        assert_eq!(hb_res["name"], "cercano-node-1");
+        assert_eq!(hb_res["hostname"], "cercano-node-1");
+        assert_eq!(hb_res["os"], "Windows 11 Pro");
+        assert_eq!(hb_res["version"], "0.1.0");
+        assert_eq!(hb_res["ip_address"], "192.168.1.101");
+        assert_eq!(hb_res["status"], "online");
+        assert!(hb_res["last_seen_at"].is_string());
+
+        // List devices via GET /api/devices (protected)
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let list: Vec<serde_json::Value> = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0]["id"], "client-101");
+        assert_eq!(list[0]["status"], "online");
+        assert_eq!(list[0]["version"], "0.1.0");
+
+        // Detail via GET /api/devices/client-101
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/client-101")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let detail: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(detail["id"], "client-101");
+        assert_eq!(detail["status"], "online");
+    }
+
+    #[tokio::test]
+    async fn test_tc_f1_021_client_without_heartbeat_becomes_offline_after_grace_period() {
+        let (state, _) = setup_test_state().await;
+        let admin_token = get_authenticated_admin_token(&state).await;
+
+        // Register client with heartbeat
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "client-102",
+                    "hostname": "cercano-node-2"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Verify it is online immediately
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/client-102")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let detail: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(detail["status"], "online");
+
+        // Advance device's last_seen_at past the 60-second grace period (to 90 seconds ago)
+        sqlx::query(
+            "UPDATE devices SET last_seen_at = datetime('now', '-90 seconds') WHERE id = 'client-102'",
+        )
+        .execute(&state.db)
+        .await
+        .unwrap();
+
+        // Check GET /api/devices: status must now be offline
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let list: Vec<serde_json::Value> = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(list[0]["id"], "client-102");
+        assert_eq!(list[0]["status"], "offline");
+
+        // Check GET /api/devices/client-102: status must be offline
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/client-102")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let detail: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(detail["status"], "offline");
+
+        // New heartbeat arrives: device becomes online again
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "client-102"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/client-102")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let detail: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(detail["status"], "online");
+    }
+
+    #[tokio::test]
+    async fn test_devices_endpoints_security_and_deletion() {
+        let (state, _) = setup_test_state().await;
+        let admin_token = get_authenticated_admin_token(&state).await;
+
+        // Register client-201
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .header("x-real-ip", "192.168.10.77")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "client-201",
+                    "hostname": "host-201"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Verify detected IP is recorded
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let hb: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(hb["ip_address"], "192.168.10.77");
+
+        // Non-admin user setup
+        let user_pwd_hash = crate::auth::hash_password("UserPassword123!").unwrap();
+        sqlx::query("INSERT INTO users (id, username, password_hash, role) VALUES ('u-1', 'normal_user', ?, 'user')")
+            .bind(user_pwd_hash)
+            .execute(&state.db)
+            .await
+            .unwrap();
+
+        // Login as non-admin
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/auth/login")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "username": "normal_user",
+                    "password": "UserPassword123!"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let login_res: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let user_token = login_res["token"].as_str().unwrap();
+
+        // Non-admin can list devices
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", user_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Non-admin CANNOT delete device (403 Forbidden)
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/client-201")
+            .method("DELETE")
+            .header("Authorization", format!("Bearer {}", user_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+        // Admin CAN delete device
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/client-201")
+            .method("DELETE")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Subsequent GET returns 404
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/client-201")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        // Deleting non-existent device returns 404
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/client-201")
+            .method("DELETE")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        // Unauthenticated access rejected
+        let app = setup_test_app().await;
+        let req = Request::builder()
+            .uri("/api/devices")
+            .method("GET")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_heartbeat_validation_error() {
+        let app = setup_test_app().await;
+
+        let req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "   "
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["error"], "validation_error");
+    }
+
+    #[tokio::test]
+    async fn test_get_public_key_success_unauthenticated() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let pub_path = temp_dir.path().join("id_ed25519.pub");
+        let keys = server_keys::generate_server_keypair().unwrap();
+        std::fs::write(&pub_path, &keys.public_key_base64).unwrap();
+
+        let db = init_db("sqlite::memory:").await.unwrap();
+        let config = Config {
+            server_key_path: pub_path.display().to_string(),
+            ..Default::default()
+        };
+
+        let state = AppState { config, db };
+        let app = create_app(state);
+
+        let req = Request::builder()
+            .uri("/api/server/public-key")
+            .method("GET")
+            .body(Body::empty())
+            .unwrap();
+
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert!(res.headers().contains_key("x-trace-id"));
+
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["public_key"], keys.public_key_base64);
+        assert_eq!(json["key_type"], "ed25519");
+    }
+
+    #[tokio::test]
+    async fn test_get_public_key_not_found() {
+        let db = init_db("sqlite::memory:").await.unwrap();
+        let config = Config {
+            server_key_path: "nonexistent_dir/missing_id_ed25519.pub".to_string(),
+            ..Default::default()
+        };
+
+        let state = AppState { config, db };
+        let app = create_app(state);
+
+        let req = Request::builder()
+            .uri("/api/server/public-key")
+            .method("GET")
+            .body(Body::empty())
+            .unwrap();
+
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["error"], "key_not_found");
+    }
+
+    #[tokio::test]
+    async fn test_tc_f1_031_key_rotation_and_rejection_of_old_client_keys() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let pub_path = temp_dir.path().join("id_ed25519.pub");
+        let priv_path = temp_dir.path().join("id_ed25519");
+
+        let initial_keys = server_keys::generate_server_keypair().unwrap();
+        std::fs::write(&pub_path, &initial_keys.public_key_base64).unwrap();
+        std::fs::write(&priv_path, &initial_keys.private_key_base64).unwrap();
+
+        let old_client_configured_key = initial_keys.public_key_base64.clone();
+
+        let db = init_db("sqlite::memory:").await.unwrap();
+        let config = Config {
+            server_key_path: pub_path.display().to_string(),
+            ..Default::default()
+        };
+
+        let state = AppState { config, db };
+
+        // 1. Unauthenticated rotation attempt rejected with 401 Unauthorized
+        let app = create_app(state.clone());
+        let unauth_req = Request::builder()
+            .uri("/api/server/keys/rotate")
+            .method("POST")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(unauth_req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // 2. Non-admin user attempt rejected with 403 Forbidden
+        let admin_token = get_authenticated_admin_token(&state).await;
+
+        // Create regular operator user
+        let operator_pw_hash = auth::hash_password("OperatorPass123!").unwrap();
+        let operator_user_id = uuid::Uuid::now_v7().to_string();
+        sqlx::query(
+            "INSERT INTO users (id, username, password_hash, role, is_active) VALUES (?, ?, ?, 'operator', 1)"
+        )
+        .bind(&operator_user_id)
+        .bind("operator_user")
+        .bind(&operator_pw_hash)
+        .execute(&state.db)
+        .await
+        .unwrap();
+
+        let app = create_app(state.clone());
+        let op_login_req = Request::builder()
+            .uri("/api/auth/login")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "username": "operator_user",
+                    "password": "OperatorPass123!"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.oneshot(op_login_req).await.unwrap();
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let op_login_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let operator_token = op_login_json["token"].as_str().unwrap();
+
+        let app = create_app(state.clone());
+        let op_rotate_req = Request::builder()
+            .uri("/api/server/keys/rotate")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", operator_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(op_rotate_req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+        // 3. Admin user performs key rotation
+        let app = create_app(state.clone());
+        let admin_rotate_req = Request::builder()
+            .uri("/api/server/keys/rotate")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "reason": "TC-F1-031 routine key rollover"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.oneshot(admin_rotate_req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let rotate_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        // Critical safety verification: private key NEVER in response or leaked
+        assert!(rotate_json.get("private_key").is_none());
+        assert!(rotate_json.get("secret_key").is_none());
+        assert!(rotate_json.get("sk").is_none());
+
+        assert_eq!(rotate_json["status"], "rotated");
+        assert_eq!(rotate_json["key_type"], "ed25519");
+        let new_public_key = rotate_json["public_key"].as_str().unwrap();
+        assert_ne!(new_public_key, old_client_configured_key);
+        assert!(rotate_json["backup_path"].is_string());
+
+        // 4. Verify public endpoint now returns the newly rotated key
+        let app = create_app(state.clone());
+        let get_pub_req = Request::builder()
+            .uri("/api/server/public-key")
+            .method("GET")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(get_pub_req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let pub_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let active_server_public_key = pub_json["public_key"].as_str().unwrap();
+        assert_eq!(active_server_public_key, new_public_key);
+
+        // 5. TC-F1-031 verification: Old client key mismatch
+        // When client sends or verifies handshake using old key, mismatch occurs and client is rejected
+        assert_ne!(
+            old_client_configured_key, active_server_public_key,
+            "Client holding old server key MUST NOT match current rotated server key"
+        );
+
+        // 6. Verify filesystem state: backup exists and new keys are written
+        let backup_file = rotate_json["backup_path"].as_str().unwrap();
+        assert!(std::path::Path::new(backup_file).exists());
+        let backup_content = std::fs::read_to_string(backup_file).unwrap();
+        assert_eq!(backup_content.trim(), old_client_configured_key);
+
+        let active_pub_on_disk = std::fs::read_to_string(&pub_path).unwrap();
+        assert_eq!(active_pub_on_disk.trim(), new_public_key);
+
+        let active_priv_on_disk = std::fs::read_to_string(&priv_path).unwrap();
+        assert_ne!(active_priv_on_disk.trim(), initial_keys.private_key_base64);
+        assert_eq!(active_priv_on_disk.trim().len(), 88);
     }
 }

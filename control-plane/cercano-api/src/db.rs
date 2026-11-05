@@ -109,6 +109,15 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address, attempted_at);
         "#,
     },
+    Migration {
+        version: 3,
+        name: "003_device_metadata",
+        sql: r#"
+        ALTER TABLE devices ADD COLUMN version TEXT;
+        ALTER TABLE devices ADD COLUMN ip_address TEXT;
+        CREATE INDEX IF NOT EXISTS idx_devices_last_seen_at ON devices(last_seen_at);
+        "#,
+    },
 ];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
@@ -242,13 +251,15 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 2);
+        assert_eq!(rows.len(), 3);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
         assert_eq!(rows[1].get::<i64, _>("version"), 2);
         assert_eq!(rows[1].get::<String, _>("name"), "002_auth_schema");
+        assert_eq!(rows[2].get::<i64, _>("version"), 3);
+        assert_eq!(rows[2].get::<String, _>("name"), "003_device_metadata");
 
-        // Verify devices table exists
+        // Verify devices table exists and columns can be queried
         let devices = sqlx::query("SELECT count(*) as cnt FROM devices")
             .fetch_one(&pool)
             .await
@@ -294,6 +305,6 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 2);
+        assert_eq!(rows.len(), 3);
     }
 }
