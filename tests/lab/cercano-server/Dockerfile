@@ -1,15 +1,41 @@
+# Multi-stage Dockerfile for Cercano Server in Lab
+# SPDX-License-Identifier: AGPL-3.0-only
+
+FROM rust:bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libsodium-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src/cercano-server
+COPY vendor/server /usr/src/cercano-server
+RUN cargo build --release --bin hbbs --bin hbbr --bin rustdesk-utils
+
 FROM ubuntu:24.04
+
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd \
     iproute2 \
     curl \
     ca-certificates \
+    libssl3 \
+    libsodium23 \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/cercano
-COPY entrypoint.sh /opt/cercano/entrypoint.sh
-RUN chmod +x /opt/cercano/entrypoint.sh
+RUN mkdir -p /opt/cercano/bin /opt/cercano/data
+
+COPY --from=builder /usr/src/cercano-server/target/release/hbbs /opt/cercano/bin/hbbs
+COPY --from=builder /usr/src/cercano-server/target/release/hbbr /opt/cercano/bin/hbbr
+COPY --from=builder /usr/src/cercano-server/target/release/rustdesk-utils /opt/cercano/bin/rustdesk-utils
+COPY tests/lab/cercano-server/entrypoint.sh /opt/cercano/entrypoint.sh
+
+RUN chmod +x /opt/cercano/bin/hbbs /opt/cercano/bin/hbbr /opt/cercano/bin/rustdesk-utils /opt/cercano/entrypoint.sh
 
 EXPOSE 21115/tcp 21116/tcp 21116/udp 21117/tcp 21118/tcp 21119/tcp
+
 ENTRYPOINT ["/opt/cercano/entrypoint.sh"]

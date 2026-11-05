@@ -15,7 +15,8 @@ services:
 
   cercano-server:
     build:
-      context: ./cercano-server
+      context: ../..
+      dockerfile: deploy/Dockerfile.server
     container_name: cercano-server
     hostname: server.cercano.local
     networks:

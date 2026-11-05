@@ -8,6 +8,8 @@ echo "=== Cercano Server Mock / Runner ==="
 # Si existen binarios compilados en /opt/cercano/bin, ejecutarlos
 if [[ -x "/opt/cercano/bin/hbbs" && -x "/opt/cercano/bin/hbbr" ]]; then
   echo "Ejecutando binarios reales de Cercano Server..."
+  mkdir -p /opt/cercano/data
+  cd /opt/cercano/data
   /opt/cercano/bin/hbbr &
   exec /opt/cercano/bin/hbbs -r localhost
 fi

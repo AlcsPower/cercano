@@ -6,11 +6,22 @@ Cargo.lock.bak
 *.db
 *.db-shm
 *.db-wal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
 
 # Environment and secrets
 .env
 .env.*
 !.env.example
+id_ed25519
+id_ed25519*
+
+# Lab runtime data
+tests/lab/data/server/*
+!tests/lab/data/server/.gitkeep
+tests/lab/data/siem/*
+!tests/lab/data/siem/.gitkeep
 
 # IDE & OS
 .idea/
@@ -23,4 +34,3 @@ Thumbs.db
 
 # Root temp assets
 Logo Cercano.*
-

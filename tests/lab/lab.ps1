@@ -85,6 +85,9 @@ switch ($Action) {
 
         Write-Host "==> Verificando puertos del servidor desde client-linux-1..." -ForegroundColor Cyan
         docker exec cercano-client-linux-1 nc -z -v -w 2 172.28.0.11 21115
+        docker exec cercano-client-linux-1 nc -z -v -w 2 172.28.0.11 21116
+        docker exec cercano-client-linux-1 nc -z -v -w 2 172.28.0.11 21117
+        docker exec cercano-client-linux-1 nc -z -v -u -w 2 172.28.0.11 21116
         Write-Host "==> Smoke test completado con éxito." -ForegroundColor Green
     }
     "netem" {
