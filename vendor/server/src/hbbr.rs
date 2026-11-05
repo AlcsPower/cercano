@@ -17,10 +17,12 @@ fn main() -> ResultType<()> {
         -k, --key=[KEY] 'Only allow the client with the same key'
         ",
     );
-    let matches = App::new("hbbr")
-        .version(version::VERSION)
-        .author("Purslane Ltd. <info@rustdesk.com>")
-        .about("RustDesk Relay Server")
+    let version_str = Box::leak(format!("Cercano Server (upstream {})", version::VERSION).into_boxed_str());
+    let matches = App::new("Cercano Server (hbbr)")
+        .bin_name("hbbr")
+        .version(version_str as &'static str)
+        .author("Cercano Contributors")
+        .about("Cercano Server (hbbr) - Relay Server")
         .args_from_usage(&args)
         .get_matches();
     if let Ok(v) = ini::Ini::load_from_file(".env") {

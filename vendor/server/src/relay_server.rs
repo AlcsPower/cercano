@@ -47,6 +47,7 @@ const BLOCKLIST_FILE: &str = "blocklist.txt";
 
 #[tokio::main(flavor = "multi_thread")]
 pub async fn start(port: &str, key: &str) -> ResultType<()> {
+    log::info!("=== Cercano Server (hbbr) v{} (upstream 1.1.9) ===", crate::version::VERSION);
     let key = get_server_sk(key);
     if let Ok(mut file) = std::fs::File::open(BLACKLIST_FILE) {
         let mut contents = String::new();

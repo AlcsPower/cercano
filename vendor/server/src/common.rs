@@ -55,9 +55,12 @@ fn arg_name(name: &str) -> String {
 
 #[allow(dead_code)]
 pub fn init_args(args: &str, name: &str, about: &str) {
-    let matches = App::new(name)
-        .version(crate::version::VERSION)
-        .author("Purslane Ltd. <info@rustdesk.com>")
+    let version_str = Box::leak(format!("Cercano Server (upstream {})", crate::version::VERSION).into_boxed_str());
+    let app_name = Box::leak(format!("Cercano Server ({name})").into_boxed_str());
+    let matches = App::new(app_name as &'static str)
+        .bin_name(name)
+        .version(version_str as &'static str)
+        .author("Cercano Contributors")
         .about(about)
         .args_from_usage(args)
         .get_matches();
