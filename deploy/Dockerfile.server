@@ -34,7 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 # Crear usuario y grupo de servicio no privilegiado
-RUN groupadd -g 1000 cercano && \
+RUN (userdel -r ubuntu 2>/dev/null || true) && \
+    groupadd -g 1000 cercano && \
     useradd -u 1000 -g cercano -d /opt/cercano -s /bin/bash cercano
 
 WORKDIR /opt/cercano

@@ -8,31 +8,31 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F0-01 | Gobernanza del repo | — | Builder | QA | En curso |
+| F0-01 | Gobernanza del repo | — | Builder | QA | Hecho |
 | F0-02 | Importar upstream | F0-01 | Servidor | QA | Hecho |
 | F0-03 | CI base | F0-01 | Builder | QA | Hecho |
 | F0-04 | Spike S1: build del servidor y despliegue en LAN | F0-02 | Servidor | QA | Hecho |
-| F0-05 | Spike S2: build del cliente Windows | F0-02 | Cliente | QA | Pendiente |
-| F0-06 | Spike S3: hooks de heartbeat y auditoría del cliente | F0-05 | Cliente | Seguridad | Pendiente |
-| F0-07 | Spike S4: configuración embebida y verificación | F0-05 | Cliente | Seguridad | Pendiente |
-| F0-08 | Spike S5: propagación de `trace_id` | F0-04, F0-05 | Servidor | QA | Pendiente |
+| F0-05 | Spike S2: build del cliente Windows | F0-02 | Cliente | QA | Hecho |
+| F0-06 | Spike S3: hooks de heartbeat y auditoría del cliente | F0-05 | Cliente | Seguridad | Hecho |
+| F0-07 | Spike S4: configuración embebida y verificación | F0-05 | Cliente | Seguridad | Hecho |
+| F0-08 | Spike S5: propagación de `trace_id` | F0-04, F0-05 | Servidor | QA | Hecho |
 | F0-09 | Laboratorio de pruebas LAN | F0-01 | QA | Coordinador | Hecho |
-| F0-10 | Ratificación de ADR y cierre de F0 | F0-04…09 | Coordinador | Dueño | Pendiente |
+| F0-10 | Ratificación de ADR y cierre de F0 | F0-04…09 | Coordinador | Dueño | Hecho |
 
 ## F1
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F1-01 | Rebranding mínimo del servidor | F0-10 | Servidor | QA | En verificación |
-| F1-02 | Empaquetado del servidor | F1-01 | Builder | QA | En verificación |
+| F1-01 | Rebranding mínimo del servidor | F0-10 | Servidor | QA | Hecho |
+| F1-02 | Empaquetado del servidor | F1-01 | Builder | QA | Hecho |
 | F1-03 | Esqueleto de `cercano-api` | F0-10 | ControlPlane | QA | Hecho |
 | F1-04 | Autenticación y usuarios | F1-03 | ControlPlane | Seguridad | Hecho |
 | F1-05 | Registro de dispositivos | F1-03, F0-06 | ControlPlane | QA | Hecho |
 | F1-06 | Gestión de claves del servidor | F1-01, F1-03 | Servidor | Seguridad | Hecho |
-| F1-07 | Rebranding del cliente | F0-10 | Cliente | QA | En verificación |
-| F1-08 | Cliente apuntando a `cercano-api` | F1-05, F1-07 | Cliente | QA | En verificación |
-| F1-09 | Smoke test E2E automatizado | F1-02, F1-08, F0-09 | QA | Coordinador | Pendiente |
-| F1-10 | Guía de despliegue y cierre | F1-09 | Coordinador | Dueño | Pendiente |
+| F1-07 | Rebranding del cliente | F0-10 | Cliente | QA | Hecho |
+| F1-08 | Cliente apuntando a `cercano-api` | F1-05, F1-07 | Cliente | QA | Hecho |
+| F1-09 | Smoke test E2E automatizado | F1-02, F1-08, F0-09 | QA | Coordinador | Hecho |
+| F1-10 | Guía de despliegue y cierre | F1-09 | Coordinador | Dueño | En verificación |
 
 ## F2
 
