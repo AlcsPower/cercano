@@ -6,22 +6,21 @@ Cargo.lock.bak
 *.db
 *.db-shm
 *.db-wal
-*.sqlite3
-*.sqlite3-shm
-*.sqlite3-wal
+*.sqlite3*
 
 # Environment and secrets
 .env
 .env.*
 !.env.example
-id_ed25519
 id_ed25519*
 
-# Lab runtime data
+# Lab runtime data (preserve structure, ignore generated keys & dbs)
 tests/lab/data/server/*
 !tests/lab/data/server/.gitkeep
 tests/lab/data/siem/*
 !tests/lab/data/siem/.gitkeep
+tests/lab/data/api-stub/*
+!tests/lab/data/api-stub/.gitkeep
 
 # IDE & OS
 .idea/

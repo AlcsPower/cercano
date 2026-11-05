@@ -46,10 +46,11 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "001_initial_schema",
-    sql: r#"
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "001_initial_schema",
+        sql: r#"
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
@@ -81,7 +82,34 @@ pub const MIGRATIONS: &[Migration] = &[Migration {
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         "#,
-}];
+    },
+    Migration {
+        version: 2,
+        name: "002_auth_schema",
+        sql: r#"
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            ip_address TEXT NOT NULL,
+            attempted_at TEXT NOT NULL DEFAULT (datetime('now')),
+            success INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+        CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(username, attempted_at);
+        CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address, attempted_at);
+        "#,
+    },
+];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
 pub async fn init_db(database_url: &str) -> Result<SqlitePool, DbError> {
@@ -210,13 +238,15 @@ mod tests {
         let pool = init_db("sqlite::memory:").await.unwrap();
 
         // Verify schema_migrations table
-        let rows = sqlx::query("SELECT version, name FROM schema_migrations")
+        let rows = sqlx::query("SELECT version, name FROM schema_migrations ORDER BY version ASC")
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 1);
+        assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
+        assert_eq!(rows[1].get::<i64, _>("version"), 2);
+        assert_eq!(rows[1].get::<String, _>("name"), "002_auth_schema");
 
         // Verify devices table exists
         let devices = sqlx::query("SELECT count(*) as cnt FROM devices")
@@ -231,6 +261,20 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(users.get::<i64, _>("cnt"), 0);
+
+        // Verify sessions table exists
+        let sessions = sqlx::query("SELECT count(*) as cnt FROM sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(sessions.get::<i64, _>("cnt"), 0);
+
+        // Verify login_attempts table exists
+        let attempts = sqlx::query("SELECT count(*) as cnt FROM login_attempts")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(attempts.get::<i64, _>("cnt"), 0);
 
         // Verify idempotency of run_migrations
         let second_run = run_migrations(&pool).await;
@@ -250,6 +294,6 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 1);
+        assert_eq!(rows.len(), 2);
     }
 }
