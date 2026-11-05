@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Cercano Contributors
+#
+# Aplica los parches de patches/ sobre el árbol de trabajo (vendor/) de forma ordenada e idempotente.
+# Cumple con AGENTS.md §5 y PLAN-F0-F1.md (F0-02).
+
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT_DIR"
+
+PATCHES_DIR="$ROOT_DIR/patches"
+
+if [[ ! -d "$PATCHES_DIR" ]]; then
+  echo "ERROR: Directorio $PATCHES_DIR no existe." >&2
+  exit 1
+fi
+
+# Buscar todos los parches *.patch ordenados alfanuméricamente
+shopt -s nullglob
+patches=("$PATCHES_DIR"/*.patch)
+shopt -u nullglob
+
+if [[ ${#patches[@]} -eq 0 ]]; then
+  echo "INFO: No hay parches en $PATCHES_DIR. Árbol limpio."
+  exit 0
+fi
+
+echo "INFO: Procesando ${#patches[@]} parche(s) desde $PATCHES_DIR..."
+
+for patch_file in "${patches[@]}"; do
+  patch_name="$(basename "$patch_file")"
+
+  # Comprobar si el parche ya está aplicado (idempotencia)
+  if git apply -p1 --reverse --check "$patch_file" &>/dev/null; then
+    echo "OK: $patch_name ya aplicado (se omite)."
+    continue
+  fi
+
+  # Comprobar si se puede aplicar limpiamente
+  if git apply -p1 --check "$patch_file" &>/dev/null; then
+    git apply -p1 "$patch_file"
+    echo "OK: $patch_name aplicado correctamente."
+  else
+    echo "ERROR: Falló la aplicación de $patch_name." >&2
+    git apply -p1 --check "$patch_file" || true
+    exit 1
+  fi
+done
+
+echo "OK: Todos los parches se procesaron correctamente."
+exit 0

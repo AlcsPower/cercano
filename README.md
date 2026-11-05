@@ -44,7 +44,7 @@ cercano/
 ├── AGENTS.md  CONTRIBUTING.md  SECURITY.md  NOTICE  LICENSE  README.md
 ├── branding/       logo, iconos y guía de marca
 ├── docs/           roadmap, planes, ADR, spikes, especificaciones, estado
-├── vendor/         código de RustDesk importado (pendiente: F0-02)
+├── vendor/         código de RustDesk importado (F0-02, ver vendor/UPSTREAM.md)
 ├── patches/        parches de Cercano sobre vendor/
 ├── client/  server/  control-plane/  audit-core/  builder/  console-web/
 ├── deploy/  tests/  tools/

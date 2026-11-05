@@ -16,9 +16,9 @@ importado desde esos proyectos se conservará con sus avisos de copyright
 originales dentro de `vendor/`, y cada modificación se registrará como parche en
 `patches/` (ver `docs/ARQUITECTURA.md`, sección 8).
 
-Estado: a fecha de este aviso todavía no se ha importado código de esos
-proyectos. La importación (tarea F0-02) está condicionada a que el archivo
-LICENSE sea el texto oficial de AGPL-3.0 (ver docs/status/BLOCKERS.md, B-001).
+Estado: el código base de upstream ha sido importado en `vendor/server`
+(RustDesk Server v1.1.9) y `vendor/client` (RustDesk Client v1.5.1) bajo la
+licencia AGPL-3.0 (tarea F0-02, ver `vendor/UPSTREAM.md`).
 
 Cercano no está afiliado a RustDesk ni cuenta con su respaldo. «RustDesk» y su
 logotipo pertenecen a sus titulares y no se usan en los binarios, instaladores ni
