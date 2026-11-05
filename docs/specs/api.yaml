@@ -170,6 +170,228 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/devices/heartbeat:
+    post:
+      summary: Register or update device heartbeat
+      description: >
+        Registers or updates a client device (id, name/hostname, os, version, IP).
+        Updates last_seen_at to the current timestamp and marks device status as online.
+      operationId: deviceHeartbeat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+      responses:
+        '200':
+          description: Device registered or updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceResponse'
+        '400':
+          description: Validation error on input fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/devices:
+    get:
+      summary: List registered devices
+      description: >
+        Returns all registered devices with their calculated status (online or offline)
+        evaluated against the configurable grace period (default 60s).
+      operationId: listDevices
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of registered devices.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeviceResponse'
+        '401':
+          description: Unauthorized. Invalid, expired, or missing Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/devices/{id}:
+    get:
+      summary: Get device details
+      description: >
+        Retrieves details of a specific device, including its calculated status.
+      operationId: getDevice
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier of the device.
+          schema:
+            type: string
+            example: "client-101"
+      responses:
+        '200':
+          description: Device details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceResponse'
+        '401':
+          description: Unauthorized. Missing or invalid Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Device not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete registered device
+      description: >
+        Removes a registered device from the database. Requires administrator role.
+      operationId: deleteDevice
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier of the device to delete.
+          schema:
+            type: string
+            example: "client-101"
+      responses:
+        '200':
+          description: Device deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteDeviceResponse'
+        '401':
+          description: Unauthorized. Missing or invalid Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. User is not an administrator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Device not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/server/public-key:
+    get:
+      summary: Retrieve server public key
+      description: >
+        Public endpoint returning the server's Ed25519 public key. Used by clients
+        and the management web console to discover the active server public key without manual copy.
+      operationId: getServerPublicKey
+      responses:
+        '200':
+          description: Active server public key retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicKeyResponse'
+        '404':
+          description: Public key file not found on server storage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error or invalid key format on disk.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/server/keys/rotate:
+    post:
+      summary: Rotate server cryptographic keys
+      description: >
+        Administrative endpoint that rotates the server's Ed25519 keypair.
+        Creates timestamped backups of existing keys, writes new public and private keys
+        to disk with strict permissions, and registers an audit log event.
+        CRITICAL SECURITY RULE: The private key is NEVER returned in responses, API bodies, or log outputs.
+      operationId: rotateServerKeys
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateKeysRequest'
+      responses:
+        '200':
+          description: Keypair rotated successfully. Returns newly generated public key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateKeysResponse'
+        '401':
+          description: Unauthorized. Missing or invalid Bearer session token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. Requires administrator privileges.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server or filesystem I/O error during key rotation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -317,3 +539,143 @@ components:
           type: string
           description: Associated correlation trace identifier.
           example: "0192e21b-640b-7825-94ee-a5efbc3205fa"
+
+    HeartbeatRequest:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Unique device identifier.
+          example: "client-101"
+        name:
+          type: string
+          description: Optional friendly device name.
+          example: "Workstation 1"
+        hostname:
+          type: string
+          description: Optional operating system hostname.
+          example: "ws-lan-01"
+        os:
+          type: string
+          description: Optional operating system description.
+          example: "Windows 11 Pro"
+        version:
+          type: string
+          description: Optional client application version.
+          example: "0.1.0"
+        ip:
+          type: string
+          description: Optional client reported IP address. If omitted, detected from network request.
+          example: "192.168.1.101"
+
+    DeviceResponse:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          example: "client-101"
+        name:
+          type: string
+          example: "Workstation 1"
+        hostname:
+          type: string
+          nullable: true
+          example: "ws-lan-01"
+        os:
+          type: string
+          nullable: true
+          example: "Windows 11 Pro"
+        version:
+          type: string
+          nullable: true
+          example: "0.1.0"
+        ip_address:
+          type: string
+          nullable: true
+          example: "192.168.1.101"
+        status:
+          type: string
+          enum: [online, offline]
+          example: "online"
+        last_seen_at:
+          type: string
+          nullable: true
+          example: "2026-11-05 15:30:00"
+        created_at:
+          type: string
+          example: "2026-11-05 15:00:00"
+
+    DeleteDeviceResponse:
+      type: object
+      required:
+        - status
+        - message
+        - id
+      properties:
+        status:
+          type: string
+          example: "ok"
+        message:
+          type: string
+          example: "Dispositivo eliminado correctamente"
+        id:
+          type: string
+          example: "client-101"
+
+    PublicKeyResponse:
+      type: object
+      required:
+        - public_key
+        - key_type
+      properties:
+        public_key:
+          type: string
+          description: Base64-encoded 32-byte Ed25519 public key.
+          example: "lRHZiVhN0oDD1fsuACtV6S2FOneftReV7m4eUnIEzIQ="
+        key_type:
+          type: string
+          description: Cryptographic algorithm identifier.
+          example: "ed25519"
+
+    RotateKeysRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Optional operational justification or change reference for audit logs.
+          example: "Programmed biannual cryptographic key rollover"
+
+    RotateKeysResponse:
+      type: object
+      required:
+        - status
+        - public_key
+        - key_type
+        - rotated_at
+      properties:
+        status:
+          type: string
+          example: "rotated"
+        public_key:
+          type: string
+          description: Base64-encoded 32-byte new Ed25519 public key.
+          example: "m7p0Q+6P2pY00eTsvxP8uQ11/f7b0m1c4vF9o+8pP1M="
+        key_type:
+          type: string
+          example: "ed25519"
+        rotated_at:
+          type: string
+          format: date-time
+          example: "2026-11-05T15:30:00Z"
+        backup_path:
+          type: string
+          nullable: true
+          description: Server filesystem path where previous public key was backed up.
+          example: "/opt/cercano/data/id_ed25519.pub.bak.20261105_153000"

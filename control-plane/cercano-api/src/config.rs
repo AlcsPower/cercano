@@ -26,6 +26,9 @@ pub const DEFAULT_HOST: &str = "0.0.0.0";
 pub const DEFAULT_PORT: u16 = 21114;
 pub const DEFAULT_DB_PATH: &str = "sqlite://cercano.db?mode=rwc";
 pub const DEFAULT_LOG_LEVEL: &str = "info";
+pub const DEFAULT_DEVICE_GRACE_PERIOD_SECS: u64 = 60;
+pub const DEFAULT_SERVER_KEY_PATH: &str = "/opt/cercano/data/id_ed25519.pub";
+pub const DEV_SERVER_KEY_PATH: &str = "tests/lab/data/server/id_ed25519.pub";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
@@ -33,15 +36,27 @@ pub struct Config {
     pub port: u16,
     pub database_url: String,
     pub log_level: String,
+    pub device_grace_period_secs: u64,
+    pub server_key_path: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
+        let server_key_path = if Path::new(DEFAULT_SERVER_KEY_PATH).exists() {
+            DEFAULT_SERVER_KEY_PATH.to_string()
+        } else if Path::new(DEV_SERVER_KEY_PATH).exists() {
+            DEV_SERVER_KEY_PATH.to_string()
+        } else {
+            DEFAULT_SERVER_KEY_PATH.to_string()
+        };
+
         Self {
             host: DEFAULT_HOST.to_string(),
             port: DEFAULT_PORT,
             database_url: DEFAULT_DB_PATH.to_string(),
             log_level: DEFAULT_LOG_LEVEL.to_string(),
+            device_grace_period_secs: DEFAULT_DEVICE_GRACE_PERIOD_SECS,
+            server_key_path,
         }
     }
 }
@@ -53,13 +68,15 @@ struct FileConfig {
     database_url: Option<String>,
     db_path: Option<String>,
     log_level: Option<String>,
+    device_grace_period_secs: Option<u64>,
+    server_key_path: Option<String>,
 }
 
 impl Config {
     /// Loads configuration by checking:
     /// 1. Default values
     /// 2. Config file (if specified via CERCANO_CONFIG_PATH or default `cercano.toml` if present)
-    /// 3. Environment variables (CERCANO_HOST, CERCANO_PORT, CERCANO_DATABASE_URL/CERCANO_DB_PATH, CERCANO_LOG_LEVEL)
+    /// 3. Environment variables (CERCANO_HOST, CERCANO_PORT, CERCANO_DATABASE_URL/CERCANO_DB_PATH, CERCANO_LOG_LEVEL, CERCANO_DEVICE_GRACE_PERIOD_SECS)
     pub fn load() -> Result<Self, String> {
         let mut config = Self::default();
 
@@ -106,6 +123,12 @@ impl Config {
         if let Some(level) = file_cfg.log_level {
             self.log_level = level;
         }
+        if let Some(secs) = file_cfg.device_grace_period_secs {
+            self.device_grace_period_secs = secs;
+        }
+        if let Some(key_path) = file_cfg.server_key_path {
+            self.server_key_path = key_path;
+        }
 
         Ok(())
     }
@@ -141,6 +164,22 @@ impl Config {
             }
         }
 
+        if let Ok(secs_str) = env::var("CERCANO_DEVICE_GRACE_PERIOD_SECS") {
+            let secs = secs_str.parse::<u64>().map_err(|e| {
+                format!(
+                    "Invalid CERCANO_DEVICE_GRACE_PERIOD_SECS '{}': {}",
+                    secs_str, e
+                )
+            })?;
+            self.device_grace_period_secs = secs;
+        }
+
+        if let Ok(key_path) = env::var("CERCANO_SERVER_KEY_PATH") {
+            if !key_path.trim().is_empty() {
+                self.server_key_path = key_path.trim().to_string();
+            }
+        }
+
         Ok(())
     }
 }
@@ -169,6 +208,7 @@ mod tests {
         assert_eq!(cfg.port, 21114);
         assert_eq!(cfg.database_url, "sqlite://cercano.db?mode=rwc");
         assert_eq!(cfg.log_level, "info");
+        assert_eq!(cfg.device_grace_period_secs, 60);
     }
 
     #[test]
@@ -181,6 +221,8 @@ host = "127.0.0.1"
 port = 9000
 db_path = "test.db"
 log_level = "debug"
+device_grace_period_secs = 120
+server_key_path = "/custom/keys/id_ed25519.pub"
 "#
         )
         .unwrap();
@@ -192,6 +234,8 @@ log_level = "debug"
         assert_eq!(cfg.port, 9000);
         assert_eq!(cfg.database_url, "sqlite://test.db?mode=rwc");
         assert_eq!(cfg.log_level, "debug");
+        assert_eq!(cfg.device_grace_period_secs, 120);
+        assert_eq!(cfg.server_key_path, "/custom/keys/id_ed25519.pub");
     }
 
     #[test]
@@ -234,6 +278,8 @@ database_url = "sqlite:///custom/path.db"
         env::set_var("CERCANO_PORT", "22000");
         env::set_var("CERCANO_DATABASE_URL", "sqlite://env_test.db");
         env::set_var("CERCANO_LOG_LEVEL", "warn");
+        env::set_var("CERCANO_DEVICE_GRACE_PERIOD_SECS", "45");
+        env::set_var("CERCANO_SERVER_KEY_PATH", "/env/path/id_ed25519.pub");
 
         let mut cfg = Config::default();
         cfg.merge_env().unwrap();
@@ -242,11 +288,15 @@ database_url = "sqlite:///custom/path.db"
         assert_eq!(cfg.port, 22000);
         assert_eq!(cfg.database_url, "sqlite://env_test.db");
         assert_eq!(cfg.log_level, "warn");
+        assert_eq!(cfg.device_grace_period_secs, 45);
+        assert_eq!(cfg.server_key_path, "/env/path/id_ed25519.pub");
 
         env::remove_var("CERCANO_HOST");
         env::remove_var("CERCANO_PORT");
         env::remove_var("CERCANO_DATABASE_URL");
         env::remove_var("CERCANO_LOG_LEVEL");
+        env::remove_var("CERCANO_DEVICE_GRACE_PERIOD_SECS");
+        env::remove_var("CERCANO_SERVER_KEY_PATH");
     }
 
     #[test]
