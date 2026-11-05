@@ -49,5 +49,10 @@ for patch_file in "${patches[@]}"; do
   fi
 done
 
+# Sincronizar iconos de marca de Cercano
+if [[ -f "$ROOT_DIR/tools/sync-branding-icons.sh" ]]; then
+  bash "$ROOT_DIR/tools/sync-branding-icons.sh"
+fi
+
 echo "OK: Todos los parches se procesaron correctamente."
 exit 0
