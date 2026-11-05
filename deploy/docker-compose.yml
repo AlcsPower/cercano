@@ -1,0 +1,25 @@
+# Despliegue provisional de Cercano Server
+# SPDX-License-Identifier: AGPL-3.0-only
+version: '3.8'
+
+services:
+  cercano-server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    image: cercano-server:latest
+    container_name: cercano-server
+    restart: unless-stopped
+    ports:
+      # NAT type test
+      - "21115:21115"
+      # ID registration and heartbeat (TCP + UDP)
+      - "21116:21116"
+      - "21116:21116/udp"
+      # Relay service
+      - "21117:21117"
+      # Web console / WebSocket
+      - "21118:21118"
+      - "21119:21119"
+    volumes:
+      - ./data:/opt/cercano/data

@@ -33,8 +33,11 @@ case "$action" in
     echo ""
     echo "==> Verificando ping client-1 -> client-2..."
     docker exec cercano-client-linux-1 ping -c 2 172.28.0.22
-    echo "==> Verificando puerto server desde client-1..."
+    echo "==> Verificando puertos server desde client-1 (21115, 21116 TCP, 21117 TCP, 21116 UDP)..."
     docker exec cercano-client-linux-1 nc -z -v -w 2 172.28.0.11 21115
+    docker exec cercano-client-linux-1 nc -z -v -w 2 172.28.0.11 21116
+    docker exec cercano-client-linux-1 nc -z -v -w 2 172.28.0.11 21117
+    docker exec cercano-client-linux-1 nc -z -v -u -w 2 172.28.0.11 21116
     echo "==> Smoke test OK."
     ;;
   netem)
