@@ -121,7 +121,7 @@ Cada fase incluye una revisión de seguridad del Agente-Seguridad (ver `AGENTS.m
 ## 7. Licencia y límites legales
 
 - `rustdesk/rustdesk` y `rustdesk/rustdesk-server` están bajo **AGPL-3.0**. El derivado debe mantenerse en AGPL-3.0 y ofrecer el código fuente a quienes lo usen en red, incluidos los usuarios del servidor.
-- **Estado actual:** el `LICENSE` del repo sigue siendo MIT. No se importa código de upstream hasta reemplazarlo por el texto oficial de AGPL-3.0 (bloqueo B-001 en `docs/status/BLOCKERS.md`; se comprueba con `tools/check-license.sh`).
+- **Estado actual:** el `LICENSE` del repositorio contiene el texto oficial de AGPL-3.0 (verificado con `tools/check-license.sh`). Bloqueo B-001 resuelto.
 - Mantener avisos de copyright originales y un archivo `NOTICE` con atribución.
 - **Marca:** los distribuibles no usan el nombre ni el logo de RustDesk; se describe el origen en `NOTICE` y `README`. El logo de Cercano se usa según `branding/README.md`.
 - **Clean-room:** las funciones equivalentes a Server Pro se diseñan desde documentación pública y comportamiento observable del código abierto. Ningún agente descarga, ejecuta, descompila ni inspecciona binarios de Server Pro, ni usa código de procedencia dudosa. Si un agente tiene dudas de procedencia, lo reporta al Coordinador antes de continuar.

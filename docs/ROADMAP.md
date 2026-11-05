@@ -100,11 +100,11 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 | D4 | Certificado de firma de código (Authenticode) | **Sin definir:** hasta tenerlo, los instaladores se firman con certificado de pruebas |
 | D5 | Acceso de los agentes al repositorio `AlcsPower/cercano` | **Resuelto** el 2026-11-05 |
 | D6 | Versión base de upstream | Última etiqueta estable de ambos repos en la fecha de F0-02 |
-| D7 | Texto de licencia | **Bloqueante para F0-02:** reemplazar el `LICENSE` actual (MIT) por el texto oficial de AGPL-3.0 (ver §8) |
+| D7 | Texto de licencia | **Resuelto** el 2026-11-05: `LICENSE` contiene el texto oficial de AGPL-3.0 |
 
 ## 8. Estado actual
 
 - **Repositorio:** `AlcsPower/cercano` (privado) accesible para los agentes desde el 2026-11-05. F0-01 en curso en la rama `docs/F0-01-gobernanza`.
-- **Licencia:** el repo se creó con `LICENSE` MIT. RustDesk y su servidor son AGPL-3.0, por lo que el repo debe pasar a AGPL-3.0 **antes de importar código upstream (F0-02)**. El texto oficial no pudo descargarse desde el entorno de los agentes y no se reescribe de memoria; ver `docs/status/BLOCKERS.md` (B-001).
+- **Licencia:** el repositorio se distribuye bajo **AGPL-3.0** (verificado con `tools/check-license.sh`). Bloqueo B-001 resuelto.
 - **Marca:** logo, iconos y guía de uso en `branding/`.
 - **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.

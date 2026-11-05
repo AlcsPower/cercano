@@ -9,7 +9,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
 | F0-01 | Gobernanza del repo | — | Builder | QA | En curso |
-| F0-02 | Importar upstream | F0-01, **B-001** | Servidor | QA | Bloqueada (B-001) |
+| F0-02 | Importar upstream | F0-01 | Servidor | QA | Pendiente |
 | F0-03 | CI base | F0-01 | Builder | QA | Hecho |
 | F0-04 | Spike S1: build del servidor y despliegue en LAN | F0-02 | Servidor | QA | Pendiente |
 | F0-05 | Spike S2: build del cliente Windows | F0-02 | Cliente | QA | Pendiente |

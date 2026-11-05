@@ -53,7 +53,7 @@ cercano/
 
 ## Licencia
 
-Cercano se distribuirá bajo **GNU AGPL-3.0**, la misma licencia de los proyectos de los que deriva. El archivo `LICENSE` del repositorio todavía contiene el texto MIT con el que se creó; reemplazarlo por el texto oficial de AGPL-3.0 es el bloqueo [B-001](docs/status/BLOCKERS.md), que debe resolverse antes de importar código de RustDesk. La atribución a los proyectos originales está en [`NOTICE`](NOTICE).
+Cercano se distribuye bajo **GNU Affero General Public License v3.0 (AGPL-3.0)**. Consulta el archivo [`LICENSE`](LICENSE) para ver los términos completos. La atribución a los proyectos originales de los que deriva se encuentra en [`NOTICE`](NOTICE).
 
 Cercano no está afiliado a RustDesk ni cuenta con su respaldo.
 
