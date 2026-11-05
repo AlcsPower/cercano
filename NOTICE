@@ -1,0 +1,35 @@
+Cercano
+Copyright (c) 2026 AlcsPower
+
+Cercano es una aplicación de soporte remoto para equipos de TI. Es una obra
+derivada de los siguientes proyectos de código abierto, que se distribuyen bajo
+la GNU Affero General Public License v3.0 (AGPL-3.0):
+
+  - RustDesk (cliente)
+    https://github.com/rustdesk/rustdesk
+
+  - RustDesk Server (hbbs, hbbr y utilidades)
+    https://github.com/rustdesk/rustdesk-server
+
+Copyright de cada uno: sus respectivos autores y colaboradores. El código
+importado desde esos proyectos se conservará con sus avisos de copyright
+originales dentro de `vendor/`, y cada modificación se registrará como parche en
+`patches/` (ver `docs/ARQUITECTURA.md`, sección 8).
+
+Estado: a fecha de este aviso todavía no se ha importado código de esos
+proyectos. La importación (tarea F0-02) está condicionada a que el archivo
+LICENSE sea el texto oficial de AGPL-3.0 (ver docs/status/BLOCKERS.md, B-001).
+
+Cercano no está afiliado a RustDesk ni cuenta con su respaldo. «RustDesk» y su
+logotipo pertenecen a sus titulares y no se usan en los binarios, instaladores ni
+interfaz de Cercano.
+
+El código fuente de Cercano debe ofrecerse a todo usuario que interactúe con él
+a través de una red, tal como exige la sección 13 de AGPL-3.0.
+
+Activos de terceros
+-------------------
+  - Manrope (tipografía), licencia SIL Open Font License 1.1.
+    https://fonts.google.com/specimen/Manrope
+    El wordmark de `branding/logo/` la referencia por nombre; no se distribuye
+    el archivo de la fuente.

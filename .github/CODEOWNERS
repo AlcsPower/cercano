@@ -1,0 +1,8 @@
+# Hasta que haya más personas en el equipo, el dueño del repo revisa todo.
+* @AlcsPower
+
+# Los cambios a estos archivos afectan a la licencia, la política de seguridad o las reglas de trabajo.
+/LICENSE      @AlcsPower
+/NOTICE       @AlcsPower
+/SECURITY.md  @AlcsPower
+/AGENTS.md    @AlcsPower
