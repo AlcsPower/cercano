@@ -9,7 +9,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
 | F0-01 | Gobernanza del repo | — | Builder | QA | En curso |
-| F0-02 | Importar upstream | F0-01 | Servidor | QA | En verificación |
+| F0-02 | Importar upstream | F0-01 | Servidor | QA | Hecho |
 | F0-03 | CI base | F0-01 | Builder | QA | Hecho |
 | F0-04 | Spike S1: build del servidor y despliegue en LAN | F0-02 | Servidor | QA | Pendiente |
 | F0-05 | Spike S2: build del cliente Windows | F0-02 | Cliente | QA | Pendiente |
@@ -25,7 +25,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 |---|---|---|---|---|---|
 | F1-01 | Rebranding mínimo del servidor | F0-10 | Servidor | QA | Pendiente |
 | F1-02 | Empaquetado del servidor | F1-01 | Builder | QA | Pendiente |
-| F1-03 | Esqueleto de `cercano-api` | F0-10 | ControlPlane | QA | En verificación |
+| F1-03 | Esqueleto de `cercano-api` | F0-10 | ControlPlane | QA | Hecho |
 | F1-04 | Autenticación y usuarios | F1-03 | ControlPlane | Seguridad | Pendiente |
 | F1-05 | Registro de dispositivos | F1-03, F0-06 | ControlPlane | QA | Pendiente |
 | F1-06 | Gestión de claves del servidor | F1-01, F1-03 | Servidor | Seguridad | Pendiente |
