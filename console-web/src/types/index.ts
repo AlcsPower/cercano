@@ -64,4 +64,22 @@ export interface SystemMetrics {
   services: ServerPortService[];
 }
 
-export type ActiveTab = 'dashboard' | 'devices' | 'security' | 'network';
+export interface CustomClientProfile {
+  name: string;
+  company_name: string;
+  logo_data?: string;
+  accent_color: string;
+  support_info: string;
+  rendezvous_server: string;
+  relay_server: string;
+  api_server: string;
+  public_key: string;
+  lock_settings: boolean;
+  portable_mode: boolean;
+  unattended_access: boolean;
+  lan_only: boolean;
+  allow_file_transfer: boolean;
+  allow_terminal: boolean;
+}
+
+export type ActiveTab = 'dashboard' | 'devices' | 'builder' | 'security' | 'network';
