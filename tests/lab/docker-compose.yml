@@ -1,0 +1,78 @@
+services:
+  cercano-api-stub:
+    build:
+      context: ./api-stub
+    container_name: cercano-api-stub
+    hostname: api.cercano.local
+    networks:
+      cercano-lan:
+        ipv4_address: 172.28.0.10
+    ports:
+      - "21114:21114"
+    volumes:
+      - ./data/api-stub:/data
+    restart: unless-stopped
+
+  cercano-server:
+    build:
+      context: ./cercano-server
+    container_name: cercano-server
+    hostname: server.cercano.local
+    networks:
+      cercano-lan:
+        ipv4_address: 172.28.0.11
+    ports:
+      - "21115:21115"
+      - "21116:21116"
+      - "21116:21116/udp"
+      - "21117:21117"
+    volumes:
+      - ./data/server:/opt/cercano/data
+    restart: unless-stopped
+
+  siem-sink:
+    build:
+      context: ./siem-sink
+    container_name: cercano-siem-sink
+    hostname: siem.cercano.local
+    networks:
+      cercano-lan:
+        ipv4_address: 172.28.0.12
+    ports:
+      - "8088:8088"
+      - "514:514/udp"
+    volumes:
+      - ./data/siem:/data
+    restart: unless-stopped
+
+  client-linux-1:
+    build:
+      context: ./client
+    container_name: cercano-client-linux-1
+    hostname: client-1.cercano.local
+    cap_add:
+      - NET_ADMIN
+    networks:
+      cercano-lan:
+        ipv4_address: 172.28.0.21
+    restart: unless-stopped
+
+  client-linux-2:
+    build:
+      context: ./client
+    container_name: cercano-client-linux-2
+    hostname: client-2.cercano.local
+    cap_add:
+      - NET_ADMIN
+    networks:
+      cercano-lan:
+        ipv4_address: 172.28.0.22
+    restart: unless-stopped
+
+networks:
+  cercano-lan:
+    name: cercano-lan
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

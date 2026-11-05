@@ -16,7 +16,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F0-06 | Spike S3: hooks de heartbeat y auditoría del cliente | F0-05 | Cliente | Seguridad | Pendiente |
 | F0-07 | Spike S4: configuración embebida y verificación | F0-05 | Cliente | Seguridad | Pendiente |
 | F0-08 | Spike S5: propagación de `trace_id` | F0-04, F0-05 | Servidor | QA | Pendiente |
-| F0-09 | Laboratorio de pruebas LAN | F0-01 | QA | Coordinador | Pendiente |
+| F0-09 | Laboratorio de pruebas LAN | F0-01 | QA | Coordinador | En verificación |
 | F0-10 | Ratificación de ADR y cierre de F0 | F0-04…09 | Coordinador | Dueño | Pendiente |
 
 ## F1
