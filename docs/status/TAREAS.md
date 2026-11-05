@@ -23,8 +23,8 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F1-01 | Rebranding mínimo del servidor | F0-10 | Servidor | QA | Pendiente |
-| F1-02 | Empaquetado del servidor | F1-01 | Builder | QA | Pendiente |
+| F1-01 | Rebranding mínimo del servidor | F0-10 | Servidor | QA | En verificación |
+| F1-02 | Empaquetado del servidor | F1-01 | Builder | QA | En verificación |
 | F1-03 | Esqueleto de `cercano-api` | F0-10 | ControlPlane | QA | Hecho |
 | F1-04 | Autenticación y usuarios | F1-03 | ControlPlane | Seguridad | Hecho |
 | F1-05 | Registro de dispositivos | F1-03, F0-06 | ControlPlane | QA | Hecho |

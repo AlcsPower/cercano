@@ -1,0 +1,25 @@
+[Unit]
+Description=Cercano Rendezvous & ID Server (hbbs)
+After=network.target
+
+[Service]
+Type=simple
+LimitNOFILE=1000000
+User=cercano
+Group=cercano
+WorkingDirectory=/opt/cercano/data
+ExecStart=/opt/cercano/bin/hbbs -r localhost:21117
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Endurecimiento de seguridad (systemd hardening)
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/cercano/data
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
