@@ -1,0 +1,26 @@
+# Rust build artifacts
+target/
+Cargo.lock.bak
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Root temp assets
+Logo Cercano.*
+
