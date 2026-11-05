@@ -26,7 +26,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F1-01 | Rebranding mínimo del servidor | F0-10 | Servidor | QA | Pendiente |
 | F1-02 | Empaquetado del servidor | F1-01 | Builder | QA | Pendiente |
 | F1-03 | Esqueleto de `cercano-api` | F0-10 | ControlPlane | QA | Hecho |
-| F1-04 | Autenticación y usuarios | F1-03 | ControlPlane | Seguridad | Pendiente |
+| F1-04 | Autenticación y usuarios | F1-03 | ControlPlane | Seguridad | En verificación |
 | F1-05 | Registro de dispositivos | F1-03, F0-06 | ControlPlane | QA | Pendiente |
 | F1-06 | Gestión de claves del servidor | F1-01, F1-03 | Servidor | Seguridad | Pendiente |
 | F1-07 | Rebranding del cliente | F0-10 | Cliente | QA | Pendiente |

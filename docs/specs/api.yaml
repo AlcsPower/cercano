@@ -54,7 +54,129 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/auth/bootstrap:
+    post:
+      summary: Bootstrap initial administrator
+      description: Creates the initial administrator user. Fails with 409 Conflict if any user already exists.
+      operationId: bootstrapAdmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BootstrapRequest'
+      responses:
+        '201':
+          description: Administrator created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Validation error on input fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Bootstrap already completed (users already exist).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      summary: Authenticate user
+      description: Authenticates user credentials with Argon2id and issues a 24-hour session Bearer token. Enforces rate-limiting lockout after 5 failed attempts.
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful, session token emitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials or inactive user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Account or IP temporarily locked due to repeated failed logins.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      summary: Revoke session token
+      description: Revokes the active session token passed in the Authorization header.
+      operationId: logoutUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Session revoked successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+        '401':
+          description: Missing or malformed authorization header.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/me:
+    get:
+      summary: Get current authenticated user
+      description: Returns the user profile associated with the provided session token.
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user profile details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Invalid, expired, or revoked token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Hexadecimal 256-bit session token issued by /api/auth/login.
+
   schemas:
     HealthResponse:
       type: object
@@ -76,6 +198,107 @@ components:
           description: Semantic version string of the running release.
           example: "0.1.0"
 
+    BootstrapRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+          example: "admin"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          format: password
+          example: "AdminSecretPassword123!"
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: "admin"
+        password:
+          type: string
+          format: password
+          example: "AdminSecretPassword123!"
+
+    LoginResponse:
+      type: object
+      required:
+        - token
+        - expires_at
+        - user
+      properties:
+        token:
+          type: string
+          description: 64-character hexadecimal session token.
+          example: "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
+        expires_at:
+          type: string
+          format: date-time
+          example: "2026-11-06 15:30:00"
+        user:
+          $ref: '#/components/schemas/UserInfo'
+
+    UserInfo:
+      type: object
+      required:
+        - id
+        - username
+        - role
+      properties:
+        id:
+          type: string
+          example: "0192e21b-640b-7825-94ee-a5efbc3205fa"
+        username:
+          type: string
+          example: "admin"
+        role:
+          type: string
+          example: "admin"
+
+    UserResponse:
+      type: object
+      required:
+        - id
+        - username
+        - role
+        - created_at
+      properties:
+        id:
+          type: string
+          example: "0192e21b-640b-7825-94ee-a5efbc3205fa"
+        username:
+          type: string
+          example: "admin"
+        role:
+          type: string
+          example: "admin"
+        created_at:
+          type: string
+          example: "2026-11-05 15:30:00"
+
+    LogoutResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          example: "ok"
+        message:
+          type: string
+          example: "Sesión revocada correctamente"
+
     ErrorResponse:
       type: object
       required:
@@ -85,11 +308,11 @@ components:
         error:
           type: string
           description: Short machine-readable error code.
-          example: "internal_error"
+          example: "invalid_credentials"
         message:
           type: string
           description: Human-readable error description.
-          example: "An unexpected error occurred."
+          example: "Credenciales de autenticación inválidas."
         trace_id:
           type: string
           description: Associated correlation trace identifier.
