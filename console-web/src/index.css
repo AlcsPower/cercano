@@ -1,0 +1,125 @@
+/*
+ * Copyright (C) 2026 Cercano Contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Manrope", system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Allow text selection in code, badges and inputs */
+  code, pre, input, textarea, .selectable-text {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+}
+
+/* Apple Fluid Feedback: instant response on pointer-down with scale(0.97) */
+.btn-apple {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1), background-color 150ms ease, opacity 120ms ease;
+  will-change: transform;
+}
+
+.btn-apple:active {
+  transform: scale(0.965);
+  transition: transform 60ms ease-out;
+}
+
+/* Translucent Glass Material hierarchy */
+.apple-glass {
+  background: rgba(255, 255, 255, 0.76);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.65);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.dark .apple-glass {
+  background: rgba(24, 24, 27, 0.72);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+/* Elevated Glass Surface */
+.apple-card-surface {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(220, 226, 238, 0.7);
+  box-shadow: 0 4px 20px -2px rgba(11, 20, 38, 0.04), 0 1px 2px rgba(11, 20, 38, 0.02);
+}
+
+.dark .apple-card-surface {
+  background: rgba(30, 35, 45, 0.75);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.4);
+}
+
+/* Display typography: optical spacing for headings */
+.tracking-apple-display {
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.tracking-apple-title {
+  letter-spacing: -0.015em;
+}
+
+/* Pulsing online indicator */
+.pulse-emerald {
+  box-shadow: 0 0 0 0 rgba(45, 212, 167, 0.6);
+  animation: pulseEmerald 2s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+@keyframes pulseEmerald {
+  to {
+    box-shadow: 0 0 0 8px rgba(45, 212, 167, 0);
+  }
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .btn-apple:active {
+    transform: none !important;
+  }
+}
+
+/* Accessibility: Reduced Transparency */
+@media (prefers-reduced-transparency: reduce) {
+  .apple-glass, .apple-card-surface {
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .dark .apple-glass, .dark .apple-card-surface {
+    background: #18181b !important;
+  }
+}
