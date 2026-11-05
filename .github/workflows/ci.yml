@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'docs/**'
+      - 'feat/**'
+      - 'fix/**'
+  pull_request:
+    branches:
+      - main
+      - 'docs/**'
+      - 'feat/**'
+      - 'fix/**'
+
+permissions:
+  contents: read
+
+jobs:
+  license:
+    name: License & Header Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify repository LICENSE (B-001 check)
+        run: bash tools/check-license.sh
+        continue-on-error: true # Notifica estado mientras B-001 esté abierto por el dueño
+
+      - name: Verify source files license headers (AGPL-3.0)
+        run: bash tools/check-license-headers.sh
+
+  rust-checks:
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+
+      - name: Format check
+        run: |
+          if [ -f Cargo.toml ]; then
+            cargo fmt --all -- --check
+          else
+            echo "Cargo.toml not present yet. Skipping fmt."
+          fi
+
+      - name: Clippy
+        run: |
+          if [ -f Cargo.toml ]; then
+            cargo clippy --workspace --all-targets --all-features -- -D warnings
+          else
+            echo "Cargo.toml not present yet. Skipping clippy."
+          fi
+
+      - name: Run tests
+        run: |
+          if [ -f Cargo.toml ]; then
+            cargo test --workspace --all-targets --all-features
+          else
+            echo "Cargo.toml not present yet. Skipping tests."
+          fi
+
+  security:
+    name: Security & License Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        if: hashFiles('Cargo.lock') != '' || hashFiles('Cargo.toml') != ''
+        with:
+          command: check licenses advisories bans sources
+          arguments: --all-features
+
+      - name: Run cargo-audit
+        uses: rustsec/audit-check@v1.4.1
+        if: hashFiles('Cargo.lock') != ''
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  server-build:
+    name: Server Build (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+
+      - name: Build server binary
+        run: |
+          if [ -d server ] && [ -f server/Cargo.toml ]; then
+            cargo build --release --manifest-path server/Cargo.toml
+          elif [ -f Cargo.toml ] && cargo metadata --no-deps --format-version 1 | grep -q '"name":"cercano-server"'; then
+            cargo build --release -p cercano-server
+          else
+            echo "Server crate not present yet (pending F0-02/F1-01). Skipping server build."
+          fi

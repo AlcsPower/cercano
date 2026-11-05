@@ -1,0 +1,4 @@
+# Garantizar finales de línea LF para scripts y workflows
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
