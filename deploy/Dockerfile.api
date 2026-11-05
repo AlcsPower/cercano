@@ -1,0 +1,56 @@
+# Multi-stage Dockerfile for Cercano API Control Plane
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Cercano Contributors
+
+# Etapa 1: Compilación de cercano-api
+FROM rust:bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    sqlite3 \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src/cercano-api
+
+# Copiar el código fuente de control-plane/cercano-api
+COPY control-plane/cercano-api /usr/src/cercano-api
+
+# Compilar release
+RUN cargo build --release --bin cercano-api
+
+# Etapa 2: Imagen de ejecución minimalista y sin privilegios de root
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    libssl3 \
+    sqlite3 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Crear usuario y grupo de servicio no privilegiado
+RUN groupadd -g 1000 cercano && \
+    useradd -u 1000 -g cercano -d /opt/cercano -s /bin/bash cercano
+
+WORKDIR /opt/cercano
+
+RUN mkdir -p /opt/cercano/bin /opt/cercano/data
+
+COPY --from=builder /usr/src/cercano-api/target/release/cercano-api /opt/cercano/bin/cercano-api
+
+RUN chmod +x /opt/cercano/bin/cercano-api && \
+    chown -R cercano:cercano /opt/cercano
+
+USER cercano
+WORKDIR /opt/cercano/data
+
+EXPOSE 21114/tcp
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 --start-period=5s \
+    CMD curl -f http://localhost:21114/healthz || exit 1
+
+ENTRYPOINT ["/opt/cercano/bin/cercano-api"]

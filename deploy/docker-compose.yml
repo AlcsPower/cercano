@@ -1,25 +1,89 @@
-# Despliegue provisional de Cercano Server
+# Despliegue Unificado de Cercano Server y Control Plane (cercano-api)
 # SPDX-License-Identifier: AGPL-3.0-only
-version: '3.8'
+# Copyright (C) 2026 Cercano Contributors
+# Cumple con PLAN-F0-F1.md (F1-02) y ARQUITECTURA.md §1
 
 services:
-  cercano-server:
+  cercano-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    image: cercano-api:latest
+    container_name: cercano-api
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - CERCANO_HOST=0.0.0.0
+      - CERCANO_PORT=21114
+      - CERCANO_DATABASE_URL=sqlite:///opt/cercano/data/cercano.db?mode=rwc
+      - CERCANO_SERVER_KEY_PATH=/opt/cercano/data/id_ed25519.pub
+      - CERCANO_LOG_LEVEL=info
+      - CERCANO_DEVICE_GRACE_PERIOD_SECS=60
+    ports:
+      - "21114:21114"
+    volumes:
+      - cercano-data:/opt/cercano/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:21114/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      hbbs:
+        condition: service_started
+
+  hbbs:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.server
     image: cercano-server:latest
-    container_name: cercano-server
+    container_name: cercano-hbbs
     restart: unless-stopped
+    user: "1000:1000"
+    working_dir: /opt/cercano/data
+    command: ["/opt/cercano/bin/hbbs", "-r", "localhost:21117"]
     ports:
       # NAT type test
       - "21115:21115"
-      # ID registration and heartbeat (TCP + UDP)
+      # ID registration & heartbeat (TCP + UDP)
       - "21116:21116"
       - "21116:21116/udp"
+      # Web console / WebSocket (opcional)
+      - "21118:21118"
+    volumes:
+      - cercano-data:/opt/cercano/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 21116 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  hbbr:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    image: cercano-server:latest
+    container_name: cercano-hbbr
+    restart: unless-stopped
+    user: "1000:1000"
+    working_dir: /opt/cercano/data
+    command: ["/opt/cercano/bin/hbbr"]
+    ports:
       # Relay service
       - "21117:21117"
-      # Web console / WebSocket
-      - "21118:21118"
+      # WebSocket relay (opcional)
       - "21119:21119"
     volumes:
-      - ./data:/opt/cercano/data
+      - cercano-data:/opt/cercano/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 21117 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  cercano-data:
+    driver: local

@@ -1,9 +1,10 @@
 # Multi-stage Dockerfile for Cercano Server (hbbs & hbbr)
 # SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Cercano Contributors
 
+# Etapa 1: Compilación de binarios Rust
 FROM rust:bookworm AS builder
 
-# Instalar dependencias de compilación
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
@@ -16,10 +17,10 @@ WORKDIR /usr/src/cercano-server
 # Copiar el código fuente de vendor/server
 COPY vendor/server /usr/src/cercano-server
 
-# Compilar los binarios de release (hbbs, hbbr, rustdesk-utils)
+# Compilar los binarios de release
 RUN cargo build --release --bin hbbs --bin hbbr --bin rustdesk-utils
 
-# Imagen de ejecución basada en Ubuntu 24.04 (o Debian bookworm)
+# Etapa 2: Imagen de ejecución minimalista y sin privilegios de root
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -32,17 +33,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsodium23 \
  && rm -rf /var/lib/apt/lists/*
 
+# Crear usuario y grupo de servicio no privilegiado
+RUN groupadd -g 1000 cercano && \
+    useradd -u 1000 -g cercano -d /opt/cercano -s /bin/bash cercano
+
 WORKDIR /opt/cercano
 
 RUN mkdir -p /opt/cercano/bin /opt/cercano/data
 
 COPY --from=builder /usr/src/cercano-server/target/release/hbbs /opt/cercano/bin/hbbs
 COPY --from=builder /usr/src/cercano-server/target/release/hbbr /opt/cercano/bin/hbbr
-COPY --from=builder /usr/src/cercano-server/target/release/rustdesk-utils /opt/cercano/bin/rustdesk-utils
-COPY tests/lab/cercano-server/entrypoint.sh /opt/cercano/entrypoint.sh
+COPY --from=builder /usr/src/cercano-server/target/release/rustdesk-utils /opt/cercano/bin/cercano-server-util
+COPY deploy/entrypoint-server.sh /opt/cercano/bin/entrypoint.sh
 
-RUN chmod +x /opt/cercano/bin/hbbs /opt/cercano/bin/hbbr /opt/cercano/bin/rustdesk-utils /opt/cercano/entrypoint.sh
+RUN chmod +x /opt/cercano/bin/hbbs /opt/cercano/bin/hbbr /opt/cercano/bin/cercano-server-util /opt/cercano/bin/entrypoint.sh && \
+    chown -R cercano:cercano /opt/cercano
+
+USER cercano
+WORKDIR /opt/cercano/data
 
 EXPOSE 21115/tcp 21116/tcp 21116/udp 21117/tcp 21118/tcp 21119/tcp
 
-ENTRYPOINT ["/opt/cercano/entrypoint.sh"]
+ENTRYPOINT ["/opt/cercano/bin/entrypoint.sh"]
+CMD ["/opt/cercano/bin/hbbs"]

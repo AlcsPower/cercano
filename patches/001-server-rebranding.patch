@@ -1,0 +1,124 @@
+﻿From: Agente-Servidor <cercano-dev@local>
+Subject: [PATCH] feat(server): F1-01 rebranding minimo del servidor hbbs y hbbr
+Date: 2026-11-05
+Component: vendor/server
+Task: F1-01
+
+Ajusta el nombre de la aplicacion y banners de inicio a Cercano Server (hbbs/hbbr)
+mostrando la version base de upstream (1.1.9).
+Mantiene 100% la compatibilidad binaria del protocolo de red (puertos 21115, 21116,
+21117, formato de mensajes protobuf y claves Ed25519).
+
+---
+diff --git a/vendor/server/src/common.rs b/vendor/server/src/common.rs
+index 078ee6b..f57aac6 100644
+--- a/vendor/server/src/common.rs
++++ b/vendor/server/src/common.rs
+@@ -55,9 +55,12 @@ fn arg_name(name: &str) -> String {
+ 
+ #[allow(dead_code)]
+ pub fn init_args(args: &str, name: &str, about: &str) {
+-    let matches = App::new(name)
+-        .version(crate::version::VERSION)
+-        .author("Purslane Ltd. <info@rustdesk.com>")
++    let version_str = Box::leak(format!("Cercano Server (upstream {})", crate::version::VERSION).into_boxed_str());
++    let app_name = Box::leak(format!("Cercano Server ({name})").into_boxed_str());
++    let matches = App::new(app_name as &'static str)
++        .bin_name(name)
++        .version(version_str as &'static str)
++        .author("Cercano Contributors")
+         .about(about)
+         .args_from_usage(args)
+         .get_matches();
+diff --git a/vendor/server/src/hbbr.rs b/vendor/server/src/hbbr.rs
+index 4c8a784..d42dde8 100644
+--- a/vendor/server/src/hbbr.rs
++++ b/vendor/server/src/hbbr.rs
+@@ -17,10 +17,12 @@ fn main() -> ResultType<()> {
+         -k, --key=[KEY] 'Only allow the client with the same key'
+         ",
+     );
+-    let matches = App::new("hbbr")
+-        .version(version::VERSION)
+-        .author("Purslane Ltd. <info@rustdesk.com>")
+-        .about("RustDesk Relay Server")
++    let version_str = Box::leak(format!("Cercano Server (upstream {})", version::VERSION).into_boxed_str());
++    let matches = App::new("Cercano Server (hbbr)")
++        .bin_name("hbbr")
++        .version(version_str as &'static str)
++        .author("Cercano Contributors")
++        .about("Cercano Server (hbbr) - Relay Server")
+         .args_from_usage(&args)
+         .get_matches();
+     if let Ok(v) = ini::Ini::load_from_file(".env") {
+diff --git a/vendor/server/src/main.rs b/vendor/server/src/main.rs
+index b97fbec..06855e7 100644
+--- a/vendor/server/src/main.rs
++++ b/vendor/server/src/main.rs
+@@ -18,13 +18,13 @@ fn main() -> ResultType<()> {
+         -p, --port=[NUMBER(default={RENDEZVOUS_PORT})] 'Sets the listening port'
+         -s, --serial=[NUMBER(default=0)] 'Sets configure update serial number'
+         -R, --rendezvous-servers=[HOSTS] 'Sets rendezvous servers, seperated by colon'
+-        -u, --software-url=[URL] 'Sets download url of RustDesk software of newest version'
++        -u, --software-url=[URL] 'Sets download url of Cercano software of newest version'
+         -r, --relay-servers=[HOST] 'Sets the default relay servers, seperated by colon'
+         -M, --rmem=[NUMBER(default={RMEM})] 'Sets UDP recv buffer size, set system rmem_max first, e.g., sudo sysctl -w net.core.rmem_max=52428800. vi /etc/sysctl.conf, net.core.rmem_max=52428800, sudo sysctl –p'
+         , --mask=[MASK] 'Determine if the connection comes from LAN, e.g. 192.168.0.0/16'
+         -k, --key=[KEY] 'Only allow the client with the same key'",
+     );
+-    init_args(&args, "hbbs", "RustDesk ID/Rendezvous Server");
++    init_args(&args, "hbbs", "Cercano Server (hbbs) - Rendezvous & ID Server");
+     let port = get_arg_or("port", RENDEZVOUS_PORT.to_string()).parse::<i32>()?;
+     if port < 3 {
+         bail!("Invalid port");
+diff --git a/vendor/server/src/relay_server.rs b/vendor/server/src/relay_server.rs
+index e042c23..7704042 100644
+--- a/vendor/server/src/relay_server.rs
++++ b/vendor/server/src/relay_server.rs
+@@ -47,6 +47,7 @@ const BLOCKLIST_FILE: &str = "blocklist.txt";
+ 
+ #[tokio::main(flavor = "multi_thread")]
+ pub async fn start(port: &str, key: &str) -> ResultType<()> {
++    log::info!("=== Cercano Server (hbbr) v{} (upstream 1.1.9) ===", crate::version::VERSION);
+     let key = get_server_sk(key);
+     if let Ok(mut file) = std::fs::File::open(BLACKLIST_FILE) {
+         let mut contents = String::new();
+diff --git a/vendor/server/src/rendezvous_server.rs b/vendor/server/src/rendezvous_server.rs
+index 0c0d107..7649221 100644
+--- a/vendor/server/src/rendezvous_server.rs
++++ b/vendor/server/src/rendezvous_server.rs
+@@ -96,6 +96,7 @@ impl RendezvousServer {
+         let nat_port = port - 1;
+         let ws_port = port + 2;
+         let pm = PeerMap::new().await?;
++        log::info!("=== Cercano Server (hbbs) v{} (upstream 1.1.9) ===", crate::version::VERSION);
+         log::info!("serial={}", serial);
+         let rendezvous_servers = get_servers(&get_arg("rendezvous-servers"), "rendezvous-servers");
+         log::info!("Listening on tcp/udp :{}", port);
+diff --git a/vendor/server/src/utils.rs b/vendor/server/src/utils.rs
+index 29d8c37..0c580d2 100644
+--- a/vendor/server/src/utils.rs
++++ b/vendor/server/src/utils.rs
+@@ -10,11 +10,11 @@ use std::{
+ fn print_help() {
+     println!(
+         "Usage:
+-    rustdesk-util [command]\n
++    cercano-server-util [command]\n
+ Available Commands:
+     genkeypair                                   Generate a new keypair
+     validatekeypair [public key] [secret key]    Validate an existing keypair
+-    doctor [rustdesk-server]                     Check for server connection problems"
++    doctor [cercano-server]                     Check for server connection problems"
+     );
+     process::exit(0x0001);
+ }
+@@ -161,7 +161,7 @@ fn main() {
+         }
+         "doctor" => {
+             if args.len() <= 2 {
+-                error_then_help("You must supply the rustdesk-server address");
++                error_then_help("You must supply the cercano-server address");
+             }
+             doctor(args[2].as_str());
+         }

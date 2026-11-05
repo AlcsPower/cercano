@@ -1,0 +1,32 @@
+[Unit]
+Description=Cercano Control Plane REST API
+After=network.target cercano-hbbs.service
+Wants=cercano-hbbs.service
+
+[Service]
+Type=simple
+LimitNOFILE=65535
+User=cercano
+Group=cercano
+WorkingDirectory=/opt/cercano/data
+ExecStart=/opt/cercano/bin/cercano-api
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+Environment=CERCANO_HOST=0.0.0.0
+Environment=CERCANO_PORT=21114
+Environment=CERCANO_DATABASE_URL=sqlite:///opt/cercano/data/cercano.db?mode=rwc
+Environment=CERCANO_SERVER_KEY_PATH=/opt/cercano/data/id_ed25519.pub
+Environment=CERCANO_LOG_LEVEL=info
+
+# Endurecimiento de seguridad (systemd hardening)
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/cercano/data
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
