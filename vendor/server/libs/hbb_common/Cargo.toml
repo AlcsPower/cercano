@@ -39,6 +39,7 @@ machine-uid = "0.2"
 [features]
 quic = []
 flatpak = []
+webrtc = []
 
 [build-dependencies]
 protobuf-codegen = { version = "3.1" }

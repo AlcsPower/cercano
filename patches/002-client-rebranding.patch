@@ -1,0 +1,445 @@
+From: Agente-Cliente <cercano-dev@local>
+Subject: [PATCH] feat(client): F1-07 rebranding del cliente desktop y flutter
+Date: 2026-11-05
+Component: vendor/client
+Task: F1-07
+
+Rebranding completo del cliente RustDesk 1.5.1 a Cercano:
+- Modifica nombre visible a Cercano e identificador de bundle com.cercano.client
+- Rutas de configuracion local aisladas (.config/cercano, AppData/Roaming/Cercano)
+- Sustitucion de textos de interfaz a Cercano con atribucion AGPL-3.0 y enlace al repo
+- Sustitucion de iconos oficiales por la identidad de marca de Cercano
+- Unifica crate hbb_common compartido entre servidor y cliente
+
+---
+diff --git a/vendor/client/Cargo.toml b/vendor/client/Cargo.toml
+index 1002586..28e8b1f 100644
+--- a/vendor/client/Cargo.toml
++++ b/vendor/client/Cargo.toml
+@@ -1,15 +1,15 @@
+ [package]
+-name = "rustdesk"
++name = "cercano"
+ version = "1.5.1"
+-authors = ["rustdesk <info@rustdesk.com>"]
++authors = ["Cercano Contributors <info@cercano.local>"]
+ edition = "2021"
+ build= "build.rs"
+-description = "RustDesk Remote Desktop"
+-default-run = "rustdesk"
++description = "Cercano Remote Desktop"
++default-run = "cercano"
+ rust-version = "1.75"
+ 
+ [lib]
+-name = "librustdesk"
++name = "libcercano"
+ crate-type = ["cdylib", "staticlib", "rlib"]
+ 
+ [[bin]]
+@@ -52,7 +52,7 @@ screencapturekit = ["cpal/screencapturekit"]
+ [dependencies]
+ async-trait = "0.1"
+ scrap = { path = "libs/scrap", features = ["wayland"] }
+-hbb_common = { path = "libs/hbb_common", features = ["webrtc"] }
++hbb_common = { path = "../server/libs/hbb_common", features = ["webrtc"] }
+ base = { path = "libs/base" }
+ serde_derive = "1.0"
+ serde = "1.0"
+@@ -276,8 +276,8 @@ docopt = "1.1"
+ tokio = "1.44"
+ 
+ [package.metadata.bundle]
+-name = "RustDesk"
+-identifier = "com.carriez.rustdesk"
++name = "Cercano"
++identifier = "com.cercano.client"
+ icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
+ osx_minimum_system_version = "10.14"
+ 
+diff --git a/vendor/client/flatpak/com.rustdesk.RustDesk.metainfo.xml b/vendor/client/flatpak/com.rustdesk.RustDesk.metainfo.xml
+index 90bdafc..0b497b8 100644
+--- a/vendor/client/flatpak/com.rustdesk.RustDesk.metainfo.xml
++++ b/vendor/client/flatpak/com.rustdesk.RustDesk.metainfo.xml
+@@ -1,13 +1,13 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <component type="desktop-application">
+-  <id>com.rustdesk.RustDesk</id>
++  <id>com.cercano.client</id>
+   <developer id="com.rustdesk">
+-    <name>RustDesk</name>
++    <name>Cercano</name>
+   </developer>
+   <launchable type="desktop-id">com.rustdesk.RustDesk.desktop</launchable>
+   <metadata_license>CC0-1.0</metadata_license>
+   <project_license>AGPL-3.0-only</project_license>
+-  <name>RustDesk</name>
++  <name>Cercano</name>
+   <summary>Secure remote desktop access</summary>
+   <description>
+     <p>
+diff --git a/vendor/client/flutter/android/app/build.gradle b/vendor/client/flutter/android/app/build.gradle
+index 07f029c..3f7cb49 100644
+--- a/vendor/client/flutter/android/app/build.gradle
++++ b/vendor/client/flutter/android/app/build.gradle
+@@ -99,7 +99,7 @@ android {
+ 
+     defaultConfig {
+         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+-        applicationId "com.carriez.flutter_hbb"
++        applicationId "com.cercano.client"
+         minSdkVersion 22
+         targetSdkVersion 36
+         versionCode flutterVersionCode.toInteger()
+diff --git a/vendor/client/flutter/android/app/src/main/res/values/strings.xml b/vendor/client/flutter/android/app/src/main/res/values/strings.xml
+index eae55d5..bf455d8 100644
+--- a/vendor/client/flutter/android/app/src/main/res/values/strings.xml
++++ b/vendor/client/flutter/android/app/src/main/res/values/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">RustDesk</string>
++    <string name="app_name">Cercano</string>
+     <string name="accessibility_service_description">Allow other devices to control your phone using virtual touch, when RustDesk screen sharing is established</string>
+     <string name="foreground_service_special_use_subtype">Keeps the RustDesk remote desktop host available for authorized unattended connections and foreground notifications without starting screen capture before user approval.</string>
+ </resources>
+diff --git a/vendor/client/flutter/ios/Runner/Info.plist b/vendor/client/flutter/ios/Runner/Info.plist
+index 78fd51d..4d7b31f 100644
+--- a/vendor/client/flutter/ios/Runner/Info.plist
++++ b/vendor/client/flutter/ios/Runner/Info.plist
+@@ -30,7 +30,7 @@
+ 			<key>CFBundleURLIconFile</key>
+ 			<string></string>
+ 			<key>CFBundleURLName</key>
+-			<string>com.carriez.rustdesk</string>
++			<string>com.cercano.client</string>
+ 			<key>CFBundleURLSchemes</key>
+ 			<array>
+ 				<string>rustdesk</string>
+diff --git a/vendor/client/flutter/lib/desktop/pages/desktop_setting_page.dart b/vendor/client/flutter/lib/desktop/pages/desktop_setting_page.dart
+index 730d758..1167dc5 100644
+--- a/vendor/client/flutter/lib/desktop/pages/desktop_setting_page.dart
++++ b/vendor/client/flutter/lib/desktop/pages/desktop_setting_page.dart
+@@ -2617,7 +2617,7 @@ class _AboutState extends State<_About> {
+                       .marginSymmetric(vertical: 4.0)),
+               InkWell(
+                   onTap: () {
+-                    launchUrlString('https://rustdesk.com/privacy.html');
++                    launchUrlString('https://github.com/cercano/cercano');
+                   },
+                   child: Text(
+                     translate('Privacy Statement'),
+@@ -2625,14 +2625,14 @@ class _AboutState extends State<_About> {
+                   ).marginSymmetric(vertical: 4.0)),
+               InkWell(
+                   onTap: () {
+-                    launchUrlString('https://rustdesk.com');
++                    launchUrlString('https://github.com/cercano/cercano');
+                   },
+                   child: Text(
+                     translate('Website'),
+                     style: linkStyle,
+                   ).marginSymmetric(vertical: 4.0)),
+               Container(
+-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
++                decoration: const BoxDecoration(color: Color(0xFF3B5BFF)),
+                 padding:
+                     const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                 child: SelectionArea(
+@@ -2643,11 +2643,11 @@ class _AboutState extends State<_About> {
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                           Text(
+-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
++                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Cercano Contributors.\nLicensed under GNU AGPL-3.0.\nBased on RustDesk (AGPL-3.0).\nSource code: https://github.com/cercano/cercano',
+                             style: const TextStyle(color: Colors.white),
+                           ),
+                           Text(
+-                            translate('Slogan_tip'),
++                            'Soporte remoto, como si estuvieras ahí.',
+                             style: TextStyle(
+                                 fontWeight: FontWeight.w800,
+                                 color: Colors.white),
+diff --git a/vendor/client/flutter/macos/Runner.xcodeproj/project.pbxproj b/vendor/client/flutter/macos/Runner.xcodeproj/project.pbxproj
+index c41bfa1..b1b32c0 100644
+--- a/vendor/client/flutter/macos/Runner.xcodeproj/project.pbxproj
++++ b/vendor/client/flutter/macos/Runner.xcodeproj/project.pbxproj
+@@ -445,7 +445,7 @@
+ 					../../target/profile,
+ 				);
+ 				MACOSX_DEPLOYMENT_TARGET = 10.14;
+-				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;
++				PRODUCT_BUNDLE_IDENTIFIER = com.cercano.client;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
+ 				SWIFT_VERSION = 5.0;
+@@ -590,7 +590,7 @@
+ 					../../target/debug,
+ 				);
+ 				MACOSX_DEPLOYMENT_TARGET = 10.14;
+-				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;
++				PRODUCT_BUNDLE_IDENTIFIER = com.cercano.client;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
+ 				"SWIFT_OBJC_BRIDGING_HEADER[arch=*]" = Runner/bridge_generated.h;
+@@ -627,7 +627,7 @@
+ 					__cgpreloginapp,
+ 					/dev/null,
+ 				);
+-				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;
++				PRODUCT_BUNDLE_IDENTIFIER = com.cercano.client;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
+ 				"SWIFT_OBJC_BRIDGING_HEADER[arch=*]" = Runner/bridge_generated.h;
+diff --git a/vendor/client/flutter/macos/Runner/Info.plist b/vendor/client/flutter/macos/Runner/Info.plist
+index 36ca81e..9134cff 100644
+--- a/vendor/client/flutter/macos/Runner/Info.plist
++++ b/vendor/client/flutter/macos/Runner/Info.plist
+@@ -26,7 +26,7 @@
+ 			<key>CFBundleURLIconFile</key>
+ 			<string></string>
+ 			<key>CFBundleURLName</key>
+-			<string>com.carriez.rustdesk</string>
++			<string>com.cercano.client</string>
+ 			<key>CFBundleURLSchemes</key>
+ 			<array>
+ 				<string>rustdesk</string>
+diff --git a/vendor/client/flutter/windows/runner/Runner.rc b/vendor/client/flutter/windows/runner/Runner.rc
+index 88d1854..528cdeb 100644
+--- a/vendor/client/flutter/windows/runner/Runner.rc
++++ b/vendor/client/flutter/windows/runner/Runner.rc
+@@ -89,13 +89,13 @@ BEGIN
+     BEGIN
+         BLOCK "040904e4"
+         BEGIN
+-            VALUE "CompanyName", "Purslane Tech Pte. Ltd." "\0"
+-            VALUE "FileDescription", "RustDesk Remote Desktop" "\0"
++            VALUE "CompanyName", "Cercano Contributors" "\0"
++            VALUE "FileDescription", "Cercano Remote Desktop" "\0"
+             VALUE "FileVersion", VERSION_AS_STRING "\0"
+-            VALUE "InternalName", "rustdesk" "\0"
+-            VALUE "LegalCopyright", "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved." "\0"
+-            VALUE "OriginalFilename", "rustdesk.exe" "\0"
+-            VALUE "ProductName", "RustDesk" "\0"
++            VALUE "InternalName", "cercano" "\0"
++            VALUE "LegalCopyright", "Copyright (C) 2026 Cercano Contributors. Licensed under AGPL-3.0." "\0"
++            VALUE "OriginalFilename", "cercano.exe" "\0"
++            VALUE "ProductName", "Cercano" "\0"
+             VALUE "ProductVersion", VERSION_AS_STRING "\0"
+         END
+     END
+diff --git a/vendor/client/flutter/windows/runner/main.cpp b/vendor/client/flutter/windows/runner/main.cpp
+index 4ac6b99..0763319 100644
+--- a/vendor/client/flutter/windows/runner/main.cpp
++++ b/vendor/client/flutter/windows/runner/main.cpp
+@@ -27,10 +27,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
+   if (auto result = service_control::HandleCommand(command_line)) {
+     return static_cast<int>(*result);
+   }
+-  HINSTANCE hInstance = LoadLibraryA("librustdesk.dll");
++  HINSTANCE hInstance = LoadLibraryA("libcercano.dll");
+   if (!hInstance)
+   {
+-    std::cout << "Failed to load librustdesk.dll." << std::endl;
++    hInstance = LoadLibraryA("librustdesk.dll");
++  }
++  if (!hInstance)
++  {
++    std::cout << "Failed to load libcercano.dll or librustdesk.dll." << std::endl;
+     return EXIT_FAILURE;
+   }
+   FUNC_RUSTDESK_CORE_MAIN rustdesk_core_main =
+@@ -84,7 +88,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
+         command_line_arguments.end());
+   }
+ 
+-  std::wstring app_name = L"RustDesk";
++  std::wstring app_name = L"Cercano";
+   FUNC_RUSTDESK_GET_APP_NAME get_rustdesk_app_name = (FUNC_RUSTDESK_GET_APP_NAME)GetProcAddress(hInstance, "get_rustdesk_app_name");
+   if (get_rustdesk_app_name) {
+     wchar_t app_name_buffer[512] = {0};
+diff --git a/vendor/client/res/rustdesk.desktop b/vendor/client/res/rustdesk.desktop
+index 4e7d14f..30a5b10 100644
+--- a/vendor/client/res/rustdesk.desktop
++++ b/vendor/client/res/rustdesk.desktop
+@@ -1,19 +1,19 @@
+ [Desktop Entry]
+-Name=RustDesk
++Name=Cercano
+ GenericName=Remote Desktop
+-Comment=Remote Desktop
+-Exec=rustdesk %u
+-Icon=rustdesk
++Comment=Cercano Remote Desktop
++Exec=cercano %u
++Icon=cercano
+ Terminal=false
+ Type=Application
+ StartupNotify=true
+ Categories=Network;RemoteAccess;GTK;
+ Keywords=internet;linux;dart;rust;remote-control;p2p;teamviewer;rust-lang;rdp;remote-desktop;vnc;
+ Actions=new-window;
+-StartupWMClass=rustdesk
++StartupWMClass=cercano
+ 
+ X-Desktop-File-Install-Version=0.23
+ 
+ [Desktop Action new-window]
+ Name=Open a New Window
+-Exec=rustdesk %u
++Exec=cercano %u
+diff --git a/vendor/client/res/rustdesk.service b/vendor/client/res/rustdesk.service
+index 1b3feb1..a3cf0ba 100644
+--- a/vendor/client/res/rustdesk.service
++++ b/vendor/client/res/rustdesk.service
+@@ -1,17 +1,17 @@
+ [Unit]
+-Description=RustDesk
++Description=Cercano Service
+ Requires=network.target
+ After=systemd-user-sessions.service
+ 
+ [Service]
+ Type=simple
+-ExecStart=/usr/bin/rustdesk --service
++ExecStart=/usr/bin/cercano --service
+ # kill --tray and --server both
+-ExecStop=pkill -f "rustdesk --"
++ExecStop=pkill -f "cercano --"
+ # below two lines do not work, have to use above one line
+-#ExecStop=pkill -f "rustdesk --tray"
+-#ExecStop=pkill -f "rustdesk --server"
+-PIDFile=/run/rustdesk.pid
++#ExecStop=pkill -f "cercano --tray"
++#ExecStop=pkill -f "cercano --server"
++PIDFile=/run/cercano.pid
+ KillMode=mixed
+ TimeoutStopSec=30
+ User=root
+diff --git a/vendor/client/src/clipboard.rs b/vendor/client/src/clipboard.rs
+index 9a1bd60..5f3f44e 100644
+--- a/vendor/client/src/clipboard.rs
++++ b/vendor/client/src/clipboard.rs
+@@ -26,7 +26,7 @@ pub fn is_sync_clipboard_between_sessions_enabled() -> bool {
+ }
+ 
+ // This format is used to store the flag in the clipboard.
+-const RUSTDESK_CLIPBOARD_OWNER_FORMAT: &'static str = "dyn.com.rustdesk.owner";
++const RUSTDESK_CLIPBOARD_OWNER_FORMAT: &'static str = "dyn.com.cercano.owner";
+ 
+ // Add special format for Excel XML Spreadsheet
+ const CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET: &'static str = "XML Spreadsheet";
+diff --git a/vendor/client/src/common.rs b/vendor/client/src/common.rs
+index 53831cc..e375cf5 100644
+--- a/vendor/client/src/common.rs
++++ b/vendor/client/src/common.rs
+@@ -51,7 +51,7 @@ pub enum GrabState {
+ pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
+ 
+ // the executable name of the portable version
+-pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
++pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "CERCANO_APPNAME";
+ 
+ pub const PLATFORM_WINDOWS: &str = "Windows";
+ pub const PLATFORM_LINUX: &str = "Linux";
+@@ -1210,12 +1210,17 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
+ 
+ #[inline]
+ pub fn get_app_name() -> String {
+-    hbb_common::config::APP_NAME.read().unwrap().clone()
++    let name = hbb_common::config::APP_NAME.read().unwrap().clone();
++    if name.is_empty() || name == "RustDesk" {
++        "Cercano".to_owned()
++    } else {
++        name
++    }
+ }
+ 
+ #[inline]
+ pub fn is_rustdesk() -> bool {
+-    hbb_common::config::APP_NAME.read().unwrap().eq("RustDesk")
++    false
+ }
+ 
+ #[inline]
+@@ -1228,7 +1233,7 @@ pub fn get_full_name() -> String {
+     format!(
+         "{}.{}",
+         hbb_common::config::ORG.read().unwrap(),
+-        hbb_common::config::APP_NAME.read().unwrap(),
++        get_app_name(),
+     )
+ }
+ 
+diff --git a/vendor/client/src/manual_update.rs b/vendor/client/src/manual_update.rs
+index 4476ec0..ea6cb42 100644
+--- a/vendor/client/src/manual_update.rs
++++ b/vendor/client/src/manual_update.rs
+@@ -5,7 +5,7 @@ use hbb_common::{
+ use std::{io::Read, path::Path};
+ 
+ const UPDATE_SIDECAR_MAX_BYTES: u64 = 1024 * 1024;
+-const PUBLIC_MACOS_BUNDLE_ID: &str = "com.carriez.rustdesk";
++const PUBLIC_MACOS_BUNDLE_ID: &str = "com.cercano.client";
+ const MACOS_UPDATE_USAGE: &str = "Usage: --update [update.dmg --metadata rustdesk-update.json --signature rustdesk-update.json.sig]";
+ const LEGACY_UPDATE_WARNING: &str =
+     "legacy offline update: signed metadata not found; release hash was not verified";
+diff --git a/vendor/client/src/platform/windows.rs b/vendor/client/src/platform/windows.rs
+index 206a88d..f813338 100644
+--- a/vendor/client/src/platform/windows.rs
++++ b/vendor/client/src/platform/windows.rs
+@@ -1247,8 +1247,8 @@ pub fn portable_service_logon_helper_paths() -> Option<(PathBuf, PathBuf)> {
+         .home_dir()
+         .join("AppData")
+         .join("Local")
+-        .join("rustdesk-sciter");
+-    let dst = dir.join("rustdesk.exe");
++        .join("cercano-sciter");
++    let dst = dir.join("cercano.exe");
+     Some((dir, dst))
+ }
+ 
+@@ -2026,8 +2026,8 @@ fn get_public_base_dir() -> PathBuf {
+ #[inline]
+ pub fn get_custom_client_staging_dir() -> PathBuf {
+     get_public_base_dir()
+-        .join("RustDesk")
+-        .join("RustDeskCustomClientStaging")
++        .join("Cercano")
++        .join("CercanoCustomClientStaging")
+ }
+ 
+ /// Removes the custom client staging directory.
+@@ -4186,7 +4186,7 @@ pub fn message_box(text: &str) {
+         .encode_utf16()
+         .chain(std::iter::once(0))
+         .collect::<Vec<u16>>();
+-    let caption = "RustDesk Output"
++    let caption = "Cercano Output"
+         .encode_utf16()
+         .chain(std::iter::once(0))
+         .collect::<Vec<u16>>();
+diff --git a/vendor/server/libs/hbb_common/Cargo.toml b/vendor/server/libs/hbb_common/Cargo.toml
+index 59f0896..fff6607 100644
+--- a/vendor/server/libs/hbb_common/Cargo.toml
++++ b/vendor/server/libs/hbb_common/Cargo.toml
+@@ -39,6 +39,7 @@ machine-uid = "0.2"
+ [features]
+ quic = []
+ flatpak = []
++webrtc = []
+ 
+ [build-dependencies]
+ protobuf-codegen = { version = "3.1" }
+diff --git a/vendor/server/libs/hbb_common/src/config.rs b/vendor/server/libs/hbb_common/src/config.rs
+index 099a454..86d273d 100644
+--- a/vendor/server/libs/hbb_common/src/config.rs
++++ b/vendor/server/libs/hbb_common/src/config.rs
+@@ -48,7 +48,7 @@ lazy_static::lazy_static! {
+         Some(key) if !key.is_empty() => key,
+         _ => "",
+     }.to_owned()));
+-    pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
++    pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("Cercano".to_owned()));
+     static ref KEY_PAIR: Arc<Mutex<Option<KeyPair>>> = Default::default();
+     static ref HW_CODEC_CONFIG: Arc<RwLock<HwCodecConfig>> = Arc::new(RwLock::new(HwCodecConfig::load()));
+ }

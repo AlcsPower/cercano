@@ -1,0 +1,111 @@
+From: Agente-Cliente <cercano-dev@local>
+Subject: [PATCH] feat(client): F1-08 cliente apuntando a cercano-api y endpoints locales
+Date: 2026-11-05
+Component: vendor/client
+Task: F1-08
+
+Configuracion por defecto de endpoints de red y telemetria:
+- Rendezvous/ID Server: 127.0.0.1:21116
+- Relay Server: 127.0.0.1:21117
+- API Server: http://127.0.0.1:21114
+- Latido de telemetria hacia POST /api/devices/heartbeat enviando id, os, hostname y version
+
+---
+diff --git a/vendor/client/src/client.rs b/vendor/client/src/client.rs
+index 597dc86..9b224e3 100644
+--- a/vendor/client/src/client.rs
++++ b/vendor/client/src/client.rs
+@@ -1859,6 +1859,10 @@ impl Client {
+         ipv4: bool,
+     ) -> ResultType<Stream> {
+         // The proxy's address family does not constrain the relay target.
++        let mut relay_server = relay_server;
++        if relay_server.is_empty() {
++            relay_server = "127.0.0.1:21117".to_string();
++        }
+         let relay_server = check_port(relay_server, RELAY_PORT);
+         let use_ws_proxy = Config::is_proxy() && is_ws_endpoint(&check_ws(&relay_server));
+         let mut conn = connect_tcp(
+diff --git a/vendor/client/src/common.rs b/vendor/client/src/common.rs
+index e375cf5..8e8d123 100644
+--- a/vendor/client/src/common.rs
++++ b/vendor/client/src/common.rs
+@@ -1254,7 +1254,7 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
+     if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
+         return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
+     }
+-    "".to_owned()
++    "127.0.0.1:21116".to_owned()
+ }
+ 
+ #[inline]
+@@ -1299,7 +1299,7 @@ fn get_api_server_(api: String, custom: String) -> String {
+             return format!("http://{}", s);
+         }
+     }
+-    "https://admin.rustdesk.com".to_owned()
++    "http://127.0.0.1:21114".to_owned()
+ }
+ 
+ #[inline]
+diff --git a/vendor/client/src/hbbs_http/sync.rs b/vendor/client/src/hbbs_http/sync.rs
+index aac220b..42e1185 100644
+--- a/vendor/client/src/hbbs_http/sync.rs
++++ b/vendor/client/src/hbbs_http/sync.rs
+@@ -233,10 +233,15 @@ async fn start_hbbs_sync_async() {
+                     continue;
+                 }
+                 last_sent = Some(Instant::now());
++                let sysinfo = crate::get_sysinfo();
+                 let mut v = Value::default();
+                 v["id"] = json!(id);
+                 v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
+                 v["ver"] = json!(hbb_common::get_version_number(crate::VERSION));
++                v["version"] = json!(crate::VERSION);
++                v["os"] = json!(sysinfo["os"].as_str().unwrap_or(std::env::consts::OS));
++                v["hostname"] = json!(sysinfo["hostname"].as_str().unwrap_or(&crate::hostname()));
++                v["name"] = json!(sysinfo["hostname"].as_str().unwrap_or(&crate::hostname()));
+                 if !conns.is_empty() {
+                     v["conns"] = json!(conns);
+                 }
+@@ -289,7 +294,7 @@ fn heartbeat_url() -> String {
+     if url.is_empty() || crate::is_public(&url) {
+         return "".to_owned();
+     }
+-    format!("{}/api/heartbeat", url)
++    format!("{}/api/devices/heartbeat", url)
+ }
+ 
+ async fn handle_config_options(
+diff --git a/vendor/client/src/rendezvous_mediator.rs b/vendor/client/src/rendezvous_mediator.rs
+index b1e523d..b418951 100644
+--- a/vendor/client/src/rendezvous_mediator.rs
++++ b/vendor/client/src/rendezvous_mediator.rs
+@@ -1337,9 +1337,11 @@ impl RendezvousMediator {
+         if relay_server.is_empty() {
+             relay_server = crate::increase_port(&self.host, 1);
+         }
++        if relay_server.is_empty() {
++            relay_server = "127.0.0.1:21117".to_string();
++        }
+         relay_server
+     }
+-}
+ 
+ fn get_direct_port() -> i32 {
+     let mut port = Config::get_option("direct-access-port")
+diff --git a/vendor/server/libs/hbb_common/src/config.rs b/vendor/server/libs/hbb_common/src/config.rs
+index 86d273d..a7a8f6b 100644
+--- a/vendor/server/libs/hbb_common/src/config.rs
++++ b/vendor/server/libs/hbb_common/src/config.rs
+@@ -76,9 +76,7 @@ const CHARS: &[char] = &[
+ ];
+ 
+ pub const RENDEZVOUS_SERVERS: &[&str] = &[
+-    "rs-ny.rustdesk.com",
+-    "rs-sg.rustdesk.com",
+-    "rs-cn.rustdesk.com",
++    "127.0.0.1:21116",
+ ];
+ 
+ pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {

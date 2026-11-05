@@ -29,8 +29,8 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F1-04 | Autenticación y usuarios | F1-03 | ControlPlane | Seguridad | Hecho |
 | F1-05 | Registro de dispositivos | F1-03, F0-06 | ControlPlane | QA | Hecho |
 | F1-06 | Gestión de claves del servidor | F1-01, F1-03 | Servidor | Seguridad | Hecho |
-| F1-07 | Rebranding del cliente | F0-10 | Cliente | QA | Pendiente |
-| F1-08 | Cliente apuntando a `cercano-api` | F1-05, F1-07 | Cliente | QA | Pendiente |
+| F1-07 | Rebranding del cliente | F0-10 | Cliente | QA | En verificación |
+| F1-08 | Cliente apuntando a `cercano-api` | F1-05, F1-07 | Cliente | QA | En verificación |
 | F1-09 | Smoke test E2E automatizado | F1-02, F1-08, F0-09 | QA | Coordinador | Pendiente |
 | F1-10 | Guía de despliegue y cierre | F1-09 | Coordinador | Dueño | Pendiente |
 

@@ -233,10 +233,15 @@ async fn start_hbbs_sync_async() {
                     continue;
                 }
                 last_sent = Some(Instant::now());
+                let sysinfo = crate::get_sysinfo();
                 let mut v = Value::default();
                 v["id"] = json!(id);
                 v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
                 v["ver"] = json!(hbb_common::get_version_number(crate::VERSION));
+                v["version"] = json!(crate::VERSION);
+                v["os"] = json!(sysinfo["os"].as_str().unwrap_or(std::env::consts::OS));
+                v["hostname"] = json!(sysinfo["hostname"].as_str().unwrap_or(&crate::hostname()));
+                v["name"] = json!(sysinfo["hostname"].as_str().unwrap_or(&crate::hostname()));
                 if !conns.is_empty() {
                     v["conns"] = json!(conns);
                 }
@@ -289,7 +294,7 @@ fn heartbeat_url() -> String {
     if url.is_empty() || crate::is_public(&url) {
         return "".to_owned();
     }
-    format!("{}/api/heartbeat", url)
+    format!("{}/api/devices/heartbeat", url)
 }
 
 async fn handle_config_options(

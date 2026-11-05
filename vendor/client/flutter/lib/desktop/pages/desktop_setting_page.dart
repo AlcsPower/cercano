@@ -2617,7 +2617,7 @@ class _AboutState extends State<_About> {
                       .marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com/privacy.html');
+                    launchUrlString('https://github.com/cercano/cercano');
                   },
                   child: Text(
                     translate('Privacy Statement'),
@@ -2625,14 +2625,14 @@ class _AboutState extends State<_About> {
                   ).marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com');
+                    launchUrlString('https://github.com/cercano/cercano');
                   },
                   child: Text(
                     translate('Website'),
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                decoration: const BoxDecoration(color: Color(0xFF3B5BFF)),
                 padding:
                     const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                 child: SelectionArea(
@@ -2643,11 +2643,11 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
+                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Cercano Contributors.\nLicensed under GNU AGPL-3.0.\nBased on RustDesk (AGPL-3.0).\nSource code: https://github.com/cercano/cercano',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(
-                            translate('Slogan_tip'),
+                            'Soporte remoto, como si estuvieras ahí.',
                             style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 color: Colors.white),

@@ -27,10 +27,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (auto result = service_control::HandleCommand(command_line)) {
     return static_cast<int>(*result);
   }
-  HINSTANCE hInstance = LoadLibraryA("librustdesk.dll");
+  HINSTANCE hInstance = LoadLibraryA("libcercano.dll");
   if (!hInstance)
   {
-    std::cout << "Failed to load librustdesk.dll." << std::endl;
+    hInstance = LoadLibraryA("librustdesk.dll");
+  }
+  if (!hInstance)
+  {
+    std::cout << "Failed to load libcercano.dll or librustdesk.dll." << std::endl;
     return EXIT_FAILURE;
   }
   FUNC_RUSTDESK_CORE_MAIN rustdesk_core_main =
@@ -84,7 +88,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
         command_line_arguments.end());
   }
 
-  std::wstring app_name = L"RustDesk";
+  std::wstring app_name = L"Cercano";
   FUNC_RUSTDESK_GET_APP_NAME get_rustdesk_app_name = (FUNC_RUSTDESK_GET_APP_NAME)GetProcAddress(hInstance, "get_rustdesk_app_name");
   if (get_rustdesk_app_name) {
     wchar_t app_name_buffer[512] = {0};

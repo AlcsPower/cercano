@@ -51,7 +51,7 @@ pub enum GrabState {
 pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
 
 // the executable name of the portable version
-pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
+pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "CERCANO_APPNAME";
 
 pub const PLATFORM_WINDOWS: &str = "Windows";
 pub const PLATFORM_LINUX: &str = "Linux";
@@ -1210,12 +1210,17 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
 
 #[inline]
 pub fn get_app_name() -> String {
-    hbb_common::config::APP_NAME.read().unwrap().clone()
+    let name = hbb_common::config::APP_NAME.read().unwrap().clone();
+    if name.is_empty() || name == "RustDesk" {
+        "Cercano".to_owned()
+    } else {
+        name
+    }
 }
 
 #[inline]
 pub fn is_rustdesk() -> bool {
-    hbb_common::config::APP_NAME.read().unwrap().eq("RustDesk")
+    false
 }
 
 #[inline]
@@ -1228,7 +1233,7 @@ pub fn get_full_name() -> String {
     format!(
         "{}.{}",
         hbb_common::config::ORG.read().unwrap(),
-        hbb_common::config::APP_NAME.read().unwrap(),
+        get_app_name(),
     )
 }
 
@@ -1249,7 +1254,7 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
     if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
         return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
     }
-    "".to_owned()
+    "127.0.0.1:21116".to_owned()
 }
 
 #[inline]
@@ -1294,7 +1299,7 @@ fn get_api_server_(api: String, custom: String) -> String {
             return format!("http://{}", s);
         }
     }
-    "https://admin.rustdesk.com".to_owned()
+    "http://127.0.0.1:21114".to_owned()
 }
 
 #[inline]

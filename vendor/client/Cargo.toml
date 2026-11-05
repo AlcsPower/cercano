@@ -1,15 +1,15 @@
 [package]
-name = "rustdesk"
+name = "cercano"
 version = "1.5.1"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["Cercano Contributors <info@cercano.local>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "Cercano Remote Desktop"
+default-run = "cercano"
 rust-version = "1.75"
 
 [lib]
-name = "librustdesk"
+name = "libcercano"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
@@ -52,7 +52,7 @@ screencapturekit = ["cpal/screencapturekit"]
 [dependencies]
 async-trait = "0.1"
 scrap = { path = "libs/scrap", features = ["wayland"] }
-hbb_common = { path = "libs/hbb_common", features = ["webrtc"] }
+hbb_common = { path = "../server/libs/hbb_common", features = ["webrtc"] }
 base = { path = "libs/base" }
 serde_derive = "1.0"
 serde = "1.0"
@@ -276,8 +276,8 @@ docopt = "1.1"
 tokio = "1.44"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "Cercano"
+identifier = "com.cercano.client"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 
