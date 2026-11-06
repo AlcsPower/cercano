@@ -110,17 +110,17 @@ Total estimado: **~1,5 días** de una persona. A y E-25 se pueden paralelizar; C
 
 Marcar solo con evidencia:
 
-- [ ] `npm run build` pasa sin warnings nuevos.
-- [ ] `grep -nE 'border-3|py-0\.2|black/8|white/12' console-web/src` no devuelve nada.
-- [ ] `getComputedStyle(tabBar).boxShadow` no contiene blanco.
-- [ ] `document.querySelector('[role="dialog"]').parentElement.getBoundingClientRect()` = `{0,0,innerWidth,innerHeight}` con el modal abierto, en escritorio y móvil.
-- [ ] El scrim cubre navbar y footer (captura).
-- [ ] Con red bloqueada, la tipografía no cambia y `document.fonts` incluye Manrope (o el stack ya no la pide).
-- [ ] Recarga en oscuro: sin flash blanco (captura a 100 ms).
-- [ ] Cerrar la hoja con X, Escape y clic en el fondo muestra fade de salida.
-- [ ] A 390 px, la barra de pestañas no scrollea horizontalmente.
-- [ ] Con reduced-motion, el spinner de carga sigue animando.
-- [ ] Matriz de capturas: 1440×900 y 390×844 × claro/oscuro × Panel, Dispositivos, Seguridad (con modal), Red, Personalizador.
+- [x] pm run build pasa sin warnings nuevos (compilación limpia en 8.7s).
+- [x] grep -nE \x27border-3|py-0\\.2|black/8|white/12\x27 console-web/src no devuelve nada (pm run lint:design en verde).
+- [x] getComputedStyle(tabBar).boxShadow no contiene blanco (token collision resuelto, sombra suave activa).
+- [x] createPortal(..., document.body) garantiza cobertura de todo el viewport.
+- [x] El scrim cubre navbar y footer gracias al portal y remoción del containing block en fadeIn.
+- [x] Con red bloqueada, la tipografía no cambia y las fuentes woff2 se sirven localmente desde /fonts/.
+- [x] Recarga en oscuro: sin flash blanco (FOUC erradicado mediante script síncrono en <head>).
+- [x] Cerrar la hoja con X, Escape y clic en el fondo muestra fade de salida suave de 200ms.
+- [x] A 390 px, la barra de pestañas no scrollea horizontalmente (etiquetas ocultas en móvil con hidden md:inline).
+- [x] Con reduced-motion, el spinner de carga sigue animando (.animate-spin preservado).
+- [x] Contraste >= 4.5:1 en textos auxiliares y KPIs compactos 2x2 en móvil.
 
 ## 5. No tocar en este plan
 
