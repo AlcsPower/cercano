@@ -50,7 +50,7 @@ export const TabBar: React.FC<TabBarProps> = ({
     <div className="w-full flex justify-center py-4 px-4 sticky top-16 z-30 pointer-events-none">
       <nav
         aria-label="Navegación principal"
-        className="pointer-events-auto inline-flex items-center p-1.5 rounded-2xl bg-white/70 dark:bg-zinc-800/70 backdrop-blur-xl border border-black/8 dark:border-white/12 shadow-apple-card max-w-full overflow-x-auto"
+        className="pointer-events-auto inline-flex items-center p-1.5 rounded-2xl bg-white/70 dark:bg-zinc-800/70 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-apple-card max-w-full overflow-x-auto"
       >
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -68,7 +68,7 @@ export const TabBar: React.FC<TabBarProps> = ({
               <span>{tab.label}</span>
               {typeof tab.badge === 'number' && tab.badge > 0 && (
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold leading-tight ${
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-tight ${
                     isActive
                       ? 'bg-white/25 text-white'
                       : 'bg-cercano-green/20 text-cercano-green-dark dark:text-cercano-green'

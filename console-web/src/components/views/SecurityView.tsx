@@ -155,7 +155,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
           <label className="block text-xs font-semibold text-cercano-slate dark:text-gray-400 uppercase tracking-wider mb-2">
             Cadena de Clave Pública (Base64)
           </label>
-          <div className="relative p-4 rounded-2xl bg-black/[0.03] dark:bg-black/30 border border-black/8 dark:border-white/10 font-mono text-sm text-cercano-night dark:text-blue-200 break-all select-all flex items-center justify-between">
+          <div className="relative p-4 rounded-2xl bg-black/[0.03] dark:bg-black/30 border border-black/10 dark:border-white/10 font-mono text-sm text-cercano-night dark:text-blue-200 break-all select-all flex items-center justify-between">
             <span>{keyInfo ? keyInfo.public_key : 'Cargando clave criptográfica...'}</span>
           </div>
         </div>

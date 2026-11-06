@@ -53,7 +53,7 @@ export const App: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-apple-canvas dark:bg-apple-canvas-dark">
         <div className="flex flex-col items-center gap-3 animate-fade-in">
-          <div className="w-10 h-10 border-3 border-cercano-blue/20 border-t-cercano-blue rounded-full animate-spin" />
+          <div className="w-10 h-10 border-[3px] border-cercano-blue/20 border-t-cercano-blue rounded-full animate-spin" />
           <span className="text-xs font-semibold text-cercano-slate dark:text-gray-400">
             Iniciando Cercano...
           </span>

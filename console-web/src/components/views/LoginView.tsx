@@ -105,7 +105,7 @@ export const LoginView: React.FC = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="admin"
-                className="w-full px-4 py-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 text-sm transition-all"
+                className="w-full px-4 py-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 text-sm transition-all"
               />
             </div>
           </div>
@@ -121,7 +121,7 @@ export const LoginView: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full px-4 py-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 text-sm transition-all pr-10"
+                className="w-full px-4 py-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 text-sm transition-all pr-10"
               />
               <Lock
                 size={16}

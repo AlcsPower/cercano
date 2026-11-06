@@ -237,7 +237,7 @@ echo Perfil corporativo configurado exitosamente.
                     value={profile.name}
                     onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                     placeholder="Ej. Cercano Asistencia"
-                    className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
+                    className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
                   />
                 </div>
                 <div>
@@ -249,7 +249,7 @@ echo Perfil corporativo configurado exitosamente.
                     value={profile.company_name}
                     onChange={(e) => setProfile({ ...profile, company_name: e.target.value })}
                     placeholder="Ej. Mi Organización TI"
-                    className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
+                    className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
                   />
                 </div>
               </div>
@@ -348,7 +348,7 @@ echo Perfil corporativo configurado exitosamente.
                   value={profile.support_info}
                   onChange={(e) => setProfile({ ...profile, support_info: e.target.value })}
                   placeholder="Ej. Contactar al Helpdesk extensión 4000"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
+                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
                 />
               </div>
             </div>
@@ -380,7 +380,7 @@ echo Perfil corporativo configurado exitosamente.
                     type="text"
                     value={profile.rendezvous_server}
                     onChange={(e) => setProfile({ ...profile, rendezvous_server: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 font-mono text-xs"
+                    className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-xs"
                   />
                 </div>
                 <div>
@@ -391,7 +391,7 @@ echo Perfil corporativo configurado exitosamente.
                     type="text"
                     value={profile.relay_server}
                     onChange={(e) => setProfile({ ...profile, relay_server: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 font-mono text-xs"
+                    className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-xs"
                   />
                 </div>
               </div>
@@ -405,7 +405,7 @@ echo Perfil corporativo configurado exitosamente.
                   value={profile.public_key}
                   onChange={(e) => setProfile({ ...profile, public_key: e.target.value })}
                   placeholder="Clave pública del servidor (Base64)"
-                  className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 font-mono text-xs"
+                  className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-xs"
                 />
               </div>
             </div>
@@ -577,7 +577,7 @@ echo Perfil corporativo configurado exitosamente.
                       type="text"
                       readOnly
                       placeholder="Ingresar ID del colega..."
-                      className="w-full px-3 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/8 dark:border-white/10 text-xs font-mono"
+                      className="w-full px-3 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs font-mono"
                     />
                     <button
                       type="button"

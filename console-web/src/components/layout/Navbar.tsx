@@ -67,7 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, setDarkMode }) => {
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="btn-apple flex items-center gap-2 p-1.5 pr-3 rounded-full bg-black/5 hover:bg-black/8 dark:bg-white/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10"
+              className="btn-apple flex items-center gap-2 p-1.5 pr-3 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10"
             >
               <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-cercano-blue to-cercano-green flex items-center justify-center text-white text-xs font-bold shadow-sm">
                 {user?.username ? user.username.charAt(0).toUpperCase() : 'A'}

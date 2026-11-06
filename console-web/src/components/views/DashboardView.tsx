@@ -242,7 +242,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="space-y-3">
                 <button
                   onClick={() => setActiveTab('devices')}
-                  className="btn-apple w-full p-3 rounded-xl bg-black/5 hover:bg-black/8 dark:bg-white/5 dark:hover:bg-white/10 flex items-center justify-between text-left transition-colors cursor-pointer"
+                  className="btn-apple w-full p-3 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 flex items-center justify-between text-left transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <Monitor size={18} className="text-cercano-blue" />
@@ -260,7 +260,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 <button
                   onClick={() => setActiveTab('security')}
-                  className="btn-apple w-full p-3 rounded-xl bg-black/5 hover:bg-black/8 dark:bg-white/5 dark:hover:bg-white/10 flex items-center justify-between text-left transition-colors cursor-pointer"
+                  className="btn-apple w-full p-3 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 flex items-center justify-between text-left transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <ShieldCheck size={18} className="text-cercano-green-dark dark:text-cercano-green" />
@@ -278,7 +278,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 <button
                   onClick={() => setActiveTab('builder')}
-                  className="btn-apple w-full p-3 rounded-xl bg-black/5 hover:bg-black/8 dark:bg-white/5 dark:hover:bg-white/10 flex items-center justify-between text-left transition-colors cursor-pointer"
+                  className="btn-apple w-full p-3 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 flex items-center justify-between text-left transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <Sparkles size={18} className="text-purple-500" />

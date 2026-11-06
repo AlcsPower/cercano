@@ -187,7 +187,7 @@ export const DevicesView: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por ID, nombre, hostname, IP o sistema operativo (búsqueda instantánea)..."
-            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white/80 dark:bg-zinc-800/80 backdrop-blur-xl border border-black/8 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 shadow-sm transition-all"
+            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white/80 dark:bg-zinc-800/80 backdrop-blur-xl border border-black/10 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 shadow-sm transition-all"
           />
           {searchQuery && (
             <button
@@ -219,7 +219,7 @@ export const DevicesView: React.FC = () => {
                 className={`btn-apple px-3 py-1 rounded-xl text-xs font-medium cursor-pointer transition-all ${
                   selectedOs === os.id
                     ? 'bg-cercano-blue text-white shadow-sm'
-                    : 'bg-black/5 dark:bg-white/5 text-cercano-slate dark:text-gray-300 hover:bg-black/8 dark:hover:bg-white/10'
+                    : 'bg-black/5 dark:bg-white/5 text-cercano-slate dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/10'
                 }`}
               >
                 {os.label}
@@ -243,7 +243,7 @@ export const DevicesView: React.FC = () => {
                 className={`btn-apple px-3 py-1 rounded-xl text-xs font-medium cursor-pointer transition-all ${
                   selectedStatus === st.id
                     ? 'bg-cercano-night dark:bg-white text-white dark:text-cercano-night shadow-sm'
-                    : 'bg-black/5 dark:bg-white/5 text-cercano-slate dark:text-gray-300 hover:bg-black/8 dark:hover:bg-white/10'
+                    : 'bg-black/5 dark:bg-white/5 text-cercano-slate dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/10'
                 }`}
               >
                 {st.label}
