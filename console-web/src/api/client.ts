@@ -23,7 +23,7 @@ export async function computeSha256Fingerprint(base64Key: string): Promise<strin
     const hex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join(':');
     return `SHA256:${hex.slice(0, 47)}...`;
   } catch {
-    return 'SHA256:7f:8c:1a:2d:4e:3b:9f:5c:6e:0d:11:8b:9a:4f...';
+    return 'Error al calcular huella';
   }
 }
 
@@ -31,7 +31,7 @@ export async function computeSha256Fingerprint(base64Key: string): Promise<strin
 const INITIAL_DEVICES: Device[] = [
   {
     id: 'cercano-dev-91820',
-    name: 'Estación Soporte IT-01',
+    name: 'EstaciÃ³n Soporte IT-01',
     hostname: 'WS-SOPORTE-01',
     os: 'Windows 11 Pro (23H2)',
     version: '1.4.0',
@@ -64,7 +64,7 @@ const INITIAL_DEVICES: Device[] = [
   },
   {
     id: 'cercano-dev-11094',
-    name: 'Terminal Mostrador Atención',
+    name: 'Terminal Mostrador AtenciÃ³n',
     hostname: 'POS-TERMINAL-04',
     os: 'Windows 10 Enterprise LTSC',
     version: '1.3.9',
@@ -75,7 +75,7 @@ const INITIAL_DEVICES: Device[] = [
   },
   {
     id: 'cercano-dev-33821',
-    name: 'Tablet Almacén Central',
+    name: 'Tablet AlmacÃ©n Central',
     hostname: 'Galaxy-Tab-Active4',
     os: 'Android 14',
     version: '1.4.0',
@@ -86,7 +86,7 @@ const INITIAL_DEVICES: Device[] = [
   },
   {
     id: 'cercano-dev-77402',
-    name: 'Servidor Respaldo Frío',
+    name: 'Servidor Respaldo FrÃ­o',
     hostname: 'bkp-node2.lan',
     os: 'Debian 12 Bookworm',
     version: '1.3.8',
@@ -211,7 +211,7 @@ class CercanoApiClient {
         signal: AbortSignal.timeout(5000),
       });
     } catch {
-      throw new Error('Error de conexión: No se pudo conectar con el servidor cercano-api.');
+      throw new Error('Error de conexiÃ³n: No se pudo conectar con el servidor cercano-api.');
     }
 
     if (res.ok) {
@@ -222,18 +222,18 @@ class CercanoApiClient {
         this.notifyStatus(true);
         return authData;
       }
-      throw new Error('Respuesta inválida recibida del servidor cercano-api.');
+      throw new Error('Respuesta invÃ¡lida recibida del servidor cercano-api.');
     }
 
     if (res.status === 401) {
-      throw new Error('Credenciales incorrectas. Verifique usuario y contraseña.');
+      throw new Error('Credenciales incorrectas. Verifique usuario y contraseÃ±a.');
     }
 
     if (res.status === 429) {
-      throw new Error('Demasiados intentos fallidos. Su acceso está temporalmente bloqueado (15 min).');
+      throw new Error('Demasiados intentos fallidos. Su acceso estÃ¡ temporalmente bloqueado (15 min).');
     }
 
-    let errorMessage = `Error del servidor (${res.status}): No se pudo procesar la autenticación.`;
+    let errorMessage = `Error del servidor (${res.status}): No se pudo procesar la autenticaciÃ³n.`;
     try {
       const errData = await res.json();
       if (errData && typeof errData === 'object') {
@@ -278,7 +278,7 @@ class CercanoApiClient {
     }
 
     if (!this.token) {
-      throw new Error('No hay sesión activa.');
+      throw new Error('No hay sesiÃ³n activa.');
     }
 
     try {
@@ -292,14 +292,14 @@ class CercanoApiClient {
       }
       if (res.status === 401) {
         this.setToken(null);
-        throw new Error('Sesión expirada o inválida.');
+        throw new Error('SesiÃ³n expirada o invÃ¡lida.');
       }
-      throw new Error(`Error al verificar sesión (${res.status}).`);
+      throw new Error(`Error al verificar sesiÃ³n (${res.status}).`);
     } catch (err: unknown) {
       if (err instanceof Error) {
         throw err;
       }
-      throw new Error('Error de conexión: No se pudo verificar la sesión con cercano-api.');
+      throw new Error('Error de conexiÃ³n: No se pudo verificar la sesiÃ³n con cercano-api.');
     }
   }
 
@@ -461,7 +461,7 @@ class CercanoApiClient {
           port: 21114,
           protocol: 'TCP',
           role: 'Control Plane / API REST',
-          description: 'Gestión de autenticación, dispositivos, llaves y endpoints de auditoría.',
+          description: 'GestiÃ³n de autenticaciÃ³n, dispositivos, llaves y endpoints de auditorÃ­a.',
           status: this.isConnectedToLiveApi ? 'operational' : 'operational',
         },
         {
@@ -469,7 +469,7 @@ class CercanoApiClient {
           port: 21115,
           protocol: 'UDP',
           role: 'NAT Type Discovery',
-          description: 'Determinación de topología NAT para enlace P2P directo entre clientes.',
+          description: 'DeterminaciÃ³n de topologÃ­a NAT para enlace P2P directo entre clientes.',
           status: 'operational',
         },
         {
@@ -477,15 +477,15 @@ class CercanoApiClient {
           port: 21116,
           protocol: 'TCP/UDP',
           role: 'Rendezvous & Signaling',
-          description: 'Servidor de señalización, registro y mediación inicial de conexiones remotas.',
+          description: 'Servidor de seÃ±alizaciÃ³n, registro y mediaciÃ³n inicial de conexiones remotas.',
           status: 'operational',
         },
         {
           name: 'hbbr',
           port: 21117,
           protocol: 'TCP',
-          role: 'Relay / Retransmisión',
-          description: 'Retransmisión segura de tráfico cifrado cuando no es posible el enlace P2P.',
+          role: 'Relay / RetransmisiÃ³n',
+          description: 'RetransmisiÃ³n segura de trÃ¡fico cifrado cuando no es posible el enlace P2P.',
           status: 'operational',
         },
       ],

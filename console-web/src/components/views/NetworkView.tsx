@@ -6,22 +6,24 @@ import {
   Copy,
   Check,
   Server,
-  ArrowDownToLine,
   ShieldAlert,
-  Monitor,
-  Smartphone,
-  Laptop,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
-import { ServerPortService, ServerPublicKeyResponse } from '../../types';
+import { ActiveTab, ServerPortService, ServerPublicKeyResponse } from '../../types';
 import { AppleCard } from '../common/AppleCard';
 import { AppleButton } from '../common/AppleButton';
 import { StatusPill } from '../common/StatusPill';
 
-export const NetworkView: React.FC = () => {
+interface NetworkViewProps {
+  setActiveTab?: (tab: ActiveTab) => void;
+}
+
+export const NetworkView: React.FC<NetworkViewProps> = ({ setActiveTab }) => {
   const [services, setServices] = useState<ServerPortService[]>([]);
   const [keyInfo, setKeyInfo] = useState<ServerPublicKeyResponse | null>(null);
-  const [serverHost, setServerHost] = useState('192.168.10.10');
+  const [serverHost, setServerHost] = useState('127.0.0.1');
   const [copiedString, setCopiedString] = useState(false);
   const [copiedPortSummary, setCopiedPortSummary] = useState(false);
 
@@ -98,22 +100,25 @@ export const NetworkView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04] text-xs">
-              {services.map((svc) => (
-                <tr key={svc.name} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
-                  <td className="py-3.5 px-3 font-bold text-cercano-night dark:text-white">
-                    {svc.name}
+              {services.map((srv) => (
+                <tr key={srv.name} className="hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
+                  <td className="py-3 px-3 font-semibold text-cercano-night dark:text-white flex items-center gap-2">
+                    <Server size={14} className="text-cercano-blue" />
+                    <span>{srv.name}</span>
                   </td>
-                  <td className="py-3.5 px-3 font-mono font-semibold text-cercano-blue dark:text-blue-300">
-                    {svc.port}
+                  <td className="py-3 px-3 font-mono font-bold text-cercano-blue dark:text-blue-400">
+                    {srv.port}
                   </td>
-                  <td className="py-3.5 px-3 font-mono text-gray-500 dark:text-gray-400">
-                    {svc.protocol}
+                  <td className="py-3 px-3">
+                    <span className="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 font-mono text-[10px]">
+                      {srv.protocol}
+                    </span>
                   </td>
-                  <td className="py-3.5 px-3 text-cercano-slate dark:text-gray-300">
-                    <span className="font-semibold">{svc.role}</span> — {svc.description}
+                  <td className="py-3 px-3 text-cercano-slate dark:text-gray-400 max-w-md">
+                    {srv.description}
                   </td>
-                  <td className="py-3.5 px-3 text-right">
-                    <StatusPill status={svc.status} size="sm" />
+                  <td className="py-3 px-3 text-right">
+                    <StatusPill status="online" label="En escucha" size="sm" pulse={false} />
                   </td>
                 </tr>
               ))}
@@ -122,202 +127,109 @@ export const NetworkView: React.FC = () => {
         </div>
       </AppleCard>
 
-      {/* LAN Configuration String Generator */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <AppleCard className="h-full">
-            <div className="pb-4 mb-4 border-b border-black/5 dark:border-white/10">
-              <h2 className="text-lg font-bold tracking-apple-title text-cercano-night dark:text-white">
-                Cadena de Conexión LAN para Clientes
-              </h2>
-              <p className="text-xs text-cercano-slate dark:text-gray-400">
-                Pega esta cadena en la ventana de configuración del cliente Cercano o en el archivo de despliegue silencioso
-              </p>
+      {/* Manual Connection String & Directives */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <AppleCard>
+          <h2 className="text-lg font-bold tracking-apple-title text-cercano-night dark:text-white mb-2">
+            Cadena de Conexión Manual para Clientes
+          </h2>
+          <p className="text-xs text-cercano-slate dark:text-gray-400 mb-4">
+            Parámetros necesarios para apuntar manualmente un cliente al servidor local sin configuración automática.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-cercano-night dark:text-gray-200 mb-1">
+                IP o Hostname del Servidor LAN
+              </label>
+              <input
+                type="text"
+                value={serverHost}
+                onChange={(e) => setServerHost(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono focus:outline-none focus:ring-2 focus:ring-cercano-blue"
+              />
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-cercano-slate dark:text-gray-400 mb-1.5 ml-1">
-                  Host o IP del Servidor en LAN
-                </label>
+            <div>
+              <label className="block text-xs font-semibold text-cercano-night dark:text-gray-200 mb-1">
+                Cadena de Parámetros de Enlace
+              </label>
+              <div className="relative">
                 <input
                   type="text"
-                  value={serverHost}
-                  onChange={(e) => setServerHost(e.target.value)}
-                  placeholder="192.168.10.10"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-mono"
+                  readOnly
+                  value={connectionString}
+                  className="w-full pl-3 pr-20 py-2 rounded-xl text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-cercano-slate dark:text-gray-400 select-all"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-cercano-slate dark:text-gray-400 mb-1.5 ml-1">
-                  Cadena de Parámetros Embebida
-                </label>
-                <div className="p-3.5 rounded-xl bg-black/[0.03] dark:bg-black/30 border border-black/8 dark:border-white/10 font-mono text-xs text-cercano-night dark:text-blue-200 break-all select-all flex items-center justify-between">
-                  <span>{connectionString}</span>
-                </div>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end">
-                <AppleButton
-                  variant="primary"
-                  size="md"
+                <button
                   onClick={copyConnectionString}
-                  icon={copiedString ? <Check size={16} className="text-emerald-300" /> : <Copy size={16} />}
+                  className="absolute right-1 top-1 bottom-1 px-3 rounded-lg bg-cercano-blue text-white text-xs font-medium flex items-center gap-1 hover:bg-cercano-blue-dark transition-colors cursor-pointer"
                 >
-                  {copiedString ? 'Cadena Copiada al Portapapeles' : 'Copiar Cadena de Conexión'}
-                </AppleButton>
+                  {copiedString ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copiedString ? 'Listo' : 'Copiar'}</span>
+                </button>
               </div>
             </div>
-          </AppleCard>
-        </div>
+          </div>
+        </AppleCard>
 
-        {/* Firewall Guidelines */}
-        <div>
-          <AppleCard className="h-full flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2 pb-4 mb-4 border-b border-black/5 dark:border-white/10 text-amber-600 dark:text-amber-400">
-                <ShieldAlert size={20} />
-                <h2 className="text-base font-bold tracking-apple-title text-cercano-night dark:text-white">
-                  Reglas de Firewall LAN
-                </h2>
-              </div>
-
-              <ul className="space-y-3 text-xs text-cercano-slate dark:text-gray-300">
-                <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />
-                  <span><strong>TCP 21114-21117</strong>: tráfico entrante obligatorio al host del servidor.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />
-                  <span><strong>UDP 21116</strong>: señalización de baja latencia entre clientes.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />
-                  <span><strong>UDP 21115</strong>: requerido para determinar el tipo de NAT de la subred.</span>
-                </li>
-              </ul>
+        <AppleCard className="flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-2 text-amber-600 dark:text-amber-400">
+              <ShieldAlert size={20} />
+              <h2 className="text-lg font-bold tracking-apple-title text-cercano-night dark:text-white">
+                Requisitos de Firewall Interno
+              </h2>
             </div>
+            <p className="text-xs text-cercano-slate dark:text-gray-400 mb-4">
+              Para garantizar que los clientes de la red corporativa establezcan conexiones directas sin intermediación externa:
+            </p>
 
-            <div className="mt-6 p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 text-[11px] text-gray-400">
-              Operación 100% aislada: no se requiere conectividad a internet ni dependencias externas.
-            </div>
-          </AppleCard>
-        </div>
+            <ul className="space-y-2 text-xs text-cercano-slate dark:text-gray-300">
+              <li className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />
+                <span><strong>21115/UDP</strong> requerido para el descubrimiento de NAT (STUN) inter-cliente.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />
+                <span><strong>21116/TCP y UDP</strong> para la señalización inicial de enlace y estado.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />
+                <span><strong>21117/TCP</strong> como puente de retransmisión (relay) si los clientes están en subredes aisladas.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="mt-4 p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 text-[11px] text-cercano-slate dark:text-gray-400">
+            Operación 100% LAN aislada: el sistema opera sin acceso a servidores externos ni telemetría foránea.
+          </div>
+        </AppleCard>
       </div>
 
-      {/* Client Downloads Grid */}
-      <div>
-        <h2 className="text-xl font-bold tracking-apple-title text-cercano-night dark:text-white mb-4">
-          Descargas de Clientes Preconfigurados
-        </h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Windows */}
-          <AppleCard className="flex flex-col justify-between p-5">
-            <div>
-              <div className="p-3 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 w-fit mb-3">
-                <Monitor size={24} />
-              </div>
-              <h3 className="font-bold text-sm text-cercano-night dark:text-white">
-                Cercano para Windows
-              </h3>
-              <p className="text-xs text-cercano-slate dark:text-gray-400 mt-1">
-                Windows 10, 11 y Server (x64)
-              </p>
-            </div>
-            <div className="mt-5 pt-3 border-t border-black/5 dark:border-white/10">
-              <AppleButton
-                variant="secondary"
-                size="sm"
-                className="w-full justify-center"
-                icon={<ArrowDownToLine size={14} />}
-                onClick={() => alert('Descarga iniciada para el instalador Cercano-Setup.exe con configuración LAN.')}
-              >
-                Descargar .exe
-              </AppleButton>
-            </div>
-          </AppleCard>
-
-          {/* Linux */}
-          <AppleCard className="flex flex-col justify-between p-5">
-            <div>
-              <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 w-fit mb-3">
-                <Server size={24} />
-              </div>
-              <h3 className="font-bold text-sm text-cercano-night dark:text-white">
-                Cercano para Linux
-              </h3>
-              <p className="text-xs text-cercano-slate dark:text-gray-400 mt-1">
-                Ubuntu, Debian, RHEL (amd64 / arm64)
-              </p>
-            </div>
-            <div className="mt-5 pt-3 border-t border-black/5 dark:border-white/10">
-              <AppleButton
-                variant="secondary"
-                size="sm"
-                className="w-full justify-center"
-                icon={<ArrowDownToLine size={14} />}
-                onClick={() => alert('Descarga iniciada para el paquete cercano-client.deb.')}
-              >
-                Descargar .deb
-              </AppleButton>
-            </div>
-          </AppleCard>
-
-          {/* macOS */}
-          <AppleCard className="flex flex-col justify-between p-5">
-            <div>
-              <div className="p-3 rounded-2xl bg-zinc-500/10 text-zinc-700 dark:text-zinc-300 w-fit mb-3">
-                <Laptop size={24} />
-              </div>
-              <h3 className="font-bold text-sm text-cercano-night dark:text-white">
-                Cercano para macOS
-              </h3>
-              <p className="text-xs text-cercano-slate dark:text-gray-400 mt-1">
-                Apple Silicon (M1/M2/M3/M4) e Intel
-              </p>
-            </div>
-            <div className="mt-5 pt-3 border-t border-black/5 dark:border-white/10">
-              <AppleButton
-                variant="secondary"
-                size="sm"
-                className="w-full justify-center"
-                icon={<ArrowDownToLine size={14} />}
-                onClick={() => alert('Descarga iniciada para Cercano.dmg.')}
-              >
-                Descargar .dmg
-              </AppleButton>
-            </div>
-          </AppleCard>
-
-          {/* Android */}
-          <AppleCard className="flex flex-col justify-between p-5">
-            <div>
-              <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 w-fit mb-3">
-                <Smartphone size={24} />
-              </div>
-              <h3 className="font-bold text-sm text-cercano-night dark:text-white">
-                Cercano para Android
-              </h3>
-              <p className="text-xs text-cercano-slate dark:text-gray-400 mt-1">
-                Android 9.0 o superior (APK universal)
-              </p>
-            </div>
-            <div className="mt-5 pt-3 border-t border-black/5 dark:border-white/10">
-              <AppleButton
-                variant="secondary"
-                size="sm"
-                className="w-full justify-center"
-                icon={<ArrowDownToLine size={14} />}
-                onClick={() => alert('Descarga iniciada para cercano-client.apk.')}
-              >
-                Descargar .apk
-              </AppleButton>
-            </div>
-          </AppleCard>
+      {/* Client Distribution Card */}
+      <AppleCard className="p-6">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold tracking-apple-title text-cercano-night dark:text-white flex items-center gap-2">
+              <Sparkles size={20} className="text-cercano-blue" />
+              <span>Personalización y Distribución de Clientes</span>
+            </h2>
+            <p className="text-xs text-cercano-slate dark:text-gray-400 max-w-2xl">
+              Configura instaladores con la identidad corporativa de tu organización (logo, color institucional), directivas de seguridad de acceso desatendido y perfiles de conexión empaquetados.
+            </p>
+          </div>
+          {setActiveTab && (
+            <AppleButton
+              variant="primary"
+              onClick={() => setActiveTab('builder')}
+              icon={<ArrowRight size={16} />}
+            >
+              Abrir Personalizador
+            </AppleButton>
+          )}
         </div>
-      </div>
+      </AppleCard>
     </div>
   );
 };

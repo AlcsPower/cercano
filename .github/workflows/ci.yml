@@ -25,9 +25,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Verify repository LICENSE (B-001 check)
+      - name: Verify repository LICENSE (AGPL-3.0-only)
         run: bash tools/check-license.sh
-        continue-on-error: true # Notifica estado mientras B-001 esté abierto por el dueño
 
       - name: Verify source files license headers (AGPL-3.0)
         run: bash tools/check-license-headers.sh
@@ -72,6 +71,26 @@ jobs:
             echo "Cargo.toml not present yet. Skipping tests."
           fi
 
+  web-console:
+    name: Web Console (TypeScript & Build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: console-web/package-lock.json
+
+      - name: Install dependencies
+        run: cd console-web && npm ci
+
+      - name: Build Web Console
+        run: cd console-web && npm run build
+
   security:
     name: Security & License Compliance
     runs-on: ubuntu-latest
@@ -108,10 +127,12 @@ jobs:
 
       - name: Build server binary
         run: |
-          if [ -d server ] && [ -f server/Cargo.toml ]; then
+          if [ -d vendor/server ] && [ -f vendor/server/Cargo.toml ]; then
+            cargo build --release --manifest-path vendor/server/Cargo.toml
+          elif [ -d server ] && [ -f server/Cargo.toml ]; then
             cargo build --release --manifest-path server/Cargo.toml
           elif [ -f Cargo.toml ] && cargo metadata --no-deps --format-version 1 | grep -q '"name":"cercano-server"'; then
             cargo build --release -p cercano-server
           else
-            echo "Server crate not present yet (pending F0-02/F1-01). Skipping server build."
+            echo "Server crate not present yet. Skipping server build."
           fi
