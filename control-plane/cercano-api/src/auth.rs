@@ -19,9 +19,9 @@
 
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
-use argon2::Argon2;
+use argon2::{Algorithm, Argon2, Params, Version};
 use axum::async_trait;
-use axum::extract::{FromRequestParts, State};
+use axum::extract::{ConnectInfo, FromRequestParts, State};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -29,6 +29,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Row, SqlitePool};
+use std::net::SocketAddr;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -225,10 +226,12 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
     }
 }
 
-/// Hashes password using Argon2id with cryptographically secure random salt.
+/// Hashes password using Argon2id with robust parameters (64 MB, 3 passes, 4 threads, 32-byte output).
 pub fn hash_password(password: &str) -> Result<String, AuthError> {
     let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
+    let params =
+        Params::new(65536, 3, 4, Some(32)).map_err(|e| AuthError::Hashing(e.to_string()))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt)
         .map_err(|e| AuthError::Hashing(e.to_string()))?
@@ -242,7 +245,9 @@ pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, Auth
         Ok(h) => h,
         Err(e) => return Err(AuthError::Hashing(e.to_string())),
     };
-    let argon2 = Argon2::default();
+    let params =
+        Params::new(65536, 3, 4, Some(32)).map_err(|e| AuthError::Hashing(e.to_string()))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     match argon2.verify_password(password.as_bytes(), &parsed_hash) {
         Ok(()) => Ok(true),
         Err(argon2::password_hash::Error::Password) => Ok(false),
@@ -250,59 +255,97 @@ pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, Auth
     }
 }
 
-/// Generates a 256-bit cryptographically secure hexadecimal session token.
+/// Generates a cryptographically secure session token prefixed with `cercano_sess_`.
 pub fn generate_session_token() -> String {
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
-    let mut hex = String::with_capacity(64);
+    let mut token = String::with_capacity(13 + 64);
+    token.push_str("cercano_sess_");
     for b in bytes {
         use std::fmt::Write;
-        let _ = write!(hex, "{:02x}", b);
+        let _ = write!(token, "{:02x}", b);
     }
-    hex
+    token
 }
 
 /// Extracts client IP from standard HTTP headers or falls back to local address.
-pub fn extract_client_ip(headers: &HeaderMap) -> String {
-    if let Some(forwarded) = headers.get("x-forwarded-for") {
-        if let Ok(s) = forwarded.to_str() {
-            if let Some(first) = s.split(',').next() {
-                let trimmed = first.trim();
+pub fn extract_client_ip(headers: &HeaderMap, peer_addr: Option<SocketAddr>) -> String {
+    let is_trusted_proxy = match peer_addr {
+        Some(addr) => addr.ip().is_loopback(),
+        None => true,
+    };
+
+    if is_trusted_proxy {
+        if let Some(forwarded) = headers.get("x-forwarded-for") {
+            if let Ok(s) = forwarded.to_str() {
+                if let Some(first) = s.split(',').next() {
+                    let trimmed = first.trim();
+                    if !trimmed.is_empty() {
+                        return trimmed.to_string();
+                    }
+                }
+            }
+        }
+        if let Some(real_ip) = headers.get("x-real-ip") {
+            if let Ok(s) = real_ip.to_str() {
+                let trimmed = s.trim();
                 if !trimmed.is_empty() {
                     return trimmed.to_string();
                 }
             }
         }
     }
-    if let Some(real_ip) = headers.get("x-real-ip") {
-        if let Ok(s) = real_ip.to_str() {
-            let trimmed = s.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
+
+    if let Some(addr) = peer_addr {
+        addr.ip().to_string()
+    } else {
+        "127.0.0.1".to_string()
     }
-    "127.0.0.1".to_string()
 }
 
-/// Checks if an account/IP is temporarily locked due to repeated failed logins.
+/// Checks if an account or IP is temporarily locked due to repeated failed logins.
+/// Evaluates account lockout (by username) and IP lockout (by IP address) separately
+/// to prevent brute-force attacks without enabling denial-of-service against legitimate users.
 pub async fn is_locked_out(pool: &SqlitePool, username: &str, ip: &str) -> Result<bool, AuthError> {
-    let row = sqlx::query(
+    // 1. Account-level lockout: check failed attempts for this username
+    let user_row = sqlx::query(
         r#"
         SELECT COUNT(*) as failed_count
         FROM login_attempts
-        WHERE (username = ? OR ip_address = ?)
+        WHERE username = ?
           AND success = 0
           AND attempted_at > datetime('now', '-15 minutes')
         "#,
     )
     .bind(username)
+    .fetch_one(pool)
+    .await?;
+
+    let user_count: i64 = user_row.get("failed_count");
+    if user_count >= MAX_FAILED_LOGIN_ATTEMPTS {
+        return Ok(true);
+    }
+
+    // 2. IP-level lockout: check failed attempts for this IP address
+    let ip_row = sqlx::query(
+        r#"
+        SELECT COUNT(*) as failed_count
+        FROM login_attempts
+        WHERE ip_address = ?
+          AND success = 0
+          AND attempted_at > datetime('now', '-15 minutes')
+        "#,
+    )
     .bind(ip)
     .fetch_one(pool)
     .await?;
 
-    let count: i64 = row.get("failed_count");
-    Ok(count >= MAX_FAILED_LOGIN_ATTEMPTS)
+    let ip_count: i64 = ip_row.get("failed_count");
+    if ip_count >= MAX_FAILED_LOGIN_ATTEMPTS {
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 /// Records a login attempt into `login_attempts` for audit and brute-force tracking.
@@ -414,10 +457,11 @@ pub async fn bootstrap_handler(
 /// Authenticates user credentials, enforces lockout, and issues a session token.
 pub async fn login_handler(
     State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AuthError> {
-    let client_ip = extract_client_ip(&headers);
+    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
     let username = payload.username.trim();
 
     // Check brute-force lockout
@@ -572,8 +616,9 @@ mod tests {
         let password = "SuperSecretPassword123!";
         let hash = hash_password(password).unwrap();
 
-        // Must be Argon2id format
+        // Must be Argon2id format with robust parameters (m=65536, t=3, p=4)
         assert!(hash.starts_with("$argon2id$"));
+        assert!(hash.contains("m=65536,t=3,p=4"));
         // Never contain plaintext password in hash
         assert!(!hash.contains(password));
 
@@ -589,10 +634,13 @@ mod tests {
         let t1 = generate_session_token();
         let t2 = generate_session_token();
 
-        assert_eq!(t1.len(), 64);
-        assert_eq!(t2.len(), 64);
+        assert_eq!(t1.len(), 77); // 13 ("cercano_sess_") + 64 hex characters
+        assert_eq!(t2.len(), 77);
         assert_ne!(t1, t2);
-        assert!(t1.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(t1.starts_with("cercano_sess_"));
+        assert!(t2.starts_with("cercano_sess_"));
+        let hex_part = &t1["cercano_sess_".len()..];
+        assert!(hex_part.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     #[test]
@@ -606,13 +654,28 @@ mod tests {
     #[test]
     fn test_extract_client_ip() {
         let mut headers = HeaderMap::new();
-        assert_eq!(extract_client_ip(&headers), "127.0.0.1");
 
+        // 1. Without socket or headers -> default loopback
+        assert_eq!(extract_client_ip(&headers, None), "127.0.0.1");
+
+        // 2. Loopback socket (trusted proxy) -> honors X-Forwarded-For and X-Real-IP
+        let loopback: SocketAddr = "127.0.0.1:45678".parse().unwrap();
         headers.insert("x-forwarded-for", "192.168.1.50, 10.0.0.1".parse().unwrap());
-        assert_eq!(extract_client_ip(&headers), "192.168.1.50");
+        assert_eq!(extract_client_ip(&headers, Some(loopback)), "192.168.1.50");
 
         headers.remove("x-forwarded-for");
         headers.insert("x-real-ip", "10.10.10.20".parse().unwrap());
-        assert_eq!(extract_client_ip(&headers), "10.10.10.20");
+        assert_eq!(extract_client_ip(&headers, Some(loopback)), "10.10.10.20");
+
+        // 3. IPv6 loopback [::1] (trusted proxy) -> honors headers
+        let loopback_v6: SocketAddr = "[::1]:45678".parse().unwrap();
+        assert_eq!(
+            extract_client_ip(&headers, Some(loopback_v6)),
+            "10.10.10.20"
+        );
+
+        // 4. Remote socket (untrusted client) -> ignores spoofed proxy headers completely
+        let remote: SocketAddr = "192.168.1.200:54321".parse().unwrap();
+        assert_eq!(extract_client_ip(&headers, Some(remote)), "192.168.1.200");
     }
 }

@@ -17,13 +17,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use axum::extract::{Path, State};
+use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
+use std::net::SocketAddr;
 use thiserror::Error;
 
 use crate::auth::{extract_client_ip, AuthenticatedUser};
@@ -41,6 +42,8 @@ pub enum DeviceError {
     Forbidden(String),
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
+    #[error("Rate limit exceeded: {0}")]
+    RateLimited(String),
 }
 
 impl IntoResponse for DeviceError {
@@ -53,6 +56,9 @@ impl IntoResponse for DeviceError {
             DeviceError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
             DeviceError::Unauthorized(msg) => {
                 (StatusCode::UNAUTHORIZED, "unauthorized", msg.clone())
+            }
+            DeviceError::RateLimited(msg) => {
+                (StatusCode::TOO_MANY_REQUESTS, "rate_limited", msg.clone())
             }
             DeviceError::Db(err) => {
                 tracing::error!("Database error during device operation: {:?}", err);
@@ -121,6 +127,41 @@ pub fn validate_heartbeat_input(req: &HeartbeatRequest) -> Result<(), DeviceErro
             "El ID del dispositivo no puede exceder 128 caracteres.".to_string(),
         ));
     }
+    if let Some(ref name) = req.name {
+        if name.len() > 128 {
+            return Err(DeviceError::Validation(
+                "El nombre del dispositivo no puede exceder 128 caracteres.".to_string(),
+            ));
+        }
+    }
+    if let Some(ref hostname) = req.hostname {
+        if hostname.len() > 128 {
+            return Err(DeviceError::Validation(
+                "El hostname no puede exceder 128 caracteres.".to_string(),
+            ));
+        }
+    }
+    if let Some(ref os) = req.os {
+        if os.len() > 128 {
+            return Err(DeviceError::Validation(
+                "El sistema operativo no puede exceder 128 caracteres.".to_string(),
+            ));
+        }
+    }
+    if let Some(ref version) = req.version {
+        if version.len() > 64 {
+            return Err(DeviceError::Validation(
+                "La versión no puede exceder 64 caracteres.".to_string(),
+            ));
+        }
+    }
+    if let Some(ref ip) = req.ip {
+        if ip.len() > 64 {
+            return Err(DeviceError::Validation(
+                "La dirección IP no puede exceder 64 caracteres.".to_string(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -128,8 +169,11 @@ pub fn validate_heartbeat_input(req: &HeartbeatRequest) -> Result<(), DeviceErro
 ///
 /// Records/updates device metadata (`id`, `name`/`hostname`, `os`, `version`, IP),
 /// updates `last_seen_at` to the current timestamp and marks status as `online`.
+/// Enforces socket-derived IP registration to prevent spoofing (H2) and preserves
+/// existing user-assigned device name when subsequent heartbeats lack a name (H7).
 pub async fn heartbeat_handler(
     State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Json(payload): Json<HeartbeatRequest>,
 ) -> Result<(StatusCode, Json<DeviceResponse>), DeviceError> {
@@ -137,20 +181,32 @@ pub async fn heartbeat_handler(
 
     let trimmed_id = payload.id.trim().to_string();
 
-    let resolved_name = payload
+    // Rate limiting: throttle heartbeats if received within 1 second for the same device (H2)
+    let recent = sqlx::query(
+        r#"
+        SELECT 1 FROM devices
+        WHERE id = ?
+          AND last_seen_at IS NOT NULL
+          AND (strftime('%s', 'now') - strftime('%s', last_seen_at)) < 1
+        "#,
+    )
+    .bind(&trimmed_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if recent.is_some() {
+        return Err(DeviceError::RateLimited(
+            "Frecuencia de latidos excedida. Espere al menos 1 segundo entre peticiones."
+                .to_string(),
+        ));
+    }
+
+    let provided_name = payload
         .name
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            payload
-                .hostname
-                .as_deref()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-        })
-        .unwrap_or(&trimmed_id)
-        .to_string();
+        .map(ToString::to_string);
 
     let resolved_hostname = payload
         .hostname
@@ -173,34 +229,42 @@ pub async fn heartbeat_handler(
         .filter(|s| !s.is_empty())
         .map(ToString::to_string);
 
-    let resolved_ip = payload
-        .ip
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string)
-        .unwrap_or_else(|| extract_client_ip(&headers));
+    // H2: Use socket peer IP or trusted local proxy headers, never client-reported JSON IP
+    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
 
+    if let Some(ref reported_ip) = payload.ip {
+        if reported_ip != &client_ip {
+            tracing::debug!(
+                device_id = %trimmed_id,
+                reported_ip = %reported_ip,
+                socket_ip = %client_ip,
+                "Device reported IP in payload differs from socket connection IP; recording verified connection IP"
+            );
+        }
+    }
+
+    // H7: On INSERT, use provided name or fallback to hostname or ID.
+    // On UPDATE (conflict), preserve devices.name if provided_name is NULL or empty.
     sqlx::query(
         r#"
         INSERT INTO devices (id, name, hostname, os, version, ip_address, status, last_seen_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'online', datetime('now'))
+        VALUES (?1, COALESCE(?2, ?3, ?1), ?3, ?4, ?5, ?6, 'online', datetime('now'))
         ON CONFLICT(id) DO UPDATE SET
             name = CASE WHEN ?2 IS NOT NULL AND ?2 != '' THEN ?2 ELSE devices.name END,
             hostname = COALESCE(?3, devices.hostname),
             os = COALESCE(?4, devices.os),
             version = COALESCE(?5, devices.version),
-            ip_address = COALESCE(?6, devices.ip_address),
+            ip_address = ?6,
             status = 'online',
             last_seen_at = datetime('now');
         "#,
     )
     .bind(&trimmed_id)
-    .bind(&resolved_name)
+    .bind(&provided_name)
     .bind(&resolved_hostname)
     .bind(&resolved_os)
     .bind(&resolved_version)
-    .bind(&resolved_ip)
+    .bind(&client_ip)
     .execute(&state.db)
     .await?;
 
@@ -408,5 +472,37 @@ mod tests {
             ip: None,
         };
         assert!(validate_heartbeat_input(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_heartbeat_input_field_length_limits() {
+        let mut req = HeartbeatRequest {
+            id: "valid-id".to_string(),
+            name: Some("n".repeat(129)),
+            hostname: None,
+            os: None,
+            version: None,
+            ip: None,
+        };
+        assert!(validate_heartbeat_input(&req).is_err());
+
+        req.name = Some("valid-name".to_string());
+        req.hostname = Some("h".repeat(129));
+        assert!(validate_heartbeat_input(&req).is_err());
+
+        req.hostname = Some("valid-host".to_string());
+        req.os = Some("o".repeat(129));
+        assert!(validate_heartbeat_input(&req).is_err());
+
+        req.os = Some("Linux".to_string());
+        req.version = Some("v".repeat(65));
+        assert!(validate_heartbeat_input(&req).is_err());
+
+        req.version = Some("1.0.0".to_string());
+        req.ip = Some("i".repeat(65));
+        assert!(validate_heartbeat_input(&req).is_err());
+
+        req.ip = Some("192.168.1.1".to_string());
+        assert!(validate_heartbeat_input(&req).is_ok());
     }
 }

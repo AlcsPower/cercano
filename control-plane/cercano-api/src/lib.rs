@@ -61,6 +61,7 @@ pub fn create_app(state: AppState) -> Router {
             post(server_keys::rotate_keys_handler),
         )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
+        .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .with_state(state)
 }
 
@@ -264,7 +265,8 @@ mod tests {
         let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let token = json["token"].as_str().unwrap();
-        assert_eq!(token.len(), 64);
+        assert!(token.starts_with("cercano_sess_"));
+        assert_eq!(token.len(), 77);
         assert_eq!(json["user"]["username"], "admin_login");
 
         // Verify session was inserted with ~24 hour expiration
@@ -503,12 +505,17 @@ mod tests {
             "ip": "192.168.1.101"
         });
 
-        let req = Request::builder()
+        let mut req = Request::builder()
             .uri("/api/devices/heartbeat")
             .method("POST")
             .header("content-type", "application/json")
             .body(Body::from(serde_json::to_vec(&heartbeat_payload).unwrap()))
             .unwrap();
+        req.extensions_mut().insert(axum::extract::ConnectInfo(
+            "192.168.1.101:54321"
+                .parse::<std::net::SocketAddr>()
+                .unwrap(),
+        ));
 
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
@@ -1000,5 +1007,312 @@ mod tests {
         let active_priv_on_disk = std::fs::read_to_string(&priv_path).unwrap();
         assert_ne!(active_priv_on_disk.trim(), initial_keys.private_key_base64);
         assert_eq!(active_priv_on_disk.trim().len(), 88);
+    }
+
+    #[tokio::test]
+    async fn test_failed_logins_on_one_ip_do_not_block_different_ip() {
+        let (state, _) = setup_test_state().await;
+
+        // 1. Bootstrap admin
+        let app = create_app(state.clone());
+        let bootstrap_req = Request::builder()
+            .uri("/api/auth/bootstrap")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "username": "admin_user",
+                    "password": "AdminPassword123!"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.oneshot(bootstrap_req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CREATED);
+
+        // 2. Add a second user
+        let user2_hash = crate::auth::hash_password("SecondUserPassword123!").unwrap();
+        sqlx::query("INSERT INTO users (id, username, password_hash, role) VALUES ('u-2', 'user_beta', ?, 'user')")
+            .bind(user2_hash)
+            .execute(&state.db)
+            .await
+            .unwrap();
+
+        // 3. Attacker from IP 192.168.1.100 makes 5 failed attempts against admin_user
+        let attacker_addr: std::net::SocketAddr = "192.168.1.100:54321".parse().unwrap();
+        for _ in 0..5 {
+            let app = create_app(state.clone());
+            let mut req = Request::builder()
+                .uri("/api/auth/login")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "username": "admin_user",
+                        "password": "WrongPassword!"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap();
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(attacker_addr));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        // 4. Verify attacker from IP 192.168.1.100 is now locked out
+        let app = create_app(state.clone());
+        let mut req = Request::builder()
+            .uri("/api/auth/login")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "username": "user_beta",
+                    "password": "SecondUserPassword123!"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(attacker_addr));
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        // 5. Legitimate user from a DIFFERENT IP (192.168.1.200) logs in successfully
+        let legit_addr: std::net::SocketAddr = "192.168.1.200:54321".parse().unwrap();
+        let app = create_app(state.clone());
+        let mut req = Request::builder()
+            .uri("/api/auth/login")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "username": "user_beta",
+                    "password": "SecondUserPassword123!"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(legit_addr));
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert!(json["token"].as_str().unwrap().starts_with("cercano_sess_"));
+    }
+
+    #[tokio::test]
+    async fn test_heartbeat_without_name_preserves_existing_name() {
+        let (state, _) = setup_test_state().await;
+        let admin_token = get_authenticated_admin_token(&state).await;
+
+        // 1. First heartbeat with an explicit human-friendly name
+        let app = create_app(state.clone());
+        let mut req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "dev-recepcion-01",
+                    "name": "Recepción mostrador",
+                    "hostname": "kiosk-front",
+                    "os": "Windows 11 IoT"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        req.extensions_mut().insert(axum::extract::ConnectInfo(
+            "192.168.1.55:40000"
+                .parse::<std::net::SocketAddr>()
+                .unwrap(),
+        ));
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let hb1: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(hb1["name"], "Recepción mostrador");
+
+        // Simulate elapsed time past the 1-second rate-limit window
+        sqlx::query("UPDATE devices SET last_seen_at = datetime('now', '-5 seconds') WHERE id = 'dev-recepcion-01'")
+            .execute(&state.db)
+            .await
+            .unwrap();
+
+        // 2. Subsequent heartbeat with no 'name' field and updated hostname
+        let app = create_app(state.clone());
+        let mut req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "dev-recepcion-01",
+                    "hostname": "kiosk-front-updated",
+                    "os": "Windows 11 IoT"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        req.extensions_mut().insert(axum::extract::ConnectInfo(
+            "192.168.1.55:40000"
+                .parse::<std::net::SocketAddr>()
+                .unwrap(),
+        ));
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // 3. Inspect device detail: name MUST still be 'Recepción mostrador', NOT 'dev-recepcion-01'
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/dev-recepcion-01")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let dev: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(
+            dev["name"], "Recepción mostrador",
+            "Previous human-friendly device name must be preserved"
+        );
+        assert_eq!(
+            dev["hostname"], "kiosk-front-updated",
+            "Hostname must be updated"
+        );
+
+        // 4. Also verify an empty string 'name': "   " does NOT overwrite the existing name
+        sqlx::query("UPDATE devices SET last_seen_at = datetime('now', '-5 seconds') WHERE id = 'dev-recepcion-01'")
+            .execute(&state.db)
+            .await
+            .unwrap();
+
+        let app = create_app(state.clone());
+        let mut req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "dev-recepcion-01",
+                    "name": "   ",
+                    "hostname": "kiosk-front-updated"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        req.extensions_mut().insert(axum::extract::ConnectInfo(
+            "192.168.1.55:40000"
+                .parse::<std::net::SocketAddr>()
+                .unwrap(),
+        ));
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/dev-recepcion-01")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let dev: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(
+            dev["name"], "Recepción mostrador",
+            "Blank name must not erase existing name"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_heartbeat_ip_comes_from_connection_not_json_spoofing() {
+        let (state, _) = setup_test_state().await;
+        let admin_token = get_authenticated_admin_token(&state).await;
+
+        let socket_ip: std::net::SocketAddr = "192.168.77.88:45000".parse().unwrap();
+
+        // Heartbeat attempts to spoof IP via payload JSON ("ip": "10.99.99.99")
+        // and via spoofed header ("x-forwarded-for": "10.88.88.88")
+        let app = create_app(state.clone());
+        let mut req = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .header("x-forwarded-for", "10.88.88.88")
+            .header("x-real-ip", "10.88.88.88")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "dev-spoof-target",
+                    "hostname": "spoofed-host",
+                    "ip": "10.99.99.99"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(socket_ip));
+
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let hb: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        // Must record socket IP (192.168.77.88), NOT spoofed payload or header IP
+        assert_eq!(hb["ip_address"], "192.168.77.88");
+
+        // Verify stored value in DB via GET /api/devices/:id
+        let app = create_app(state.clone());
+        let req = Request::builder()
+            .uri("/api/devices/dev-spoof-target")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let dev: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(dev["ip_address"], "192.168.77.88");
+    }
+
+    #[tokio::test]
+    async fn test_heartbeat_rate_limiting_throttles_rapid_requests() {
+        let (state, _) = setup_test_state().await;
+
+        let app = create_app(state.clone());
+        let req1 = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "dev-flood-01"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res1 = app.oneshot(req1).await.unwrap();
+        assert_eq!(res1.status(), StatusCode::OK);
+
+        // Immediate second heartbeat for same device is throttled (429)
+        let app = create_app(state.clone());
+        let req2 = Request::builder()
+            .uri("/api/devices/heartbeat")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "id": "dev-flood-01"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let res2 = app.oneshot(req2).await.unwrap();
+        assert_eq!(res2.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }
