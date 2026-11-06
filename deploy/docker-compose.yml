@@ -1,9 +1,28 @@
-# Despliegue Unificado de Cercano Server y Control Plane (cercano-api)
+# Despliegue Unificado de Cercano Server, Control Plane y Web Console
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Cercano Contributors
-# Cumple con PLAN-F0-F1.md (F1-02) y ARQUITECTURA.md §1
+# Cumple con PLAN-F0-F1.md (F1-02), ARQUITECTURA.md §1 y Mitigación de Hallazgos H6/H11
 
 services:
+  # 1. Consola Web de Administración y Proxy Reverso con TLS (H6, H11)
+  cercano-web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    image: cercano-web:latest
+    container_name: cercano-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Opcional: Montar certificados corporativos (cercano.crt y cercano.key) para HTTPS
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      cercano-api:
+        condition: service_healthy
+
+  # 2. API de Control Plane
   cercano-api:
     build:
       context: ..
@@ -19,8 +38,11 @@ services:
       - CERCANO_SERVER_KEY_PATH=/opt/cercano/data/id_ed25519.pub
       - CERCANO_LOG_LEVEL=info
       - CERCANO_DEVICE_GRACE_PERIOD_SECS=60
+    # Enlaza a localhost del host para administración directa y expone internamente a cercano-web
     ports:
-      - "21114:21114"
+      - "127.0.0.1:21114:21114"
+    expose:
+      - "21114"
     volumes:
       - cercano-data:/opt/cercano/data
     healthcheck:
@@ -33,6 +55,7 @@ services:
       hbbs:
         condition: service_started
 
+  # 3. Servidor de Señalización, ID y NAT Traversal
   hbbs:
     build:
       context: ..
@@ -49,7 +72,7 @@ services:
       # ID registration & heartbeat (TCP + UDP)
       - "21116:21116"
       - "21116:21116/udp"
-      # Web console / WebSocket (opcional)
+      # WebSocket signaling (opcional)
       - "21118:21118"
     volumes:
       - cercano-data:/opt/cercano/data
@@ -60,6 +83,7 @@ services:
       retries: 3
       start_period: 5s
 
+  # 4. Servidor de Retransmisión (Relay)
   hbbr:
     build:
       context: ..
