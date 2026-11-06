@@ -38,14 +38,14 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F2-01 | Especificación del esquema de eventos | F1 cerrado | ControlPlane | Seguridad | En verificación |
-| F2-02 | Núcleo `audit-core`: almacén append-only y cadena de hashes | F2-01 | ControlPlane | QA | En verificación |
-| F2-03 | Checkpoints firmados y `cercano-audit verify` | F2-02 | ControlPlane | Seguridad | En verificación |
-| F2-04 | Endpoints de ingestión (conexión, archivo, alarma) | F2-02, F0-06 | ControlPlane | QA | En verificación |
+| F2-01 | Especificación del esquema de eventos | F1 cerrado | ControlPlane | Seguridad | Hecho |
+| F2-02 | Núcleo `audit-core`: almacén append-only y cadena de hashes | F2-01 | ControlPlane | QA | Hecho |
+| F2-03 | Checkpoints firmados y `cercano-audit verify` | F2-02 | ControlPlane | Seguridad | Hecho |
+| F2-04 | Endpoints de ingestión (conexión, archivo, alarma) | F2-02, F0-06 | ControlPlane | QA | Hecho |
 | F2-05 | Parches al cliente para hooks faltantes | F2-04 | Cliente | QA | Pendiente |
-| F2-06 | Correlación y `trace_id` | F2-04, F0-08 | Servidor + Cliente | QA | En verificación |
-| F2-07 | Motor de alarmas | F2-04 | ControlPlane | QA | En verificación |
-| F2-08 | Auditoría de la API y la consola | F2-02, F1-04 | ControlPlane | QA | En verificación |
+| F2-06 | Correlación y `trace_id` | F2-04, F0-08 | Servidor + Cliente | QA | Hecho |
+| F2-07 | Motor de alarmas | F2-04 | ControlPlane | QA | Hecho |
+| F2-08 | Auditoría de la API y la consola | F2-02, F1-04 | ControlPlane | QA | Hecho |
 | F2-09 | API de consulta y exportación | F2-04, F2-08 | ControlPlane | QA | Pendiente |
 | F2-10 | Exportadores SIEM | F2-02 | ControlPlane | QA | Pendiente |
 | F2-11 | Retención y archivado | F2-02 | ControlPlane | Seguridad | Pendiente |
