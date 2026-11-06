@@ -1,6 +1,6 @@
 # Cercano — Plan de pruebas
 
-**Versión:** 0.2 · **Fecha:** 2026-11-05 · Aplica a todas las fases. Roles y reglas: `AGENTS.md`.
+**Versión:** 0.3 · **Fecha:** 2026-11-06 · Aplica a todas las fases. Roles y reglas: `AGENTS.md`.
 
 ## 1. Principios
 
@@ -108,6 +108,27 @@
 | TC-F3-031 | Secuencia `build.*` completa | Presente y verificable en la cadena |
 | TC-F3-040 | Revocar un instalador | Rechazado en < 60 s y auditado |
 | TC-F3-050 | Búsqueda de claves privadas en artefactos y repo | Ninguna encontrada (automático) |
+| TC-F3-060 | Instalador `soporte` intenta iniciar una conexión | Rechazado por el servidor y alarma `role_violation` |
+| TC-F3-061 | Se modifica la configuración local de un `soporte` para que parezca técnico | Sigue sin poder actuar como técnico |
+| TC-F3-062 | Perfil con el `role` cambiado sin volver a firmar | Rechazado por el cliente |
+| TC-F3-063 | Usuario sin permiso `builder:create:tecnico` pide un instalador técnico | 403 y evento de denegación |
+| TC-F3-064 | Revocar todos los instaladores de un rol | Rechazados en < 60 s y auditado |
+| TC-F3-065 | Matriz de capacidades de `PLAN-F3-GENERADOR.md` §1 para cada rol | Cada celda se cumple (lista de comprobación de QA) |
+| TC-F3-070 | Elevación aceptada por la persona usuaria | Acción elevada aplicada; eventos `requested`, `consented`, `sent`, `applied` |
+| TC-F3-071 | La persona usuaria rechaza la elevación | No se envía nada; evento `denied` |
+| TC-F3-072 | La persona usuaria no responde | Caduca; evento `expired`; nada enviado |
+| TC-F3-073 | Contraseña incorrecta tres veces | Se detiene en 3 intentos; la cuenta de dominio de pruebas no se bloquea; evento `failed` |
+| TC-F3-074 | Buscar la contraseña usada en disco, logs, volcados de memoria tras el borrado y tráfico capturado | No aparece en ningún sitio (automático) |
+| TC-F3-075 | Grabación de sesión durante una elevación (si existe F2-15) | Diálogo de credenciales enmascarado |
+| TC-F3-076 | Elevación solicitada desde un instalador `soporte` | Rechazada y auditada |
+| TC-F3-077 | Técnico sin permiso `elev:use` | Rechazada y auditada |
+| TC-F3-078 | Segunda acción elevada tras la primera | Requiere nueva solicitud salvo permiso `elev:session` |
+| TC-F3-079 | Elevación sin usar durante más de 60 s | Credencial descartada; la acción posterior se rechaza |
+| TC-F3-080 | Secuencia `elev.*` completa | Presente y verificable en la cadena |
+| TC-F3-081 | Buscar contraseñas en la base de auditoría y en los exportadores SIEM | Ninguna encontrada (automático) |
+| TC-F3-082 | Ráfaga de elevaciones del mismo técnico | Se dispara la alarma |
+| TC-F3-083 | Elevación desatendida en un `soporte` con el perfil por defecto | Rechazada; solo se acepta si el perfil la habilita |
+| TC-F3-084 | Fuzzing del mensaje de elevación | Sin caídas ni fugas de información |
 
 ## 7. Pruebas de seguridad por fase
 

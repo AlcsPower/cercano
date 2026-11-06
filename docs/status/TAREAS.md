@@ -68,7 +68,13 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-08 | Auditoría `build.*` | F3-07, F2-02 | ControlPlane | QA | Pendiente |
 | F3-09 | Revocación y caducidad | F3-02, F3-07 | ControlPlane + Servidor | Seguridad | Pendiente |
 | F3-10 | SBOM y verificación de procedencia | F3-04 | Builder | Seguridad | Pendiente |
-| F3-11 | Guía de despliegue masivo | F3-05 | Coordinador | QA | Pendiente |
-| F3-12 | Pruebas de extremo a extremo y cierre | F3-01…11 | QA | Coordinador | Pendiente |
+| F3-11 | Guía de despliegue masivo | F3-05, F3-14, F3-15 | Coordinador | QA | Pendiente |
+| F3-12 | Pruebas de extremo a extremo y cierre | F3-01…11, F3-13…18 | QA | Coordinador | Pendiente |
+| F3-13 | Roles de instalador: perfil y aplicación en el servidor | F3-01, F3-02, F3-07 | ControlPlane + Servidor | Seguridad | Pendiente |
+| F3-14 | Cliente en modo soporte | F3-02, F3-13 | Cliente | QA | Pendiente |
+| F3-15 | Cliente en modo técnico | F3-02, F3-13, F1-04 | Cliente | QA | Pendiente |
+| F3-16 | Spike S6 y elevación con credenciales | F3-14, F3-15 | Cliente | Seguridad | Pendiente |
+| F3-17 | Auditoría `elev.*` y alarmas de elevación | F3-16, F2-02, F2-07 | ControlPlane | QA | Pendiente |
+| F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador | Pendiente |
 
-_Total: 47 tareas (F0–F3). F4–F7 se detallan al cerrar la fase anterior._
+_Total: 53 tareas (F0–F3). F4–F7 se detallan al cerrar la fase anterior._

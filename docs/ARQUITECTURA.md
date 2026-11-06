@@ -1,6 +1,6 @@
 # Cercano — Arquitectura y decisiones
 
-**Versión:** 0.2 · **Fecha:** 2026-11-05
+**Versión:** 0.3 · **Fecha:** 2026-11-06
 
 ## 1. Componentes
 
@@ -59,6 +59,8 @@ cercano/
 | 005 | Generador: «compilar una vez, configurar muchas» con perfil firmado embebido; recompilación solo para cambios de recursos | Rapidez (segundos en vez de minutos) | Propuesto, depende de S4 |
 | 006 | `trace_id` (UUIDv7) generado por el cliente controlador al iniciar sesión y propagado a todos los eventos | Traza extremo a extremo | Propuesto, depende de S5 |
 | 007 | Todo el código nuevo bajo AGPL-3.0; clean-room para funciones Pro | Cumplimiento de licencia | Firme |
+| 008 | Dos roles de instalador (`soporte` y `tecnico`) dentro del perfil firmado; el rol se registra con el `installer_id` y el servidor lo aplica en cada operación de técnico | El instalador por sí solo no es una barrera: un cliente modificado no debe poder actuar como técnico | Propuesto, depende de S4 |
+| 009 | Elevación con credenciales: consentimiento por solicitud, canal cifrado de la sesión, un solo uso, sin persistencia y sin pasar por `cercano-api`; desactivada por defecto hasta tener 2FA | Reducir el impacto de manejar credenciales de administrador | Propuesto, depende de S6 |
 
 Los ADR se formalizan en `docs/adr/NNN-titulo.md` al ratificarse en F0-10.
 
@@ -72,7 +74,7 @@ Los ADR se formalizan en `docs/adr/NNN-titulo.md` al ratificarse en F0-10.
 | `trace_id` | Identificador de sesión/operación, común a todos los eventos relacionados |
 | `ts` | Marca de tiempo UTC con precisión de milisegundos o mejor |
 | `source` | `client`, `hbbs`, `hbbr`, `api`, `console`, `builder` |
-| `category` | `conn`, `file`, `alarm`, `console`, `auth`, `build` |
+| `category` | `conn`, `file`, `alarm`, `console`, `auth`, `build`, `elev` |
 | `action` | Acción específica, p. ej. `conn.start`, `conn.end`, `file.transfer`, `auth.fail` |
 | `actor` | Usuario o dispositivo que actúa (ID, nombre, IP) |
 | `subject` | Dispositivo/usuario/recurso afectado |
@@ -89,7 +91,9 @@ Los ADR se formalizan en `docs/adr/NNN-titulo.md` al ratificarse en F0-10.
 - Alarmas: acceso fuera de la lista blanca de IP, más de 30 intentos consecutivos, múltiples intentos en un minuto, ráfagas desde un mismo prefijo IPv6, fallos o simultaneidad en logins de Terminal con privilegios, violación del alcance de sesión; en cuentas: más de 30 intentos consecutivos y múltiples intentos en un minuto o una hora.
 - Consola: gestión de grupos, usuarios, dispositivos, libreta, roles de admin y de control; login, desconexión de dispositivos, cambios de 2FA y restablecimiento de contraseñas.
 
-**Extras Cercano:** eventos `build.*` (generación, firma y revocación de instaladores), retención configurable y exportación continua a SIEM.
+- Elevación (extra de Cercano): solicitud, consentimiento o rechazo, envío, aplicación, fallo y caducidad; técnico, equipo, persona usuaria, cuenta objetivo, motivo, ticket y alcance. Nunca la contraseña ni su hash.
+
+**Extras Cercano:** eventos `build.*` (generación, firma y revocación de instaladores) y `elev.*`, retención configurable y exportación continua a SIEM.
 
 ## 5. Hipótesis a validar en F0
 
@@ -113,6 +117,9 @@ Importante: S3–S5 se hacen observando el **código abierto** del cliente y su 
 | Divulgación | Robo de instalador con claves embebidas | Perfiles con claves de menor privilegio, revocación, caducidad |
 | Denegación | Inundación de intentos de conexión | Alarmas y limitación de tasa |
 | Elevación | Técnico accede fuera de su alcance | Control de acceso por rol/grupo; alarma de violación de alcance |
+| Abuso de la elevación con credenciales | Un técnico o un equipo técnico comprometido envía credenciales de administrador a muchos equipos | Consentimiento por solicitud, permiso `elev:use`, un solo uso, límites de tasa, alarmas `elev.*`, desactivada por defecto hasta 2FA |
+| Escalada de soporte a técnico | Se modifica un instalador `soporte` para iniciar conexiones | Rol en el perfil firmado y comprobado en el servidor (ADR-008); alarma `alarm.role_violation` |
+| Fuga de credenciales | Contraseña de administrador en logs, memoria, disco o grabaciones | Sin persistencia, borrado de memoria, enmascarado en grabaciones, búsqueda automática de secretos en logs y auditoría |
 | Cadena de suministro | Dependencia comprometida | `cargo-deny`, `cargo-audit`, SBOM, builds reproducibles, firma |
 | MITM en LAN | Interceptación en red local | Cifrado extremo a extremo del protocolo, verificación de clave del servidor, TLS en API |
 
