@@ -17,6 +17,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use audit_core::{Actor, Category, EventInput, Outcome, Source, Subject};
 use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -27,7 +28,7 @@ use sqlx::Row;
 use std::net::SocketAddr;
 use thiserror::Error;
 
-use crate::auth::{extract_client_ip, AuthenticatedUser};
+use crate::auth::{extract_client_ip, extract_trace_id, AuthenticatedUser};
 use crate::AppState;
 
 pub const DEVICE_STATUS_EXPR: &str = "CASE WHEN last_seen_at IS NOT NULL AND (strftime('%s', 'now') - strftime('%s', last_seen_at)) <= ? THEN 'online' ELSE 'offline' END";
@@ -46,6 +47,8 @@ pub enum DeviceError {
     Unauthorized(String),
     #[error("Rate limit exceeded: {0}")]
     RateLimited(String),
+    #[error("Audit error: {0}")]
+    Audit(#[from] audit_core::AuditError),
 }
 
 impl IntoResponse for DeviceError {
@@ -61,6 +64,14 @@ impl IntoResponse for DeviceError {
             }
             DeviceError::RateLimited(msg) => {
                 (StatusCode::TOO_MANY_REQUESTS, "rate_limited", msg.clone())
+            }
+            DeviceError::Audit(err) => {
+                tracing::error!("Audit error during device operation: {:?}", err);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "audit_error",
+                    format!("Error interno registrando auditoría: {err}"),
+                )
             }
             DeviceError::Db(err) => {
                 tracing::error!("Database error during device operation: {:?}", err);
@@ -245,6 +256,13 @@ pub async fn heartbeat_handler(
         }
     }
 
+    // Check if device is registering for the first time
+    let is_new_device = sqlx::query("SELECT 1 FROM devices WHERE id = ?")
+        .bind(&trimmed_id)
+        .fetch_optional(&state.db)
+        .await?
+        .is_none();
+
     // H7: On INSERT, use provided name or fallback to hostname or ID.
     // On UPDATE (conflict), preserve devices.name if provided_name is NULL or empty.
     sqlx::query(
@@ -292,6 +310,36 @@ pub async fn heartbeat_handler(
         last_seen_at: row.get("last_seen_at"),
         created_at: row.get("created_at"),
     };
+
+    if is_new_device {
+        let trace_id = extract_trace_id(&headers);
+        let dev_name = device.name.clone();
+
+        let audit_input = EventInput::new(
+            trace_id,
+            Source::Console,
+            Category::Console,
+            "console.device_register",
+            Actor::with_details(
+                &trimmed_id,
+                "device",
+                Some(dev_name.clone()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Success,
+            json!({
+                "device_id": trimmed_id,
+                "name": dev_name,
+                "hostname": resolved_hostname,
+                "os": resolved_os,
+                "version": resolved_version,
+                "client_ip": client_ip,
+            }),
+        )
+        .with_subject(Subject::with_details(&trimmed_id, "device", Some(dev_name)));
+
+        state.audit.append(audit_input).await?;
+    }
 
     Ok((StatusCode::OK, Json(device)))
 }
@@ -405,6 +453,8 @@ pub async fn get_device_handler(
 /// Protected by Bearer token authentication.
 pub async fn delete_device_handler(
     State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: HeaderMap,
     user: AuthenticatedUser,
     Path(id): Path<String>,
 ) -> Result<Json<DeleteDeviceResponse>, DeviceError> {
@@ -413,6 +463,23 @@ pub async fn delete_device_handler(
             "Se requieren permisos de administrador para eliminar dispositivos.".to_string(),
         ));
     }
+
+    let existing_device = sqlx::query("SELECT id, name FROM devices WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await?;
+
+    let existing = match existing_device {
+        Some(row) => row,
+        None => {
+            return Err(DeviceError::NotFound(format!(
+                "Dispositivo con ID '{}' no encontrado",
+                id
+            )));
+        }
+    };
+
+    let device_name: String = existing.get("name");
 
     let result = sqlx::query("DELETE FROM devices WHERE id = ?")
         .bind(&id)
@@ -425,6 +492,31 @@ pub async fn delete_device_handler(
             id
         )));
     }
+
+    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let trace_id = extract_trace_id(&headers);
+
+    let audit_input = EventInput::new(
+        trace_id,
+        Source::Console,
+        Category::Console,
+        "console.device_delete",
+        Actor::with_details(
+            &user.id,
+            "user",
+            Some(user.username.clone()),
+            Some(client_ip.clone()),
+        ),
+        Outcome::Success,
+        json!({
+            "device_id": id,
+            "device_name": device_name,
+            "client_ip": client_ip,
+        }),
+    )
+    .with_subject(Subject::with_details(&id, "device", Some(device_name)));
+
+    state.audit.append(audit_input).await?;
 
     Ok(Json(DeleteDeviceResponse {
         status: "ok",

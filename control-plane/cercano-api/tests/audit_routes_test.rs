@@ -46,50 +46,29 @@ async fn setup_test_context() -> TestContext {
         ..Default::default()
     };
 
-    let state = AppState {
-        config,
-        db: db.clone(),
-        audit,
-    };
+    let state = AppState::new(config, db.clone(), audit);
 
     let app = create_app(state.clone());
 
-    // 1. Bootstrap admin
-    let bootstrap_req = Request::builder()
-        .uri("/api/auth/bootstrap")
-        .method("POST")
-        .header("content-type", "application/json")
-        .body(Body::from(
-            serde_json::to_vec(&json!({
-                "username": "admin_audit_test",
-                "password": "AdminPassword123!"
-            }))
-            .unwrap(),
-        ))
-        .unwrap();
+    // 1. Seed admin directly into DB to avoid polluting the audit chain
+    let admin_id = uuid::Uuid::now_v7().to_string();
+    let admin_token = format!("admin_tok_{}", uuid::Uuid::now_v7());
+    sqlx::query(
+        "INSERT INTO users (id, username, password_hash, role, is_active) VALUES (?, 'admin_audit_test', 'hash', 'admin', 1)",
+    )
+    .bind(&admin_id)
+    .execute(&db)
+    .await
+    .unwrap();
 
-    let res = app.clone().oneshot(bootstrap_req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED);
-
-    // 2. Login to get admin token
-    let login_req = Request::builder()
-        .uri("/api/auth/login")
-        .method("POST")
-        .header("content-type", "application/json")
-        .body(Body::from(
-            serde_json::to_vec(&json!({
-                "username": "admin_audit_test",
-                "password": "AdminPassword123!"
-            }))
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let res = app.clone().oneshot(login_req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::OK);
-    let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    let login_json: Value = serde_json::from_slice(&bytes).unwrap();
-    let admin_token = login_json["token"].as_str().unwrap().to_string();
+    sqlx::query(
+        "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', '+1 hour'))",
+    )
+    .bind(&admin_token)
+    .bind(&admin_id)
+    .execute(&db)
+    .await
+    .unwrap();
 
     // 3. Register a test device
     let device_id = "dev_test_001".to_string();

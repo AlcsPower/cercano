@@ -17,4 +17,6 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+pub mod alarms;
 pub mod audit;
+pub mod traces;

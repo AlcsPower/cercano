@@ -18,12 +18,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use std::fs;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use argon2::password_hash::rand_core::OsRng;
-use axum::extract::State;
-use axum::http::StatusCode;
+use audit_core::{Actor, Category, EventInput, Outcome, Source, Subject};
+use axum::extract::{ConnectInfo, State};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -31,10 +33,11 @@ use base64::Engine;
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
-use crate::auth::AuthenticatedUser;
+use crate::auth::{extract_client_ip, extract_trace_id, AuthenticatedUser};
 use crate::AppState;
 
 pub const KEY_TYPE_ED25519: &str = "ed25519";
@@ -54,6 +57,8 @@ pub enum ServerKeyError {
     Forbidden(String),
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
+    #[error("Audit error: {0}")]
+    Audit(#[from] audit_core::AuditError),
 }
 
 impl IntoResponse for ServerKeyError {
@@ -78,6 +83,14 @@ impl IntoResponse for ServerKeyError {
                 "io_error",
                 format!("Error de entrada/salida al acceder a las claves del servidor: {msg}"),
             ),
+            ServerKeyError::Audit(err) => {
+                tracing::error!("Audit error during server key operation: {:?}", err);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "audit_error",
+                    format!("Error interno registrando auditoría: {err}"),
+                )
+            }
         };
 
         let body = Json(json!({
@@ -87,6 +100,18 @@ impl IntoResponse for ServerKeyError {
 
         (status, body).into_response()
     }
+}
+
+/// Computes the SHA-256 fingerprint for a Base64-encoded public key.
+pub fn compute_key_fingerprint(pub_key_b64: &str) -> String {
+    let bytes = match BASE64_STANDARD.decode(pub_key_b64.trim()) {
+        Ok(b) => b,
+        Err(_) => pub_key_b64.trim().as_bytes().to_vec(),
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    let digest = hasher.finalize();
+    format!("SHA256:{:x}", digest)
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -270,6 +295,9 @@ pub async fn rotate_keys<P: AsRef<Path>>(
     pub_path: P,
     reason: Option<&str>,
     admin_user: &AuthenticatedUser,
+    audit: Option<&audit_core::AuditStore>,
+    trace_id: Option<&str>,
+    client_ip: Option<&str>,
 ) -> Result<RotateKeysResponse, ServerKeyError> {
     let _guard = ROTATE_MUTEX.lock().await;
 
@@ -282,6 +310,13 @@ pub async fn rotate_keys<P: AsRef<Path>>(
 
     let pub_path_ref = pub_path.as_ref();
     let priv_path = derive_private_key_path(pub_path_ref);
+
+    // Read previous public key if present for audit fingerprinting
+    let old_key_b64 = read_public_key(pub_path_ref).ok();
+    let old_fingerprint = old_key_b64
+        .as_ref()
+        .map(|k| compute_key_fingerprint(k))
+        .unwrap_or_else(|| "none".to_string());
 
     if let Some(parent) = pub_path_ref.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
@@ -315,6 +350,7 @@ pub async fn rotate_keys<P: AsRef<Path>>(
     }
 
     let new_keys = generate_server_keypair()?;
+    let new_fingerprint = compute_key_fingerprint(&new_keys.public_key_base64);
 
     // Atomic write of private key: write to temporary file first with 0o600 permissions, then rename
     let tmp_priv_path = format!("{}.tmp.{}", priv_path.display(), compact_ts);
@@ -357,6 +393,42 @@ pub async fn rotate_keys<P: AsRef<Path>>(
             ))
         })?;
 
+    // Record audit event if audit store provided
+    if let Some(store) = audit {
+        let effective_trace_id = trace_id
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+
+        let audit_input = EventInput::new(
+            effective_trace_id,
+            Source::Console,
+            Category::Console,
+            "console.rotate_key",
+            Actor::with_details(
+                &admin_user.id,
+                "user",
+                Some(admin_user.username.clone()),
+                client_ip.map(ToString::to_string),
+            ),
+            Outcome::Success,
+            json!({
+                "key_type": KEY_TYPE_ED25519,
+                "old_key_fingerprint": old_fingerprint,
+                "new_key_fingerprint": new_fingerprint,
+                "new_public_key": new_keys.public_key_base64,
+                "rotation_reason": reason.unwrap_or("administrative_rotation"),
+            }),
+        )
+        .with_subject(Subject::with_details(
+            "server_keys",
+            "setting",
+            Some("Ed25519 Server Keys".to_string()),
+        ));
+
+        store.append(audit_input).await?;
+    }
+
     tracing::info!(
         admin_id = %admin_user.id,
         admin_user = %admin_user.username,
@@ -397,11 +469,23 @@ pub async fn get_public_key_handler(
 /// Never leaks or returns private key.
 pub async fn rotate_keys_handler(
     State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: HeaderMap,
     user: AuthenticatedUser,
     body: Option<Json<RotateKeysRequest>>,
 ) -> Result<Json<RotateKeysResponse>, ServerKeyError> {
+    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let trace_id = extract_trace_id(&headers);
     let reason = body.as_ref().and_then(|b| b.reason.as_deref());
-    let response = rotate_keys(&state.config.server_key_path, reason, &user).await?;
+    let response = rotate_keys(
+        &state.config.server_key_path,
+        reason,
+        &user,
+        Some(&state.audit),
+        Some(&trace_id),
+        Some(&client_ip),
+    )
+    .await?;
     Ok(Json(response))
 }
 
@@ -481,9 +565,16 @@ mod tests {
             created_at: "2026-11-05 10:00:00".to_string(),
         };
 
-        let rotate_res = rotate_keys(&pub_path, Some("scheduled maintenance"), &admin_user)
-            .await
-            .unwrap();
+        let rotate_res = rotate_keys(
+            &pub_path,
+            Some("scheduled maintenance"),
+            &admin_user,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(rotate_res.status, "rotated");
         assert_eq!(rotate_res.key_type, "ed25519");
@@ -512,7 +603,7 @@ mod tests {
             created_at: "2026-11-05 10:00:00".to_string(),
         };
 
-        let res = rotate_keys(&pub_path, None, &operator_user).await;
+        let res = rotate_keys(&pub_path, None, &operator_user, None, None, None).await;
         match res {
             Err(ServerKeyError::Forbidden(msg)) => {
                 assert!(msg.contains("administrador"));

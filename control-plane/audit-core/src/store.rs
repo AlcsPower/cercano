@@ -520,7 +520,59 @@ impl AuditStore {
         Ok(results)
     }
 
-    fn row_to_event(row: sqlx::sqlite::SqliteRow) -> Result<AuditEvent, AuditError> {
+    /// Queries unlinked candidate events for fallback correlation matching participant IDs within a time window.
+    pub async fn query_unlinked_events(
+        &self,
+        participant_a: &str,
+        participant_b: &str,
+        from_ts: &str,
+        to_ts: &str,
+    ) -> Result<Vec<AuditEvent>, AuditError> {
+        let query_str = r#"
+            SELECT sequence, event_id, trace_id, ts, source, category, action,
+                   actor, subject, outcome, details, prev_hash, hash, created_at
+            FROM audit_events
+            WHERE (trace_id = '' OR trace_id = 'unknown' OR trace_id = 'none' OR trace_id = '-' OR trace_id = 'unlinked')
+              AND (
+                  (
+                      (json_extract(actor, '$.id') = ? OR json_extract(details, '$.controller_id') = ?)
+                      AND
+                      (json_extract(subject, '$.id') = ? OR json_extract(details, '$.controlled_id') = ?)
+                  )
+                  OR
+                  (
+                      (json_extract(actor, '$.id') = ? OR json_extract(details, '$.controlled_id') = ?)
+                      AND
+                      (json_extract(subject, '$.id') = ? OR json_extract(details, '$.controller_id') = ?)
+                  )
+              )
+              AND ts >= ? AND ts <= ?
+            ORDER BY sequence ASC
+        "#;
+
+        let rows = sqlx::query(query_str)
+            .bind(participant_a)
+            .bind(participant_a)
+            .bind(participant_b)
+            .bind(participant_b)
+            .bind(participant_b)
+            .bind(participant_b)
+            .bind(participant_a)
+            .bind(participant_a)
+            .bind(from_ts)
+            .bind(to_ts)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in rows {
+            results.push(Self::row_to_event(row)?);
+        }
+
+        Ok(results)
+    }
+
+    pub fn row_to_event(row: sqlx::sqlite::SqliteRow) -> Result<AuditEvent, AuditError> {
         let sequence: i64 = row.try_get("sequence")?;
         let event_id: String = row.try_get("event_id")?;
         let trace_id: String = row.try_get("trace_id")?;

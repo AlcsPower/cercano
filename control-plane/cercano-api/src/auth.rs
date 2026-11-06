@@ -20,6 +20,7 @@
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Algorithm, Argon2, Params, Version};
+use audit_core::{Actor, Category, EventInput, Outcome, Source, Subject};
 use axum::async_trait;
 use axum::extract::{ConnectInfo, FromRequestParts, State};
 use axum::http::request::Parts;
@@ -57,6 +58,8 @@ pub enum AuthError {
     UserInactive,
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
+    #[error("Audit error: {0}")]
+    Audit(#[from] audit_core::AuditError),
 }
 
 impl IntoResponse for AuthError {
@@ -103,6 +106,14 @@ impl IntoResponse for AuthError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "internal_error",
                     "Error en procesamiento criptográfico de contraseñas.".to_string(),
+                )
+            }
+            AuthError::Audit(err) => {
+                tracing::error!("Audit error during auth operation: {:?}", err);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "audit_error",
+                    format!("Error interno registrando auditoría: {err}"),
                 )
             }
         };
@@ -303,6 +314,17 @@ pub fn extract_client_ip(headers: &HeaderMap, peer_addr: Option<SocketAddr>) -> 
     }
 }
 
+/// Extracts trace_id from headers (x-trace-id or x-request-id) or generates a new UUIDv7.
+pub fn extract_trace_id(headers: &HeaderMap) -> String {
+    headers
+        .get("x-trace-id")
+        .or_else(|| headers.get("x-request-id"))
+        .and_then(|v| v.to_str().ok())
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| Uuid::now_v7().to_string())
+}
+
 /// Checks if an account or IP is temporarily locked due to repeated failed logins.
 /// Evaluates account lockout (by username) and IP lockout (by IP address) separately
 /// to prevent brute-force attacks without enabling denial-of-service against legitimate users.
@@ -397,8 +419,13 @@ fn validate_credentials_input(username: &str, password: &str) -> Result<(), Auth
 /// Initial administrator provisioning. Only succeeds if zero users exist in the database.
 pub async fn bootstrap_handler(
     State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: HeaderMap,
     Json(payload): Json<BootstrapRequest>,
 ) -> Result<(StatusCode, Json<UserResponse>), AuthError> {
+    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let trace_id = extract_trace_id(&headers);
+
     validate_credentials_input(&payload.username, &payload.password)?;
 
     // Atomic transaction to ensure race-condition safety on bootstrap
@@ -436,6 +463,34 @@ pub async fn bootstrap_handler(
 
     tx.commit().await?;
 
+    let username_str = payload.username.trim().to_string();
+
+    let audit_input = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Auth,
+        "auth.bootstrap",
+        Actor::with_details(
+            &user_id,
+            "user",
+            Some(username_str.clone()),
+            Some(client_ip.clone()),
+        ),
+        Outcome::Success,
+        json!({
+            "username": username_str,
+            "role": "admin",
+            "client_ip": client_ip,
+        }),
+    )
+    .with_subject(Subject::with_details(
+        &user_id,
+        "user",
+        Some(username_str.clone()),
+    ));
+
+    state.audit.append(audit_input).await?;
+
     tracing::info!(
         user_id = %user_id,
         username = %payload.username.trim(),
@@ -462,7 +517,18 @@ pub async fn login_handler(
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AuthError> {
     let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let trace_id = extract_trace_id(&headers);
     let username = payload.username.trim();
+
+    // Evaluate IP whitelist and IP burst rate limits via alarm engine
+    let _ = state
+        .alarms
+        .check_ip_whitelist(&client_ip, Some(&trace_id), Some(username))
+        .await;
+    let _ = state
+        .alarms
+        .record_ip_attempt(&client_ip, Some(&trace_id), Some(username))
+        .await;
 
     // Check brute-force lockout
     if is_locked_out(&state.db, username, &client_ip).await? {
@@ -471,6 +537,29 @@ pub async fn login_handler(
             ip = %client_ip,
             "Login rejected: account or IP temporarily locked"
         );
+        let audit_input = EventInput::new(
+            trace_id.clone(),
+            Source::Api,
+            Category::Auth,
+            "auth.failed",
+            Actor::with_details(
+                username,
+                "user",
+                Some(username.to_string()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Failure,
+            json!({
+                "target_username": username,
+                "reason": "account_or_ip_locked",
+                "client_ip": client_ip,
+            }),
+        );
+        let _ = state.audit.append(audit_input).await;
+        let _ = state
+            .alarms
+            .record_login_failure(username, Some(&client_ip), Some(&trace_id))
+            .await;
         return Err(AuthError::AccountLocked);
     }
 
@@ -491,6 +580,29 @@ pub async fn login_handler(
                 ip = %client_ip,
                 "Login failed: user not found"
             );
+            let audit_input = EventInput::new(
+                trace_id.clone(),
+                Source::Api,
+                Category::Auth,
+                "auth.failed",
+                Actor::with_details(
+                    username,
+                    "user",
+                    Some(username.to_string()),
+                    Some(client_ip.clone()),
+                ),
+                Outcome::Failure,
+                json!({
+                    "target_username": username,
+                    "reason": "user_not_found",
+                    "client_ip": client_ip,
+                }),
+            );
+            let _ = state.audit.append(audit_input).await;
+            let _ = state
+                .alarms
+                .record_login_failure(username, Some(&client_ip), Some(&trace_id))
+                .await;
             return Err(AuthError::InvalidCredentials);
         }
     };
@@ -503,6 +615,30 @@ pub async fn login_handler(
             ip = %client_ip,
             "Login failed: account is inactive"
         );
+        let user_id: String = user.get("id");
+        let audit_input = EventInput::new(
+            trace_id.clone(),
+            Source::Api,
+            Category::Auth,
+            "auth.failed",
+            Actor::with_details(
+                &user_id,
+                "user",
+                Some(username.to_string()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Failure,
+            json!({
+                "target_username": username,
+                "reason": "user_inactive",
+                "client_ip": client_ip,
+            }),
+        );
+        let _ = state.audit.append(audit_input).await;
+        let _ = state
+            .alarms
+            .record_login_failure(username, Some(&client_ip), Some(&trace_id))
+            .await;
         return Err(AuthError::UserInactive);
     }
 
@@ -516,6 +652,30 @@ pub async fn login_handler(
             ip = %client_ip,
             "Login failed: password mismatch"
         );
+        let user_id: String = user.get("id");
+        let audit_input = EventInput::new(
+            trace_id.clone(),
+            Source::Api,
+            Category::Auth,
+            "auth.failed",
+            Actor::with_details(
+                &user_id,
+                "user",
+                Some(username.to_string()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Failure,
+            json!({
+                "target_username": username,
+                "reason": "invalid_password",
+                "client_ip": client_ip,
+            }),
+        );
+        let _ = state.audit.append(audit_input).await;
+        let _ = state
+            .alarms
+            .record_login_failure(username, Some(&client_ip), Some(&trace_id))
+            .await;
         return Err(AuthError::InvalidCredentials);
     }
 
@@ -546,6 +706,32 @@ pub async fn login_handler(
         .await?;
     let expires_at: String = session_row.get("expires_at");
 
+    let audit_input = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Auth,
+        "auth.login",
+        Actor::with_details(
+            &user_id,
+            "user",
+            Some(username.to_string()),
+            Some(client_ip.clone()),
+        ),
+        Outcome::Success,
+        json!({
+            "username": username,
+            "role": user_role,
+            "client_ip": client_ip,
+        }),
+    )
+    .with_subject(Subject::with_details(
+        &user_id,
+        "user",
+        Some(username.to_string()),
+    ));
+
+    state.audit.append(audit_input).await?;
+
     tracing::info!(
         username = %username,
         user_id = %user_id,
@@ -567,8 +753,12 @@ pub async fn login_handler(
 /// Revokes active session corresponding to the Bearer token provided.
 pub async fn logout_handler(
     State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
 ) -> Result<Json<LogoutResponse>, AuthError> {
+    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let trace_id = extract_trace_id(&headers);
+
     let auth_header = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -585,6 +775,18 @@ pub async fn logout_handler(
             AuthError::Unauthorized("Formato de cabecera Bearer token inválido".to_string())
         })?;
 
+    let session_row = sqlx::query(
+        r#"
+        SELECT s.user_id, u.username
+        FROM sessions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.token = ? AND s.revoked_at IS NULL
+        "#,
+    )
+    .bind(token)
+    .fetch_optional(&state.db)
+    .await?;
+
     let result = sqlx::query(
         "UPDATE sessions SET revoked_at = datetime('now') WHERE token = ? AND revoked_at IS NULL",
     )
@@ -596,6 +798,35 @@ pub async fn logout_handler(
         tracing::debug!("Logout called on nonexistent or already revoked token");
     } else {
         tracing::info!("Session successfully revoked upon logout");
+        let (user_id, username) = match session_row {
+            Some(row) => (
+                row.get::<String, _>("user_id"),
+                row.get::<String, _>("username"),
+            ),
+            None => ("unknown".to_string(), "unknown".to_string()),
+        };
+
+        let audit_input = EventInput::new(
+            trace_id,
+            Source::Api,
+            Category::Auth,
+            "auth.logout",
+            Actor::with_details(
+                &user_id,
+                "user",
+                Some(username.clone()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Success,
+            json!({
+                "username": username,
+                "reason": "user_requested",
+                "client_ip": client_ip,
+            }),
+        )
+        .with_subject(Subject::with_details(&user_id, "user", Some(username)));
+
+        state.audit.append(audit_input).await?;
     }
 
     Ok(Json(LogoutResponse {

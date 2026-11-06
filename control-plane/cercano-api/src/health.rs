@@ -90,11 +90,7 @@ mod tests {
     async fn test_health_handler_execution() {
         let db = init_db("sqlite::memory:").await.unwrap();
         let audit = std::sync::Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
-        let state = AppState {
-            config: Config::default(),
-            db,
-            audit,
-        };
+        let state = AppState::new(Config::default(), db, audit);
         let resp = health_handler(State(state)).await;
         assert_eq!(resp.status(), StatusCode::OK);
     }
@@ -104,11 +100,7 @@ mod tests {
         let db = init_db("sqlite::memory:").await.unwrap();
         let audit = std::sync::Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
         db.close().await;
-        let state = AppState {
-            config: Config::default(),
-            db,
-            audit,
-        };
+        let state = AppState::new(Config::default(), db, audit);
         let resp = health_handler(State(state)).await;
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
     }

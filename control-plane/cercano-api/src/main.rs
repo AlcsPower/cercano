@@ -45,11 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|e| format!("Failed to initialize AuditStore: {}", e))?,
     );
 
-    let state = AppState {
-        config: config.clone(),
-        db,
-        audit,
-    };
+    let state = AppState::new(config.clone(), db, audit);
 
     let app = create_app(state);
 

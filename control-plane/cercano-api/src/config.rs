@@ -39,6 +39,8 @@ pub struct Config {
     pub device_grace_period_secs: u64,
     pub server_key_path: String,
     pub internal_token: String,
+    #[serde(default)]
+    pub ip_whitelist: Vec<String>,
 }
 
 impl Default for Config {
@@ -51,6 +53,7 @@ impl Default for Config {
             device_grace_period_secs: DEFAULT_DEVICE_GRACE_PERIOD_SECS,
             server_key_path: DEFAULT_SERVER_KEY_PATH.to_string(),
             internal_token: DEFAULT_INTERNAL_TOKEN.to_string(),
+            ip_whitelist: Vec::new(),
         }
     }
 }
@@ -65,6 +68,7 @@ struct FileConfig {
     device_grace_period_secs: Option<u64>,
     server_key_path: Option<String>,
     internal_token: Option<String>,
+    ip_whitelist: Option<Vec<String>>,
 }
 
 impl Config {
@@ -127,6 +131,9 @@ impl Config {
         if let Some(token) = file_cfg.internal_token {
             self.internal_token = token;
         }
+        if let Some(whitelist) = file_cfg.ip_whitelist {
+            self.ip_whitelist = whitelist;
+        }
 
         Ok(())
     }
@@ -184,6 +191,15 @@ impl Config {
             }
         }
 
+        if let Ok(whitelist_str) = env::var("CERCANO_IP_WHITELIST") {
+            self.ip_whitelist = whitelist_str
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect();
+        }
+
         Ok(())
     }
 }
@@ -215,6 +231,7 @@ mod tests {
         assert_eq!(cfg.device_grace_period_secs, 60);
         assert_eq!(cfg.server_key_path, "/opt/cercano/data/id_ed25519.pub");
         assert_eq!(cfg.internal_token, "cercano_internal_token_secret");
+        assert_eq!(cfg.ip_whitelist, Vec::<String>::new());
     }
 
     #[test]
@@ -242,6 +259,25 @@ server_key_path = "/custom/keys/id_ed25519.pub"
         assert_eq!(cfg.log_level, "debug");
         assert_eq!(cfg.device_grace_period_secs, 120);
         assert_eq!(cfg.server_key_path, "/custom/keys/id_ed25519.pub");
+    }
+
+    #[test]
+    fn test_merge_file_with_ip_whitelist() {
+        let mut temp = NamedTempFile::new().unwrap();
+        writeln!(
+            temp,
+            r#"
+ip_whitelist = ["192.168.1.0/24", "10.0.0.0/8"]
+"#
+        )
+        .unwrap();
+
+        let mut cfg = Config::default();
+        cfg.merge_file(temp.path()).unwrap();
+        assert_eq!(
+            cfg.ip_whitelist,
+            vec!["192.168.1.0/24".to_string(), "10.0.0.0/8".to_string()]
+        );
     }
 
     #[test]

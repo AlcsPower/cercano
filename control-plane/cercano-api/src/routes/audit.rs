@@ -46,11 +46,14 @@ pub enum AuditRouteError {
     Unauthorized(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
+    #[error("Not found: {0}")]
+    NotFound(String),
 }
 
 impl IntoResponse for AuditRouteError {
     fn into_response(self) -> Response {
         let (status, code, message) = match &self {
+            AuditRouteError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg.clone()),
             AuditRouteError::Validation(msg) => {
                 (StatusCode::BAD_REQUEST, "validation_error", msg.clone())
             }

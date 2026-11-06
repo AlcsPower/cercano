@@ -21,6 +21,7 @@ thiserror = "2.0"
 argon2 = { version = "0.5", default-features = false, features = ["std", "password-hash"] }
 ed25519-dalek = { version = "2.1", default-features = false, features = ["rand_core"] }
 base64 = "0.22"
+sha2 = "0.10"
 audit-core = { path = "../audit-core" }
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 

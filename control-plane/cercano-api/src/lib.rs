@@ -17,6 +17,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+pub mod alarms;
 pub mod audit;
 pub mod auth;
 pub mod config;
@@ -40,6 +41,19 @@ pub struct AppState {
     pub config: Config,
     pub db: SqlitePool,
     pub audit: Arc<audit_core::AuditStore>,
+    pub alarms: Arc<alarms::AlarmEngine>,
+}
+
+impl AppState {
+    pub fn new(config: Config, db: SqlitePool, audit: Arc<audit_core::AuditStore>) -> Self {
+        let alarms = Arc::new(alarms::AlarmEngine::new(config.clone(), audit.clone()));
+        Self {
+            config,
+            db,
+            audit,
+            alarms,
+        }
+    }
 }
 
 /// Builds the Axum application router with all registered routes and middleware.
@@ -82,8 +96,20 @@ pub fn create_app(state: AppState) -> Router {
         )
         .route("/api/audit/alarm", post(routes::audit::alarm_handler))
         .route(
+            "/api/audit/alarms",
+            get(routes::alarms::list_alarms_handler),
+        )
+        .route(
+            "/api/audit/alarms/:id/acknowledge",
+            post(routes::alarms::acknowledge_alarm_handler),
+        )
+        .route(
             "/api/audit/verify",
             get(routes::audit::verify_chain_handler),
+        )
+        .route(
+            "/api/audit/traces/:trace_id",
+            get(routes::traces::get_trace_timeline_handler),
         )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
@@ -115,22 +141,14 @@ mod tests {
     async fn setup_test_app() -> Router {
         let db = init_db("sqlite::memory:").await.unwrap();
         let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
-        let state = AppState {
-            config: Config::default(),
-            db,
-            audit,
-        };
+        let state = AppState::new(Config::default(), db, audit);
         create_app(state)
     }
 
     async fn setup_test_state() -> (AppState, Router) {
         let db = init_db("sqlite::memory:").await.unwrap();
         let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
-        let state = AppState {
-            config: Config::default(),
-            db,
-            audit,
-        };
+        let state = AppState::new(Config::default(), db, audit);
         let app = create_app(state.clone());
         (state, app)
     }
@@ -202,11 +220,7 @@ mod tests {
         let db = init_db("sqlite::memory:").await.unwrap();
         let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
         db.close().await;
-        let state = AppState {
-            config: Config::default(),
-            db,
-            audit,
-        };
+        let state = AppState::new(Config::default(), db, audit);
         let app = create_app(state);
 
         let req = Request::builder()
@@ -885,7 +899,7 @@ mod tests {
             ..Default::default()
         };
 
-        let state = AppState { config, db, audit };
+        let state = AppState::new(config, db, audit);
         let app = create_app(state);
 
         let req = Request::builder()
@@ -913,7 +927,7 @@ mod tests {
             ..Default::default()
         };
 
-        let state = AppState { config, db, audit };
+        let state = AppState::new(config, db, audit);
         let app = create_app(state);
 
         let req = Request::builder()
@@ -949,7 +963,7 @@ mod tests {
             ..Default::default()
         };
 
-        let state = AppState { config, db, audit };
+        let state = AppState::new(config, db, audit);
 
         // 1. Unauthenticated rotation attempt rejected with 401 Unauthorized
         let app = create_app(state.clone());
