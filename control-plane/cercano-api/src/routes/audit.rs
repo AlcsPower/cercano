@@ -19,8 +19,10 @@
 
 use std::str::FromStr;
 
+use axum::body::Body;
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::header;
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -303,6 +305,14 @@ pub struct FileTransferRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SessionNoteRequest {
+    #[serde(default)]
+    pub event_id: Option<String>,
+    pub trace_id: String,
+    pub note: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AlarmRequest {
     #[serde(default)]
     pub event_id: Option<String>,
@@ -325,17 +335,93 @@ pub struct AlarmRequest {
 pub struct QueryEventsParams {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub cursor: Option<i64>,
     pub trace_id: Option<String>,
     pub category: Option<String>,
     pub action: Option<String>,
     pub actor_id: Option<String>,
     pub subject_id: Option<String>,
     pub outcome: Option<String>,
+    pub from_ts: Option<String>,
+    pub to_ts: Option<String>,
+    pub from_seq: Option<i64>,
+    pub to_seq: Option<i64>,
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PagedEvents {
+    pub events: Vec<AuditEvent>,
+    pub next_cursor: Option<i64>,
+}
+
+fn validate_page(params: &QueryEventsParams) -> Result<i64, AuditRouteError> {
+    let limit = params.limit.unwrap_or(50);
+    if !(1..=1000).contains(&limit) {
+        return Err(AuditRouteError::Validation(
+            "limit debe estar entre 1 y 1000".into(),
+        ));
+    }
+    if params.offset.unwrap_or(0) < 0 || params.cursor.unwrap_or(0) < 0 {
+        return Err(AuditRouteError::Validation(
+            "offset/cursor no pueden ser negativos".into(),
+        ));
+    }
+    if params.offset.is_some() && params.cursor.is_some() {
+        return Err(AuditRouteError::Validation(
+            "offset y cursor son excluyentes".into(),
+        ));
+    }
+    Ok(limit)
 }
 
 // ----------------------------------------------------------------------------
 // Handlers
 // ----------------------------------------------------------------------------
+
+/// `POST /api/audit/session/note`
+/// Adds an immutable free-form note linked to an existing session trace.
+pub async fn session_note_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Json(payload): Json<SessionNoteRequest>,
+) -> Result<(StatusCode, Json<AuditEvent>), AuditRouteError> {
+    if payload.trace_id.trim().is_empty() {
+        return Err(AuditRouteError::Validation(
+            "trace_id no puede estar vacío".into(),
+        ));
+    }
+    let note = payload.note.trim();
+    if note.is_empty() || note.chars().count() > 4000 {
+        return Err(AuditRouteError::Validation(
+            "note debe tener entre 1 y 4000 caracteres".into(),
+        ));
+    }
+    if let Some(ref eid) = payload.event_id {
+        if eid.trim().is_empty() || eid.len() > 128 {
+            return Err(AuditRouteError::Validation("event_id inválido".into()));
+        }
+        if let Some(existing) = state.audit.get_event_by_id(eid).await? {
+            return Ok((StatusCode::OK, Json(existing)));
+        }
+    }
+    let mut input = EventInput::new(
+        payload.trace_id,
+        Source::Api,
+        Category::Console,
+        "session.note",
+        Actor::with_details(&user.id, "user", Some(user.username), None),
+        Outcome::Success,
+        json!({ "note": note }),
+    );
+    if let Some(eid) = payload.event_id {
+        input = input.with_event_id(eid);
+    }
+    match state.audit.append(input).await {
+        Ok(created) => Ok((StatusCode::CREATED, Json(created))),
+        Err(err) => Err(AuditRouteError::Audit(err)),
+    }
+}
 
 /// `POST /api/audit/events`
 ///
@@ -704,18 +790,25 @@ pub async fn query_events_handler(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Query(params): Query<QueryEventsParams>,
-) -> Result<Json<Vec<AuditEvent>>, AuditRouteError> {
+) -> Result<Json<PagedEvents>, AuditRouteError> {
     require_admin(&user)?;
-
+    let limit = validate_page(&params)?;
     let category = params
         .category
         .as_ref()
-        .map(|c| Category::from_str(c).unwrap());
+        .map(|c| {
+            Category::from_str(c)
+                .map_err(|_| AuditRouteError::Validation(format!("category inválida: {c}")))
+        })
+        .transpose()?;
     let outcome = params
         .outcome
         .as_ref()
-        .map(|o| Outcome::from_str(o).unwrap());
-
+        .map(|o| {
+            Outcome::from_str(o)
+                .map_err(|_| AuditRouteError::Validation(format!("outcome inválido: {o}")))
+        })
+        .transpose()?;
     let filter = EventFilter {
         trace_id: params.trace_id,
         category,
@@ -723,16 +816,137 @@ pub async fn query_events_handler(
         actor_id: params.actor_id,
         subject_id: params.subject_id,
         outcome,
-        from_ts: None,
-        to_ts: None,
-        from_seq: None,
-        to_seq: None,
-        limit: params.limit.or(Some(50)),
+        from_ts: params.from_ts,
+        to_ts: params.to_ts,
+        from_seq: params.from_seq,
+        to_seq: params.to_seq,
+        after_sequence: params.cursor,
+        limit: Some(limit + 1),
         offset: params.offset,
     };
+    let mut events = state.audit.query_events(filter).await?;
+    let next_cursor = if events.len() > limit as usize {
+        events.truncate(limit as usize);
+        events.last().map(|event| event.sequence)
+    } else {
+        None
+    };
+    Ok(Json(PagedEvents {
+        events,
+        next_cursor,
+    }))
+}
 
+/// `GET /api/audit/export?format=jsonl|csv` — paged read-only export.
+pub async fn export_events_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Query(mut params): Query<QueryEventsParams>,
+) -> Result<Response, AuditRouteError> {
+    require_admin(&user)?;
+    let format = params.format.take().unwrap_or_else(|| "jsonl".into());
+    if format != "jsonl" && format != "csv" {
+        return Err(AuditRouteError::Validation(
+            "format debe ser jsonl o csv".into(),
+        ));
+    }
+    let limit = validate_page(&params)?;
+    params.limit = Some(limit);
+    let category = params
+        .category
+        .as_ref()
+        .map(|c| {
+            Category::from_str(c)
+                .map_err(|_| AuditRouteError::Validation(format!("category inválida: {c}")))
+        })
+        .transpose()?;
+    let outcome = params
+        .outcome
+        .as_ref()
+        .map(|o| {
+            Outcome::from_str(o)
+                .map_err(|_| AuditRouteError::Validation(format!("outcome inválido: {o}")))
+        })
+        .transpose()?;
+    let filter = EventFilter {
+        trace_id: params.trace_id,
+        category,
+        action: params.action,
+        actor_id: params.actor_id,
+        subject_id: params.subject_id,
+        outcome,
+        from_ts: params.from_ts,
+        to_ts: params.to_ts,
+        from_seq: params.from_seq,
+        to_seq: params.to_seq,
+        after_sequence: params.cursor,
+        limit: Some(limit),
+        offset: params.offset,
+    };
     let events = state.audit.query_events(filter).await?;
-    Ok(Json(events))
+    let mut body = String::new();
+    if format == "csv" {
+        body.push_str("sequence,event_id,trace_id,ts,source,category,action,actor,subject,outcome,details,prev_hash,hash,created_at\n");
+        for event in events {
+            body.push_str(&csv_event(&event));
+        }
+    } else {
+        for event in events {
+            body.push_str(
+                &serde_json::to_string(&event)
+                    .map_err(|e| AuditRouteError::Validation(e.to_string()))?,
+            );
+            body.push('\n');
+        }
+    }
+    let content_type = if format == "csv" {
+        "text/csv; charset=utf-8"
+    } else {
+        "application/x-ndjson; charset=utf-8"
+    };
+    let filename = if format == "csv" {
+        "audit-events.csv"
+    } else {
+        "audit-events.jsonl"
+    };
+    let disposition = HeaderValue::from_str(&format!("attachment; filename=\"{filename}\""))
+        .map_err(|e| AuditRouteError::Validation(format!("filename inválido: {e}")))?;
+    let mut response = Response::new(Body::from(body));
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+    response
+        .headers_mut()
+        .insert(header::CONTENT_DISPOSITION, disposition);
+    Ok(response)
+}
+
+fn csv_field(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+fn csv_event(event: &AuditEvent) -> String {
+    let subject = event
+        .subject
+        .as_ref()
+        .map(|v| serde_json::to_string(v).unwrap_or_default())
+        .unwrap_or_default();
+    format!(
+        "{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+        event.sequence,
+        csv_field(&event.event_id),
+        csv_field(&event.trace_id),
+        csv_field(&event.ts),
+        csv_field(event.source.as_str()),
+        csv_field(event.category.as_str()),
+        csv_field(&event.action),
+        csv_field(&serde_json::to_string(&event.actor).unwrap_or_default()),
+        csv_field(&subject),
+        csv_field(event.outcome.as_str()),
+        csv_field(&event.details.to_string()),
+        csv_field(&event.prev_hash),
+        csv_field(&event.hash),
+        csv_field(&event.created_at)
+    )
 }
 
 /// `GET /api/audit/verify`

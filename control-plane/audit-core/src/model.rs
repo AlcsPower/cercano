@@ -513,6 +513,8 @@ pub struct EventFilter {
     pub to_seq: Option<i64>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    /// Exclusive lower bound for cursor pagination.
+    pub after_sequence: Option<i64>,
 }
 
 /// Result of verifying a segment or the entirety of the audit chain.

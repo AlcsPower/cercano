@@ -83,12 +83,20 @@ pub fn create_app(state: AppState) -> Router {
             post(routes::audit::ingest_event_handler).get(routes::audit::query_events_handler),
         )
         .route(
+            "/api/audit/export",
+            get(routes::audit::export_events_handler),
+        )
+        .route(
             "/api/audit/session/start",
             post(routes::audit::session_start_handler),
         )
         .route(
             "/api/audit/session/end",
             post(routes::audit::session_end_handler),
+        )
+        .route(
+            "/api/audit/session/note",
+            post(routes::audit::session_note_handler),
         )
         .route(
             "/api/audit/file-transfer",

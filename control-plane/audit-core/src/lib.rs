@@ -25,16 +25,20 @@
 pub mod canonical;
 pub mod checkpoint;
 pub mod error;
+pub mod export;
 pub mod hash;
 pub mod model;
+pub mod retention;
 pub mod store;
 
 pub use canonical::{to_canonical_json_bytes, to_canonical_json_string};
 pub use checkpoint::{sign_checkpoint, verify_checkpoint, AuditCheckpoint, CheckpointPayload};
 pub use error::AuditError;
+pub use export::{ExportConfig, ExportQueue, SyslogConfig, SyslogTransport, WebhookConfig};
 pub use hash::compute_hash;
 pub use model::{
     Actor, AuditEvent, Category, ChainVerificationError, EventFilter, EventInput, EventPayload,
     Outcome, Source, Subject, VerificationResult, GENESIS_HASH,
 };
+pub use retention::{default_retention_policies, verify_archive, ArchiveEnvelope, RetentionPolicy};
 pub use store::AuditStore;

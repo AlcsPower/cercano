@@ -459,6 +459,9 @@ impl AuditStore {
         if filter.from_seq.is_some() {
             query_builder.push_str(" AND sequence >= ?");
         }
+        if filter.after_sequence.is_some() {
+            query_builder.push_str(" AND sequence > ?");
+        }
         if filter.to_seq.is_some() {
             query_builder.push_str(" AND sequence <= ?");
         }
@@ -499,6 +502,9 @@ impl AuditStore {
             query = query.bind(v);
         }
         if let Some(v) = filter.from_seq {
+            query = query.bind(v);
+        }
+        if let Some(v) = filter.after_sequence {
             query = query.bind(v);
         }
         if let Some(v) = filter.to_seq {

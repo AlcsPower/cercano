@@ -46,10 +46,10 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F2-06 | Correlación y `trace_id` | F2-04, F0-08 | Servidor + Cliente | QA | Hecho |
 | F2-07 | Motor de alarmas | F2-04 | ControlPlane | QA | Hecho |
 | F2-08 | Auditoría de la API y la consola | F2-02, F1-04 | ControlPlane | QA | Hecho |
-| F2-09 | API de consulta y exportación | F2-04, F2-08 | ControlPlane | QA | Pendiente |
-| F2-10 | Exportadores SIEM | F2-02 | ControlPlane | QA | Pendiente |
-| F2-11 | Retención y archivado | F2-02 | ControlPlane | Seguridad | Pendiente |
-| F2-12 | Nota de sesión | F2-04, F2-05 | Cliente + ControlPlane | QA | Pendiente |
+| F2-09 | API de consulta y exportación | F2-04, F2-08 | ControlPlane | QA | Hecho |
+| F2-10 | Exportadores SIEM | F2-02 | ControlPlane | QA | Hecho |
+| F2-11 | Retención y archivado | F2-02 | ControlPlane | Seguridad | Hecho |
+| F2-12 | Nota de sesión | F2-04, F2-05 | Cliente + ControlPlane | QA | Hecho |
 | F2-13 | Pruebas de manipulación, carga y reloj | F2-03…11 | QA + Seguridad | Coordinador | Pendiente |
 | F2-14 | Guía de auditoría y cierre | F2-13 | Coordinador | Dueño | Pendiente |
 | F2-15 | Grabación de sesión vinculada a eventos *(opcional)* | F2-05 | Cliente + ControlPlane | Seguridad | Pendiente |

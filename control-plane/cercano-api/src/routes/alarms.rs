@@ -138,6 +138,7 @@ pub async fn list_alarms_handler(
         outcome: None,
         from_seq: None,
         to_seq: None,
+        after_sequence: None,
     };
 
     let mut events = state.audit.query_events(filter).await?;

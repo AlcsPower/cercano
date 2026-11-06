@@ -402,6 +402,49 @@ async fn test_tc_f2_013_specialized_endpoints_and_chain() {
 }
 
 #[tokio::test]
+async fn test_f2_12_session_note_is_authenticated_immutable_and_trace_linked() {
+    let ctx = setup_test_context().await;
+    let trace_id = "trace-note-001";
+    let payload = json!({"trace_id": trace_id, "note": "Incidente resuelto por soporte", "event_id": "note-001"});
+    let req = Request::builder()
+        .uri("/api/audit/session/note")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let event: Value =
+        serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(event["action"], "session.note");
+    assert_eq!(event["trace_id"], trace_id);
+    assert_eq!(event["details"]["note"], payload["note"]);
+    let req = Request::builder()
+        .uri("/api/audit/session/note")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+    assert_eq!(
+        ctx.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let bad = json!({"trace_id": trace_id, "note": "   "});
+    let req = Request::builder()
+        .uri("/api/audit/session/note")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::from(serde_json::to_vec(&bad).unwrap()))
+        .unwrap();
+    assert_eq!(
+        ctx.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+}
+
+#[tokio::test]
 async fn test_tc_f2_014_query_events_with_filters() {
     let ctx = setup_test_context().await;
     let trace1 = "0192e2fb-3d5a-7182-9654-2c7da1978241";
@@ -473,7 +516,8 @@ async fn test_tc_f2_014_query_events_with_filters() {
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    let events: Vec<Value> = serde_json::from_slice(&bytes).unwrap();
+    let response: Value = serde_json::from_slice(&bytes).unwrap();
+    let events = response["events"].as_array().unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["category"], "file");
 
@@ -488,7 +532,8 @@ async fn test_tc_f2_014_query_events_with_filters() {
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    let events: Vec<Value> = serde_json::from_slice(&bytes).unwrap();
+    let response: Value = serde_json::from_slice(&bytes).unwrap();
+    let events = response["events"].as_array().unwrap();
     assert_eq!(events.len(), 2);
 
     // 3. Query with limit=1, offset=1
@@ -502,7 +547,8 @@ async fn test_tc_f2_014_query_events_with_filters() {
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    let events: Vec<Value> = serde_json::from_slice(&bytes).unwrap();
+    let response: Value = serde_json::from_slice(&bytes).unwrap();
+    let events = response["events"].as_array().unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["sequence"], 2);
 }
