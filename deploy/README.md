@@ -1,26 +1,39 @@
 # Cercano — Guía de Despliegue y Empaquetado del Servidor
 
-Este directorio contiene las definiciones de infraestructura y empaquetado para el servidor unificado de Cercano, incluyendo el servidor de señalización/rendezvous (`hbbs`), el servidor de retransmisión/relay (`hbbr`) y la API de plano de control (`cercano-api`).
+Este directorio contiene las definiciones de infraestructura y empaquetado para el stack unificado de Cercano:
+1. **Consola Web y Proxy Reverso con TLS (`cercano-web`):** SPA administrativa con Nginx, terminación HTTPS y proxy seguro.
+2. **API de Control Plane (`cercano-api`):** API REST de autenticación, directorio de dispositivos y claves Ed25519.
+3. **Servidor de Señalización/Rendezvous (`hbbs`):** Descubrimiento de ID, NAT traversal y coordinación de sesiones.
+4. **Servidor de Retransmisión/Relay (`hbbr`):** Túnel de retransmisión cifrado para sesiones que no logran conexión directa P2P.
 
-Cumple con **PLAN-F0-F1.md** (F1-02) y la arquitectura definida en **docs/ARQUITECTURA.md**.
+Cumple con **PLAN-F0-F1.md** (F1-02), **docs/ARQUITECTURA.md** y mitiga los hallazgos de seguridad **H6** y **H11**.
+
+---
+
+> [!CAUTION]
+> ### Requisito de Seguridad Crítico: TLS en Redes Corporativas (Hallazgo H6)
+> En entornos corporativos o redes LAN donde puedan existir equipos no administrados o tráfico interceptable, **el acceso administrativo a la API y a la consola DEBE transitar obligatoriamente bajo TLS (HTTPS)**.
+> Por diseño endurecido, `cercano-api` no expone el puerto `21114` en texto plano hacia la red externa (`0.0.0.0`), sino que restringe su enlace a `127.0.0.1` o a la red privada de Docker, canalizando todo el tráfico externo de administración a través de `cercano-web` (puerto 443 HTTPS).
+> Si no se proveen certificados corporativos en `deploy/certs/`, Nginx operará en HTTP (puerto 80) para pruebas internas de laboratorio. En producción, monte los certificados corporativos (`cercano.crt` y `cercano.key`).
 
 ---
 
 ## 1. Arquitectura y Puertos de Red
 
-| Servicio | Binario | Protocolo | Puertos | Propósito |
+| Servicio | Binario / Imagen | Protocolo | Puertos | Propósito |
 |---|---|---|---|---|
-| `cercano-api` | `cercano-api` | TCP | `21114` | API REST de control plane, autenticación, dispositivos y claves |
-| `hbbs` | `hbbs` | TCP | `21115` | Prueba de tipo NAT (rendezvous NAT test) |
-| `hbbs` | `hbbs` | TCP/UDP | `21116` | Registro de ID, sincronización y heartbeat |
-| `hbbr` | `hbbr` | TCP | `21117` | Retransmisión de tráfico remoto (relay) |
-| `hbbs` / `hbbr` | — | TCP | `21118` / `21119` | Conexiones WebSocket para clientes web (opcional) |
+| `cercano-web` | `nginx:1.27-alpine` | TCP | `80` (HTTP), `443` (HTTPS) | Consola web SPA y terminación TLS para `cercano-api` |
+| `cercano-api` | `cercano-api` | TCP | `127.0.0.1:21114` (local) | API REST de control plane, autenticación y dispositivos |
+| `hbbs` | `cercano-server` | TCP | `21115` | Prueba de tipo NAT (rendezvous NAT test) |
+| `hbbs` | `cercano-server` | TCP/UDP | `21116` | Registro de ID, sincronización y heartbeat |
+| `hbbr` | `cercano-server` | TCP | `21117` | Retransmisión de tráfico remoto (relay) |
+| `hbbs` / `hbbr` | `cercano-server` | TCP | `21118` / `21119` | Conexiones WebSocket para clientes web (opcional) |
 
 ---
 
 ## 2. Volumen Persistente y Gestión de Claves
 
-Los tres servicios comparten el volumen de datos persistente montado en `/opt/cercano/data`:
+Los servicios comparten el volumen de datos persistente montado en `/opt/cercano/data`:
 
 1. **Par de claves Ed25519 (`id_ed25519` / `id_ed25519.pub`):**
    - `hbbs` genera y lee las claves en el directorio de trabajo compartido (`/opt/cercano/data`).
@@ -29,7 +42,7 @@ Los tres servicios comparten el volumen de datos persistente montado en `/opt/ce
 2. **Base de Datos SQLite (`cercano.db`):**
    - Base de datos relacional para usuarios, sesiones, roles y dispositivos administrada por `cercano-api`.
 3. **Seguridad y permisos:**
-   - Todos los contenedores se ejecutan sin privilegios de `root`, bajo el usuario del sistema `cercano` (UID `1000:1000`).
+   - Todos los contenedores de backend se ejecutan sin privilegios de `root`, bajo el usuario del sistema `cercano` (UID `1000:1000`).
 
 ---
 
@@ -39,88 +52,28 @@ Los tres servicios comparten el volumen de datos persistente montado en `/opt/ce
 - Docker Engine 24.0+
 - Docker Compose v2.20+
 
-### Arranque del Stack
-Desde la raíz del proyecto o desde el directorio `deploy/`:
-
+### Paso 1: Configurar Certificados TLS (Recomendado)
+Para activar HTTPS en la consola administrativa, coloque su certificado y clave privada en el subdirectorio `deploy/certs/`:
 ```bash
-# Navegar al directorio deploy
-cd deploy
+mkdir -p deploy/certs
+# Ejemplo para generar certificado autofirmado para pruebas LAN:
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout deploy/certs/cercano.key \
+  -out deploy/certs/cercano.crt \
+  -subj "/CN=cercano.lan/O=Cercano/C=NI"
+```
 
-# Construir y levantar los contenedores en segundo plano
+### Paso 2: Arranque del Stack
+Desde la raíz del proyecto o desde el directorio `deploy/`:
+```bash
+cd deploy
 docker compose up -d --build
 ```
 
-### Comprobación de Estado
+### Paso 3: Verificación
+Verifique que los 4 contenedores estén en estado saludable (`healthy` o `running`):
 ```bash
-# Listar contenedores y estado de healthcheck
 docker compose ps
-
-# Ver logs en tiempo real de todos los servicios
-docker compose logs -f
-
-# Ver logs de un servicio específico
-docker compose logs -f cercano-api
-docker compose logs -f hbbs
-docker compose logs -f hbbr
 ```
-
-### Verificación de Operatividad
-1. **Healthcheck de la API:**
-   ```bash
-   curl -f http://localhost:21114/healthz
-   # Respuesta esperada: {"status":"ok","version":"0.1.0"}
-   ```
-
-2. **Consulta pública de clave Ed25519:**
-   ```bash
-   curl -s http://localhost:21114/api/server/public-key | jq
-   # Respuesta esperada: {"public_key":"...","key_type":"ed25519"}
-   ```
-
-3. **Comprobación de puertos de hbbs y hbbr:**
-   ```bash
-   nc -zvw3 localhost 21115 21116 21117
-   ```
-
----
-
-## 4. Despliegue Bare-Metal con Systemd
-
-Para entornos Linux sin Docker, se proporcionan unidades systemd en `deploy/systemd/`:
-
-1. **Crear usuario y carpetas:**
-   ```bash
-   sudo groupadd -g 1000 cercano
-   sudo useradd -u 1000 -g cercano -d /opt/cercano -s /bin/bash cercano
-   sudo mkdir -p /opt/cercano/bin /opt/cercano/data
-   sudo chown -R cercano:cercano /opt/cercano
-   ```
-
-2. **Copiar binarios compilados:**
-   ```bash
-   sudo cp target/release/hbbs target/release/hbbr target/release/cercano-api /opt/cercano/bin/
-   sudo chmod +x /opt/cercano/bin/*
-   ```
-
-3. **Instalar y activar servicios:**
-   ```bash
-   sudo cp deploy/systemd/cercano-*.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now cercano-hbbr
-   sudo systemctl enable --now cercano-hbbs
-   sudo systemctl enable --now cercano-api
-   ```
-
----
-
-## 5. Procedimiento de Rotación de Claves
-
-Cuando se ejecute una rotación de claves a través de `cercano-api`:
-```bash
-# Reiniciar hbbs y hbbr para que tomen las nuevas claves
-docker compose restart hbbs hbbr
-
-# O en systemd:
-sudo systemctl restart cercano-hbbs cercano-hbbr
-```
-Consulte `docs/guias/rotacion-claves.md` para detalles completos.
+Acceso a la Consola Web:
+- **HTTPS:** `https://<IP-DEL-SERVIDOR>/` (o `http://<IP-DEL-SERVIDOR>/` en puerto 80).
