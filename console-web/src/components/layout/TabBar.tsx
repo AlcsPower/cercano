@@ -50,7 +50,7 @@ export const TabBar: React.FC<TabBarProps> = ({
     <div className="w-full flex justify-center py-4 px-4 sticky top-16 z-30 pointer-events-none">
       <nav
         aria-label="Navegación principal"
-        className="pointer-events-auto inline-flex items-center p-1.5 rounded-2xl bg-white/70 dark:bg-zinc-800/70 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-apple-card max-w-full overflow-x-auto"
+        className="pointer-events-auto inline-flex items-center p-1.5 rounded-2xl bg-white/70 dark:bg-zinc-800/70 backdrop-blur-xl border border-black/10 dark:border-white/[0.06] shadow-xl shadow-black/5 dark:shadow-black/50 max-w-full overflow-x-auto"
       >
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;

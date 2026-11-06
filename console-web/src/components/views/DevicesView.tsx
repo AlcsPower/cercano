@@ -192,7 +192,7 @@ export const DevicesView: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por ID, nombre, hostname, IP o sistema operativo (búsqueda instantánea)..."
-            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white/80 dark:bg-zinc-800/80 backdrop-blur-xl border border-black/10 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 shadow-sm transition-all"
+            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white/80 dark:bg-zinc-800/80 backdrop-blur-xl border border-black/10 dark:border-white/[0.06] text-cercano-night dark:text-white placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 shadow-sm transition-all"
           />
           {searchQuery && (
             <button
@@ -321,7 +321,7 @@ export const DevicesView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-black/5 dark:border-white/10 flex items-center justify-between text-[11px] text-cercano-slate dark:text-gray-400">
+                <div className="mt-4 pt-3 border-t border-black/5 dark:border-white/[0.04] flex items-center justify-between text-[11px] text-cercano-slate dark:text-gray-400">
                   <span className="flex items-center gap-1">
                     <Clock size={12} />
                     {formatRelativeTime(dev.last_seen_at)}
@@ -346,7 +346,7 @@ export const DevicesView: React.FC = () => {
         {modalDevice && (
           <div className="space-y-6">
             {/* Status & Live Card */}
-            <div className="p-4 rounded-2xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/5 dark:border-white/10 flex items-center justify-between">
+            <div className="p-4 rounded-2xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/5 dark:border-white/[0.04] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-3 rounded-2xl bg-white dark:bg-zinc-800 shadow-sm">
                   {getOsIcon(modalDevice.os)}
@@ -418,7 +418,7 @@ export const DevicesView: React.FC = () => {
             </div>
 
             {/* Actions */}
-            <div className="pt-4 border-t border-black/5 dark:border-white/10 flex items-center justify-between">
+            <div className="pt-4 border-t border-black/5 dark:border-white/[0.04] flex items-center justify-between">
               <AppleButton
                 variant="danger"
                 size="sm"
@@ -458,7 +458,7 @@ export const DevicesView: React.FC = () => {
                 value={newDevName}
                 onChange={(e) => setNewDevName(e.target.value)}
                 placeholder="Ej. Laptop Mantenimiento 03"
-                className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40"
+                className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40"
               />
             </div>
 
@@ -470,7 +470,7 @@ export const DevicesView: React.FC = () => {
                 <select
                   value={newDevOs}
                   onChange={(e) => setNewDevOs(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-black/5 dark:bg-zinc-800 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40"
+                  className="w-full px-3 py-2.5 rounded-xl bg-black/5 dark:bg-zinc-800 border border-black/10 dark:border-white/[0.06] text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40"
                 >
                   <option value="Windows 11 Pro">Windows 11 Pro</option>
                   <option value="Windows 10 Enterprise">Windows 10 Enterprise</option>
@@ -490,12 +490,12 @@ export const DevicesView: React.FC = () => {
                   value={newDevIp}
                   onChange={(e) => setNewDevIp(e.target.value)}
                   placeholder="192.168.10.55"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-mono"
+                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-mono"
                 />
               </div>
             </div>
 
-            <div className="pt-4 border-t border-black/5 dark:border-white/10 flex items-center justify-end gap-3">
+            <div className="pt-4 border-t border-black/5 dark:border-white/[0.04] flex items-center justify-end gap-3">
               <AppleButton
                 type="button"
                 variant="ghost"

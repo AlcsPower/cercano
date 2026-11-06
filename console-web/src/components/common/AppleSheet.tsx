@@ -193,7 +193,7 @@ export const AppleSheet: React.FC<AppleSheetProps> = ({
         tabIndex={-1}
         data-state={isVisible ? 'open' : 'closed'}
         style={{ transformOrigin: 'center' }}
-        className={`relative w-full ${maxWidth} bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl rounded-3xl p-6 sm:p-8 shadow-2xl border border-black/10 dark:border-white/15 z-10 origin-center transition-[opacity,transform] ${
+        className={`relative w-full ${maxWidth} bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl rounded-3xl p-6 sm:p-8 shadow-2xl border border-black/10 dark:border-white/[0.08] z-10 origin-center transition-[opacity,transform] ${
           isVisible
             ? 'opacity-100 translate-y-0 scale-100 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
             : isClosing
@@ -207,7 +207,7 @@ export const AppleSheet: React.FC<AppleSheetProps> = ({
         </div>
 
         {/* Header */}
-        <div className="flex items-start justify-between pb-4 mb-6 border-b border-black/5 dark:border-white/10">
+        <div className="flex items-start justify-between pb-4 mb-6 border-b border-black/5 dark:border-white/[0.04]">
           <div>
             <h2
               id={titleId}

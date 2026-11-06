@@ -114,7 +114,7 @@ export const App: React.FC = () => {
       </main>
 
       {/* Bottom Legal & Project Footer */}
-      <footer className="w-full border-t border-black/5 dark:border-white/10 py-6 text-center text-xs text-cercano-slate dark:text-gray-500">
+      <footer className="w-full border-t border-black/5 dark:border-white/[0.04] py-6 text-center text-xs text-cercano-slate dark:text-gray-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>
             Cercano © 2026 Cercano Contributors. Distribuido bajo licencia{' '}

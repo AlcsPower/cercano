@@ -31,9 +31,9 @@ export const AppleButton: React.FC<AppleButtonProps> = ({
 
   const variantStyles = {
     primary:
-      'bg-cercano-blue hover:bg-cercano-blue-hover text-white shadow-sm shadow-cercano-blue/20 border-t border-white/25',
+      'bg-cercano-blue hover:bg-cercano-blue-hover text-white shadow-sm shadow-cercano-blue/20 border-t border-white/15',
     secondary:
-      'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-cercano-night dark:text-white border border-black/5 dark:border-white/10 backdrop-blur-md',
+      'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 text-cercano-night dark:text-white border border-black/5 dark:border-white/[0.04] backdrop-blur-md',
     ghost:
       'bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-cercano-slate dark:text-gray-300 hover:text-cercano-night dark:hover:text-white',
     danger:

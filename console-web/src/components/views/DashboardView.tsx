@@ -183,7 +183,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Core Services Status (hbbs, hbbr, api, nat) */}
         <div className="lg:col-span-2">
           <AppleCard className="h-full">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-black/5 dark:border-white/10">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-black/5 dark:border-white/[0.04]">
               <div>
                 <h2 className="text-lg font-bold tracking-apple-title text-cercano-night dark:text-white">
                   Servicios y Procesos Nucleares
@@ -232,7 +232,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div>
           <AppleCard className="h-full flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-2 pb-4 mb-4 border-b border-black/5 dark:border-white/10 text-cercano-blue">
+              <div className="flex items-center gap-2 pb-4 mb-4 border-b border-black/5 dark:border-white/[0.04] text-cercano-blue">
                 <Sparkles size={18} />
                 <h2 className="text-lg font-bold tracking-apple-title text-cercano-night dark:text-white">
                   Acciones Rápidas
@@ -296,7 +296,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-black/5 dark:border-white/10 text-xs text-cercano-slate dark:text-gray-400">
+            <div className="mt-6 pt-4 border-t border-black/5 dark:border-white/[0.04] text-xs text-cercano-slate dark:text-gray-400">
               <p className="font-semibold text-cercano-night dark:text-white mb-1">
                 Servidor Cercano LAN
               </p>

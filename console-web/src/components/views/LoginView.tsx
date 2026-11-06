@@ -55,14 +55,14 @@ export const LoginView: React.FC = () => {
 
       {/* Main Glass Lock Card */}
       <div
-        className={`relative w-full max-w-md bg-white/75 dark:bg-zinc-900/75 backdrop-blur-3xl rounded-[32px] p-8 sm:p-10 shadow-apple-modal border border-white/60 dark:border-white/10 animate-scale-spring ${
+        className={`relative w-full max-w-md bg-white/75 dark:bg-zinc-900/75 backdrop-blur-3xl rounded-[32px] p-8 sm:p-10 shadow-apple-modal border border-black/5 dark:border-white/[0.04] animate-scale-spring ${
           hasShaked ? 'animate-shake' : ''
         }`}
       >
         {/* Top: Avatar & App Branding */}
         <div className="flex flex-col items-center text-center mb-8">
           <div className="relative mb-4">
-            <div className="w-20 h-20 rounded-3xl bg-white/80 dark:bg-zinc-800/80 shadow-apple-card border border-white/80 dark:border-white/10 flex items-center justify-center p-3">
+            <div className="w-20 h-20 rounded-3xl bg-white/80 dark:bg-zinc-800/80 shadow-apple-card border border-black/5 dark:border-white/[0.04] flex items-center justify-center p-3">
               <CercanoLogo size={52} />
             </div>
             {/* Live indicator dot */}
@@ -105,7 +105,7 @@ export const LoginView: React.FC = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="admin"
-                className="w-full px-4 py-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 text-sm transition-all"
+                className="w-full px-4 py-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-cercano-night dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 text-sm transition-all"
               />
             </div>
           </div>
@@ -121,7 +121,7 @@ export const LoginView: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full px-4 py-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 text-sm transition-all pr-10"
+                className="w-full px-4 py-3 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-cercano-night dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 text-sm transition-all pr-10"
               />
               <Lock
                 size={16}
@@ -145,7 +145,7 @@ export const LoginView: React.FC = () => {
         </form>
 
         {/* Status footer */}
-        <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/10 text-center">
+        <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/[0.04] text-center">
           <p className="text-[11px] text-cercano-slate dark:text-gray-400">
             Conexión con <code className="font-mono text-gray-600 dark:text-gray-300">cercano-api</code> en puerto 21114
           </p>

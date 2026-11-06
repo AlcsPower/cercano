@@ -41,7 +41,7 @@ export const StatusPill: React.FC<StatusPillProps> = ({
           ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
           : isWarning
           ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
-          : 'bg-black/5 dark:bg-white/10 text-cercano-slate dark:text-gray-400 border border-black/5 dark:border-white/10'
+          : 'bg-black/5 dark:bg-white/10 text-cercano-slate dark:text-gray-400 border border-black/5 dark:border-white/[0.04]'
       }`}
     >
       <span

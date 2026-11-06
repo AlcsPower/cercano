@@ -68,7 +68,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ setActiveTab }) => {
 
       {/* Ports Matrix Table / Cards */}
       <AppleCard>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-black/5 dark:border-white/10">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-black/5 dark:border-white/[0.04]">
           <div>
             <h2 className="text-lg font-bold tracking-apple-title text-cercano-night dark:text-white">
               Matriz de Puertos y Servicios
@@ -91,7 +91,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ setActiveTab }) => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-black/5 dark:border-white/10 text-[11px] font-semibold text-cercano-slate dark:text-gray-400 uppercase tracking-wider">
+              <tr className="border-b border-black/5 dark:border-white/[0.04] text-[11px] font-semibold text-cercano-slate dark:text-gray-400 uppercase tracking-wider">
                 <th className="py-3 px-3">Servicio</th>
                 <th className="py-3 px-3">Puerto</th>
                 <th className="py-3 px-3">Protocolo</th>
@@ -146,7 +146,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ setActiveTab }) => {
                 type="text"
                 value={serverHost}
                 onChange={(e) => setServerHost(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono focus:outline-none focus:ring-2 focus:ring-cercano-blue"
+                className="w-full px-3 py-2 rounded-xl text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] font-mono focus:outline-none focus:ring-2 focus:ring-cercano-blue"
               />
             </div>
 
@@ -159,7 +159,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ setActiveTab }) => {
                   type="text"
                   readOnly
                   value={connectionString}
-                  className="w-full pl-3 pr-20 py-2 rounded-xl text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-cercano-slate dark:text-gray-400 select-all"
+                  className="w-full pl-3 pr-20 py-2 rounded-xl text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] font-mono text-cercano-slate dark:text-gray-400 select-all"
                 />
                 <button
                   onClick={copyConnectionString}

@@ -212,7 +212,7 @@ echo Perfil corporativo configurado exitosamente.
         <div className="lg:col-span-7 space-y-6">
           {/* Section 1: Identidad Corporativa */}
           <AppleCard>
-            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-black/5 dark:border-white/10">
+            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-black/5 dark:border-white/[0.04]">
               <div className="w-8 h-8 rounded-xl bg-cercano-blue/10 dark:bg-cercano-blue/20 text-cercano-blue dark:text-blue-400 flex items-center justify-center">
                 <Palette size={18} />
               </div>
@@ -237,7 +237,7 @@ echo Perfil corporativo configurado exitosamente.
                     value={profile.name}
                     onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                     placeholder="Ej. Cercano Asistencia"
-                    className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
+                    className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
                   />
                 </div>
                 <div>
@@ -249,7 +249,7 @@ echo Perfil corporativo configurado exitosamente.
                     value={profile.company_name}
                     onChange={(e) => setProfile({ ...profile, company_name: e.target.value })}
                     placeholder="Ej. Mi Organización TI"
-                    className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
+                    className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
                   />
                 </div>
               </div>
@@ -262,7 +262,7 @@ echo Perfil corporativo configurado exitosamente.
                 <div className="flex items-center gap-4">
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-20 h-20 rounded-2xl border-2 border-dashed border-black/15 dark:border-white/15 hover:border-cercano-blue flex flex-col items-center justify-center p-2 cursor-pointer transition-all bg-black/2 dark:bg-white/2 overflow-hidden shrink-0"
+                    className="w-20 h-20 rounded-2xl border-2 border-dashed border-black/15 dark:border-white/[0.08] hover:border-cercano-blue flex flex-col items-center justify-center p-2 cursor-pointer transition-all bg-black/2 dark:bg-white/2 overflow-hidden shrink-0"
                   >
                     {profile.logo_data ? (
                       <img
@@ -315,7 +315,7 @@ echo Perfil corporativo configurado exitosamente.
                       className={`btn-apple flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                         profile.accent_color === preset.hex
                           ? 'border-black/30 dark:border-white/40 shadow-sm ring-2 ring-cercano-blue/20'
-                          : 'border-black/10 dark:border-white/10 opacity-75 hover:opacity-100'
+                          : 'border-black/10 dark:border-white/[0.06] opacity-75 hover:opacity-100'
                       }`}
                     >
                       <span
@@ -348,7 +348,7 @@ echo Perfil corporativo configurado exitosamente.
                   value={profile.support_info}
                   onChange={(e) => setProfile({ ...profile, support_info: e.target.value })}
                   placeholder="Ej. Contactar al Helpdesk extensión 4000"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
+                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40 font-medium"
                 />
               </div>
             </div>
@@ -356,7 +356,7 @@ echo Perfil corporativo configurado exitosamente.
 
           {/* Section 2: Servidores y Red Embebida */}
           <AppleCard>
-            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-black/5 dark:border-white/10">
+            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-black/5 dark:border-white/[0.04]">
               <div className="w-8 h-8 rounded-xl bg-cercano-blue/10 dark:bg-cercano-blue/20 text-cercano-blue dark:text-blue-400 flex items-center justify-center">
                 <Server size={18} />
               </div>
@@ -380,7 +380,7 @@ echo Perfil corporativo configurado exitosamente.
                     type="text"
                     value={profile.rendezvous_server}
                     onChange={(e) => setProfile({ ...profile, rendezvous_server: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-xs"
+                    className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] font-mono text-xs"
                   />
                 </div>
                 <div>
@@ -391,7 +391,7 @@ echo Perfil corporativo configurado exitosamente.
                     type="text"
                     value={profile.relay_server}
                     onChange={(e) => setProfile({ ...profile, relay_server: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-xs"
+                    className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] font-mono text-xs"
                   />
                 </div>
               </div>
@@ -405,7 +405,7 @@ echo Perfil corporativo configurado exitosamente.
                   value={profile.public_key}
                   onChange={(e) => setProfile({ ...profile, public_key: e.target.value })}
                   placeholder="Clave pública del servidor (Base64)"
-                  className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-xs"
+                  className="w-full px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] font-mono text-xs"
                 />
               </div>
             </div>
@@ -413,7 +413,7 @@ echo Perfil corporativo configurado exitosamente.
 
           {/* Section 3: Políticas de Control */}
           <AppleCard>
-            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-black/5 dark:border-white/10">
+            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-black/5 dark:border-white/[0.04]">
               <div className="w-8 h-8 rounded-xl bg-cercano-blue/10 dark:bg-cercano-blue/20 text-cercano-blue dark:text-blue-400 flex items-center justify-center">
                 <ShieldCheck size={18} />
               </div>
@@ -502,7 +502,7 @@ echo Perfil corporativo configurado exitosamente.
         {/* Right Column: Live Apple Mockup & Actions (5 cols) */}
         <div className="lg:col-span-5 space-y-6 sticky top-28">
           {/* Live Preview Card */}
-          <div className="rounded-3xl p-6 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-3xl border border-white/60 dark:border-white/10 shadow-apple-card">
+          <div className="rounded-3xl p-6 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-3xl border border-black/5 dark:border-white/[0.04] shadow-xl shadow-black/5 dark:shadow-black/40">
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-bold uppercase tracking-wider text-cercano-slate dark:text-gray-400">
                 Vista Previa en Vivo del Cliente
@@ -513,9 +513,9 @@ echo Perfil corporativo configurado exitosamente.
             </div>
 
             {/* Simulated Desktop Window */}
-            <div className="rounded-2xl border border-black/10 dark:border-white/15 overflow-hidden shadow-2xl bg-white dark:bg-zinc-950">
+            <div className="rounded-2xl border border-black/10 dark:border-white/[0.08] overflow-hidden shadow-2xl bg-white dark:bg-zinc-950">
               {/* Window Title Bar */}
-              <div className="px-3 py-2 bg-gray-100 dark:bg-zinc-900 border-b border-black/5 dark:border-white/10 flex items-center justify-between">
+              <div className="px-3 py-2 bg-gray-100 dark:bg-zinc-900 border-b border-black/5 dark:border-white/[0.04] flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
                   <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
@@ -530,7 +530,7 @@ echo Perfil corporativo configurado exitosamente.
               {/* Window Body */}
               <div className="p-5 space-y-4">
                 {/* Branding Lockup */}
-                <div className="flex items-center gap-3 pb-3 border-b border-black/5 dark:border-white/10">
+                <div className="flex items-center gap-3 pb-3 border-b border-black/5 dark:border-white/[0.04]">
                   <div
                     className="w-12 h-12 rounded-2xl flex items-center justify-center p-2 shadow-sm text-white shrink-0 overflow-hidden"
                     style={{ backgroundColor: profile.accent_color }}
@@ -577,7 +577,7 @@ echo Perfil corporativo configurado exitosamente.
                       type="text"
                       readOnly
                       placeholder="Ingresar ID del colega..."
-                      className="w-full px-3 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs font-mono"
+                      className="w-full px-3 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-xs font-mono"
                     />
                     <button
                       type="button"
@@ -590,7 +590,7 @@ echo Perfil corporativo configurado exitosamente.
                 </div>
 
                 {/* Support Footer in Mockup */}
-                <div className="pt-2 text-center text-[10px] text-gray-400 border-t border-black/5 dark:border-white/10">
+                <div className="pt-2 text-center text-[10px] text-gray-400 border-t border-black/5 dark:border-white/[0.04]">
                   {profile.support_info}
                 </div>
               </div>
@@ -599,7 +599,7 @@ echo Perfil corporativo configurado exitosamente.
 
           {/* Quick Actions & Deployment Scripts */}
           <AppleCard>
-            <div className="flex items-center gap-2.5 mb-3 pb-2 border-b border-black/5 dark:border-white/10">
+            <div className="flex items-center gap-2.5 mb-3 pb-2 border-b border-black/5 dark:border-white/[0.04]">
               <div className="w-7 h-7 rounded-lg bg-cercano-blue/10 dark:bg-cercano-blue/20 text-cercano-blue dark:text-blue-400 flex items-center justify-center">
                 <FileCode size={16} />
               </div>

@@ -118,7 +118,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
 
       {/* Main Public Key Display Card */}
       <AppleCard className="p-6 sm:p-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-black/5 dark:border-white/10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-black/5 dark:border-white/[0.04]">
           <div className="flex items-center gap-3.5">
             <div className="p-3.5 rounded-2xl bg-cercano-blue/10 dark:bg-cercano-blue/20 text-cercano-blue dark:text-blue-300">
               <ShieldCheck size={26} />
@@ -155,7 +155,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
           <label className="block text-xs font-semibold text-cercano-slate dark:text-gray-400 uppercase tracking-wider mb-2">
             Cadena de Clave Pública (Base64)
           </label>
-          <div className="relative p-4 rounded-2xl bg-black/[0.03] dark:bg-black/30 border border-black/10 dark:border-white/10 font-mono text-sm text-cercano-night dark:text-blue-200 break-all select-all flex items-center justify-between">
+          <div className="relative p-4 rounded-2xl bg-black/[0.03] dark:bg-black/30 border border-black/10 dark:border-white/[0.06] font-mono text-sm text-cercano-night dark:text-blue-200 break-all select-all flex items-center justify-between">
             <span>{keyInfo ? keyInfo.public_key : 'Cargando clave criptográfica...'}</span>
           </div>
         </div>
@@ -257,11 +257,11 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
                   value={rotationReason}
                   onChange={(e) => setRotationReason(e.target.value)}
                   placeholder="Ej. Rotación semestral de seguridad programada"
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40"
+                  className="w-full px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/[0.06] text-cercano-night dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cercano-blue/40"
                 />
               </div>
 
-              <div className="pt-3 border-t border-black/5 dark:border-white/10 flex items-center justify-end gap-3">
+              <div className="pt-3 border-t border-black/5 dark:border-white/[0.04] flex items-center justify-end gap-3">
                 <AppleButton
                   type="button"
                   variant="ghost"

@@ -41,7 +41,7 @@ export default {
           subtle: 'rgba(0, 0, 0, 0.04)',
           'subtle-dark': 'rgba(255, 255, 255, 0.06)',
           border: 'rgba(0, 0, 0, 0.08)',
-          'border-dark': 'rgba(255, 255, 255, 0.12)',
+          'border-dark': 'rgba(255, 255, 255, 0.06)',
         },
       },
       fontFamily: {
@@ -68,7 +68,7 @@ export default {
         'apple-sm': '0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02)',
         'apple-card': '0 8px 30px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03)',
         'apple-modal': '0 24px 60px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.08)',
-        'apple-inner': 'inset 0 1px 1px rgba(255, 255, 255, 0.4)',
+        'apple-inner': 'inset 0 1px 1px rgba(255, 255, 255, 0.05)',
       },
       animation: {
         'fade-in': 'fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
