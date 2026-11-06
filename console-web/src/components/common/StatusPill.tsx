@@ -14,7 +14,7 @@ export const StatusPill: React.FC<StatusPillProps> = ({
   status,
   label,
   size = 'md',
-  pulse = true,
+  pulse = false,
 }) => {
   const isOnline = status === 'online' || status === 'operational';
   const isWarning = status === 'warning';

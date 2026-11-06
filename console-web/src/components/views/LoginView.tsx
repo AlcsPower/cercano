@@ -50,13 +50,13 @@ export const LoginView: React.FC = () => {
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden bg-gradient-to-br from-[#E2E8F6] via-[#F2F5FB] to-[#DDE5F5] dark:from-[#070D18] dark:via-[#0B1426] dark:to-[#040810]">
       {/* Decorative ambient Apple aura */}
-      <div className="absolute w-[500px] h-[500px] rounded-full bg-cercano-blue/15 dark:bg-cercano-blue/10 blur-[120px] pointer-events-none -top-24 -left-24 animate-pulse-subtle" />
-      <div className="absolute w-[400px] h-[400px] rounded-full bg-cercano-green/15 dark:bg-cercano-green/10 blur-[100px] pointer-events-none -bottom-20 -right-20 animate-pulse-subtle" />
+      <div className="absolute w-[500px] h-[500px] rounded-full bg-cercano-blue/15 dark:bg-cercano-blue/10 blur-[120px] pointer-events-none -top-24 -left-24 opacity-80" />
+      <div className="absolute w-[400px] h-[400px] rounded-full bg-cercano-green/15 dark:bg-cercano-green/10 blur-[100px] pointer-events-none -bottom-20 -right-20 opacity-80" />
 
       {/* Main Glass Lock Card */}
       <div
-        className={`relative w-full max-w-md bg-white/75 dark:bg-zinc-900/75 backdrop-blur-3xl rounded-[32px] p-8 sm:p-10 shadow-apple-modal border border-white/60 dark:border-white/10 ${
-          hasShaked ? 'animate-shake' : 'animate-scale-spring'
+        className={`relative w-full max-w-md bg-white/75 dark:bg-zinc-900/75 backdrop-blur-3xl rounded-[32px] p-8 sm:p-10 shadow-apple-modal border border-white/60 dark:border-white/10 animate-scale-spring ${
+          hasShaked ? 'animate-shake' : ''
         }`}
       >
         {/* Top: Avatar & App Branding */}
@@ -146,7 +146,7 @@ export const LoginView: React.FC = () => {
 
         {/* Status footer */}
         <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/10 text-center">
-          <p className="text-[11px] text-gray-400 dark:text-gray-500">
+          <p className="text-[11px] text-cercano-slate dark:text-gray-400">
             Conexión con <code className="font-mono text-gray-600 dark:text-gray-300">cercano-api</code> en puerto 21114
           </p>
         </div>

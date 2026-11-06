@@ -118,7 +118,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ setActiveTab }) => {
                     {srv.description}
                   </td>
                   <td className="py-3 px-3 text-right">
-                    <StatusPill status="online" label="En escucha" size="sm" pulse={false} />
+                    <StatusPill status={srv.status || 'operational'} label={srv.status === 'stopped' ? 'Detenido' : 'Operativo'} size="sm" pulse={false} />
                   </td>
                 </tr>
               ))}
@@ -188,11 +188,11 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ setActiveTab }) => {
             <ul className="space-y-2 text-xs text-cercano-slate dark:text-gray-300">
               <li className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />
-                <span><strong>21115/UDP</strong> requerido para el descubrimiento de NAT (STUN) inter-cliente.</span>
+                <span><strong>21115/UDP</strong> requerido para el descubrimiento de NAT (prueba de tipo NAT).</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />
-                <span><strong>21116/TCP y UDP</strong> para la señalización inicial de enlace y estado.</span>
+                <span><strong>21116/TCP y UDP</strong> para señalización, rendezvous y handshake de enlace.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-cercano-blue mt-1.5 shrink-0" />

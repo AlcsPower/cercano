@@ -58,14 +58,16 @@ export const TabBar: React.FC<TabBarProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`btn-apple relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+              aria-label={tab.label}
+              aria-current={isActive ? 'page' : undefined}
+              className={`btn-apple relative flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                 isActive
                   ? 'bg-cercano-blue text-white shadow-sm shadow-cercano-blue/30'
                   : 'text-cercano-slate dark:text-gray-300 hover:text-cercano-night dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
               }`}
             >
               <span>{tab.icon}</span>
-              <span>{tab.label}</span>
+              <span className="hidden md:inline">{tab.label}</span>
               {typeof tab.badge === 'number' && tab.badge > 0 && (
                 <span
                   className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-tight ${

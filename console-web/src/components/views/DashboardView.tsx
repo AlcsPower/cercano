@@ -87,12 +87,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Devices */}
         <AppleCard
           hoverable
           onClick={() => setActiveTab('devices')}
-          className="relative overflow-hidden group"
+          className="p-4 relative overflow-hidden group"
         >
           <div className="flex items-center justify-between text-cercano-slate dark:text-gray-400 mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider">
@@ -106,7 +106,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-3xl font-extrabold tracking-apple-display text-cercano-night dark:text-white">
               {metrics ? metrics.total_devices : '—'}
             </span>
-            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center">
+            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 flex items-center">
               <StatusPill status="online" size="sm" pulse={false} label={`${metrics?.online_devices ?? 0} en línea`} />
             </span>
           </div>
@@ -117,7 +117,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </AppleCard>
 
         {/* Active Remote Sessions */}
-        <AppleCard className="relative overflow-hidden">
+        <AppleCard className="p-4 relative overflow-hidden">
           <div className="flex items-center justify-between text-cercano-slate dark:text-gray-400 mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider">
               Sesiones Activas
@@ -137,7 +137,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </AppleCard>
 
         {/* Server Load */}
-        <AppleCard className="relative overflow-hidden">
+        <AppleCard className="p-4 relative overflow-hidden">
           <div className="flex items-center justify-between text-cercano-slate dark:text-gray-400 mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider">
               Carga del Servidor
@@ -157,7 +157,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </AppleCard>
 
         {/* Uptime / API Connectivity */}
-        <AppleCard className="relative overflow-hidden">
+        <AppleCard className="p-4 relative overflow-hidden">
           <div className="flex items-center justify-between text-cercano-slate dark:text-gray-400 mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider">
               Control Plane
@@ -171,7 +171,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {typeof metrics?.uptime_seconds === 'number' ? formatUptime(metrics.uptime_seconds) : 'Puerto :21114'}
             </span>
           </div>
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 flex items-center gap-1">
+          <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-2 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             API Conectada y Operativa
           </p>
@@ -211,7 +211,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="font-mono text-xs font-bold text-cercano-night dark:text-white">
                       {srv.name}
                     </span>
-                    <StatusPill status="online" label="En Línea" size="sm" pulse={false} />
+                    <StatusPill status={srv.status || 'operational'} label={srv.status === 'stopped' ? 'Detenido' : 'Operativo'} size="sm" pulse={false} />
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-cercano-slate dark:text-gray-400">
                     <span className="px-1.5 py-0.5 rounded bg-cercano-blue/10 text-cercano-blue font-mono font-semibold">
@@ -266,7 +266,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <ShieldCheck size={18} className="text-cercano-green-dark dark:text-cercano-green" />
                     <div>
                       <p className="text-sm font-semibold text-cercano-night dark:text-white">
-                        Clave Pública Ed25519
+                        Firma Ed25519
                       </p>
                       <p className="text-xs text-cercano-slate dark:text-gray-400">
                         Ver huella SHA-256 y rotar

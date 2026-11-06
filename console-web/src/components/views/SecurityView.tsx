@@ -92,7 +92,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
             Gestión de Claves y Seguridad
           </h1>
           <p className="text-sm text-cercano-slate dark:text-gray-400 mt-1">
-            Supervisión criptográfica Ed25519 del servidor y parámetros de cifrado punto a punto
+            Supervisión de clave de firma Ed25519 del servidor y parámetros de cifrado punto a punto
           </p>
         </div>
 
@@ -126,7 +126,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold tracking-apple-title text-cercano-night dark:text-white">
-                  Clave Pública Ed25519 Activa
+                  Clave Pública de Firma Ed25519 Activa
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                   Válida y en servicio
@@ -143,7 +143,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
               variant="secondary"
               size="sm"
               onClick={handleCopyKey}
-              icon={copiedKey ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+              icon={copiedKey ? <Check size={14} className="text-emerald-600 dark:text-emerald-400" /> : <Copy size={14} />}
             >
               {copiedKey ? 'Clave Copiada' : 'Copiar Clave'}
             </AppleButton>
@@ -178,7 +178,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
             onClick={handleCopyFingerprint}
             className="btn-apple self-start sm:self-center text-xs font-medium text-cercano-blue dark:text-blue-400 hover:underline flex items-center gap-1.5"
           >
-            {copiedFingerprint ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+            {copiedFingerprint ? <Check size={14} className="text-emerald-600 dark:text-emerald-400" /> : <Copy size={14} />}
             <span>{copiedFingerprint ? 'Huella copiada' : 'Copiar huella'}</span>
           </button>
         </div>
@@ -227,8 +227,8 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
       <AppleSheet
           isOpen={isRotateModalOpen}
           onClose={() => setIsRotateModalOpen(false)}
-          title="Rotar Clave Criptográfica del Servidor"
-          subtitle="Genera un nuevo par de claves Ed25519 y archiva el par actual"
+          title="Rotar Clave de Firma del Servidor"
+          subtitle="Genera un nuevo par de claves de firma Ed25519 y archiva el par actual"
         >
           {rotationResult ? (
             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-sm flex items-center gap-3">

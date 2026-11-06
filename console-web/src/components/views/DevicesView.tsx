@@ -299,21 +299,21 @@ export const DevicesView: React.FC = () => {
 
                   <div className="space-y-1.5 text-xs text-cercano-slate dark:text-gray-300 pt-1">
                     <div className="flex justify-between items-center py-0.5 border-b border-black/[0.04] dark:border-white/[0.04]">
-                      <span className="text-gray-400">ID:</span>
+                      <span className="text-cercano-slate dark:text-gray-400">ID:</span>
                       <span className="font-mono text-[11px] font-semibold text-cercano-night dark:text-white">
                         {dev.id}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center py-0.5 border-b border-black/[0.04] dark:border-white/[0.04]">
-                      <span className="text-gray-400">IP LAN:</span>
+                      <span className="text-cercano-slate dark:text-gray-400">IP LAN:</span>
                       <span className="font-mono text-[11px]">
                         {dev.ip_address || '—'}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center py-0.5">
-                      <span className="text-gray-400">Sistema:</span>
+                      <span className="text-cercano-slate dark:text-gray-400">Sistema:</span>
                       <span className="truncate max-w-[170px]">
                         {dev.os || 'Desconocido'}
                       </span>
@@ -321,7 +321,7 @@ export const DevicesView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-black/5 dark:border-white/10 flex items-center justify-between text-[11px] text-gray-400">
+                <div className="mt-4 pt-3 border-t border-black/5 dark:border-white/10 flex items-center justify-between text-[11px] text-cercano-slate dark:text-gray-400">
                   <span className="flex items-center gap-1">
                     <Clock size={12} />
                     {formatRelativeTime(dev.last_seen_at)}
@@ -374,14 +374,14 @@ export const DevicesView: React.FC = () => {
             {/* Technical Specifications Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
-                <span className="text-gray-400">Hostname</span>
+                <span className="text-cercano-slate dark:text-gray-400">Hostname</span>
                 <p className="text-sm font-semibold text-cercano-night dark:text-white font-mono">
                   {modalDevice.hostname || '—'}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
-                <span className="text-gray-400">Dirección IP de Red</span>
+                <span className="text-cercano-slate dark:text-gray-400">Dirección IP de Red</span>
                 <p className="text-sm font-semibold text-cercano-night dark:text-white font-mono flex items-center gap-1.5">
                   <Wifi size={14} className="text-cercano-blue" />
                   {modalDevice.ip_address || '127.0.0.1'}
@@ -389,28 +389,28 @@ export const DevicesView: React.FC = () => {
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
-                <span className="text-gray-400">Sistema Operativo</span>
+                <span className="text-cercano-slate dark:text-gray-400">Sistema Operativo</span>
                 <p className="text-sm font-semibold text-cercano-night dark:text-white">
                   {modalDevice.os || 'Desconocido'}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
-                <span className="text-gray-400">Versión del Cliente Cercano</span>
+                <span className="text-cercano-slate dark:text-gray-400">Versión del Cliente Cercano</span>
                 <p className="text-sm font-semibold text-cercano-night dark:text-white font-mono">
                   v{modalDevice.version || '1.4.0'}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
-                <span className="text-gray-400">Último Heartbeat</span>
+                <span className="text-cercano-slate dark:text-gray-400">Último Heartbeat</span>
                 <p className="text-xs font-semibold text-cercano-night dark:text-white font-mono">
                   {modalDevice.last_seen_at ? new Date(modalDevice.last_seen_at).toLocaleString() : '—'}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
-                <span className="text-gray-400">Fecha de Alta</span>
+                <span className="text-cercano-slate dark:text-gray-400">Fecha de Alta</span>
                 <p className="text-xs font-semibold text-cercano-night dark:text-white font-mono">
                   {new Date(modalDevice.created_at).toLocaleString()}
                 </p>

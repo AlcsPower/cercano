@@ -24,6 +24,11 @@ export const App: React.FC = () => {
   const [onlineCount, setOnlineCount] = useState<number>(0);
   const [totalDevices, setTotalDevices] = useState<number>(0);
 
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
   // Sync dark class on document root & dynamic theme-color meta tag
   useEffect(() => {
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
@@ -77,7 +82,7 @@ export const App: React.FC = () => {
       {/* Segmented Controller Tab Bar */}
       <TabBar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         onlineCount={onlineCount}
         totalDevices={totalDevices}
       />
@@ -86,9 +91,9 @@ export const App: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-16">
         {activeTab === 'dashboard' && (
           <DashboardView
-            setActiveTab={setActiveTab}
+            setActiveTab={handleTabChange}
             openRotateKeyModal={() => {
-              setActiveTab('security');
+              handleTabChange('security');
               setIsRotateModalOpen(true);
             }}
           />
@@ -105,7 +110,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        {activeTab === 'network' && <NetworkView setActiveTab={setActiveTab} />}
+        {activeTab === 'network' && <NetworkView setActiveTab={handleTabChange} />}
       </main>
 
       {/* Bottom Legal & Project Footer */}
