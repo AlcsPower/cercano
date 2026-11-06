@@ -8,6 +8,7 @@ import { TabBar } from './components/layout/TabBar';
 import { LoginView } from './components/views/LoginView';
 import { DashboardView } from './components/views/DashboardView';
 import { DevicesView } from './components/views/DevicesView';
+import { BuilderView } from './components/views/BuilderView';
 import { SecurityView } from './components/views/SecurityView';
 import { NetworkView } from './components/views/NetworkView';
 import { ActiveTab } from './types';
@@ -91,6 +92,8 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'devices' && <DevicesView />}
+
+        {activeTab === 'builder' && <BuilderView />}
 
         {activeTab === 'security' && (
           <SecurityView

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from 'react';
-import { LayoutDashboard, Monitor, KeyRound, Network } from 'lucide-react';
+import { LayoutDashboard, Monitor, Palette, KeyRound, Network } from 'lucide-react';
 import { ActiveTab } from '../../types';
 
 interface TabBarProps {
@@ -28,6 +28,11 @@ export const TabBar: React.FC<TabBarProps> = ({
       label: 'Dispositivos',
       icon: <Monitor size={18} />,
       badge: onlineCount,
+    },
+    {
+      id: 'builder',
+      label: 'Personalizador',
+      icon: <Palette size={18} />,
     },
     {
       id: 'security',
