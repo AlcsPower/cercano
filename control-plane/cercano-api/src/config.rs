@@ -28,6 +28,7 @@ pub const DEFAULT_DB_PATH: &str = "sqlite://cercano.db?mode=rwc";
 pub const DEFAULT_LOG_LEVEL: &str = "info";
 pub const DEFAULT_DEVICE_GRACE_PERIOD_SECS: u64 = 60;
 pub const DEFAULT_SERVER_KEY_PATH: &str = "/opt/cercano/data/id_ed25519.pub";
+pub const DEFAULT_INTERNAL_TOKEN: &str = "cercano_internal_token_secret";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
@@ -37,6 +38,7 @@ pub struct Config {
     pub log_level: String,
     pub device_grace_period_secs: u64,
     pub server_key_path: String,
+    pub internal_token: String,
 }
 
 impl Default for Config {
@@ -48,6 +50,7 @@ impl Default for Config {
             log_level: DEFAULT_LOG_LEVEL.to_string(),
             device_grace_period_secs: DEFAULT_DEVICE_GRACE_PERIOD_SECS,
             server_key_path: DEFAULT_SERVER_KEY_PATH.to_string(),
+            internal_token: DEFAULT_INTERNAL_TOKEN.to_string(),
         }
     }
 }
@@ -61,6 +64,7 @@ struct FileConfig {
     log_level: Option<String>,
     device_grace_period_secs: Option<u64>,
     server_key_path: Option<String>,
+    internal_token: Option<String>,
 }
 
 impl Config {
@@ -120,6 +124,9 @@ impl Config {
         if let Some(key_path) = file_cfg.server_key_path {
             self.server_key_path = key_path;
         }
+        if let Some(token) = file_cfg.internal_token {
+            self.internal_token = token;
+        }
 
         Ok(())
     }
@@ -171,6 +178,12 @@ impl Config {
             }
         }
 
+        if let Ok(token) = env::var("CERCANO_INTERNAL_TOKEN") {
+            if !token.trim().is_empty() {
+                self.internal_token = token.trim().to_string();
+            }
+        }
+
         Ok(())
     }
 }
@@ -201,6 +214,7 @@ mod tests {
         assert_eq!(cfg.log_level, "info");
         assert_eq!(cfg.device_grace_period_secs, 60);
         assert_eq!(cfg.server_key_path, "/opt/cercano/data/id_ed25519.pub");
+        assert_eq!(cfg.internal_token, "cercano_internal_token_secret");
     }
 
     #[test]

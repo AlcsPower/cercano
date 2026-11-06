@@ -36,6 +36,15 @@ pub enum AuditError {
     #[error("Invalid event input: {0}")]
     InvalidInput(String),
 
+    #[error("Cryptographic signature error: {0}")]
+    Signature(String),
+
+    #[error("Hex decode error: {0}")]
+    Hex(#[from] hex::FromHexError),
+
+    #[error("Checkpoint verification failed: {0}")]
+    CheckpointVerification(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }

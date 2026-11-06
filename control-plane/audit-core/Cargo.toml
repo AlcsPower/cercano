@@ -15,7 +15,10 @@ chrono = { version = "0.4", default-features = false, features = ["serde", "cloc
 thiserror = "2.0"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.38", features = ["sync", "rt", "macros"] }
+ed25519-dalek = { version = "2.1", default-features = false, features = ["rand_core"] }
+hex = "0.4"
 
 [dev-dependencies]
 tempfile = "=3.10.1"
 tokio = { version = "1.38", features = ["full"] }
+rand_core = { version = "0.6", features = ["std"] }

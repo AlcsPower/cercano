@@ -18,12 +18,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::canonical::to_canonical_json_string;
+use crate::checkpoint::{AuditCheckpoint, CheckpointPayload};
 use crate::error::AuditError;
 use crate::hash::compute_hash;
 use crate::model::{
     Actor, AuditEvent, Category, ChainVerificationError, EventFilter, EventInput, EventPayload,
     Outcome, Source, Subject, VerificationResult, GENESIS_HASH,
 };
+use ed25519_dalek::SigningKey;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Executor, Row, SqlitePool};
 use std::str::FromStr;
@@ -103,6 +105,32 @@ impl AuditStore {
         BEFORE DELETE ON audit_events
         BEGIN
             SELECT RAISE(ABORT, 'AUDIT VIOLATION: Deletions strictly prohibited on audit_events');
+        END;
+
+        CREATE TABLE IF NOT EXISTS audit_checkpoints (
+            sequence INTEGER PRIMARY KEY,
+            checkpoint_id TEXT NOT NULL UNIQUE,
+            last_hash TEXT NOT NULL,
+            event_count INTEGER NOT NULL,
+            ts TEXT NOT NULL,
+            key_id TEXT NOT NULL,
+            signature TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_audit_checkpoints_ts ON audit_checkpoints(ts);
+        CREATE INDEX IF NOT EXISTS idx_audit_checkpoints_key_id ON audit_checkpoints(key_id);
+
+        CREATE TRIGGER IF NOT EXISTS trg_audit_checkpoints_no_update
+        BEFORE UPDATE ON audit_checkpoints
+        BEGIN
+            SELECT RAISE(ABORT, 'AUDIT VIOLATION: Updates strictly prohibited on audit_checkpoints');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_audit_checkpoints_no_delete
+        BEFORE DELETE ON audit_checkpoints
+        BEGIN
+            SELECT RAISE(ABORT, 'AUDIT VIOLATION: Deletions strictly prohibited on audit_checkpoints');
         END;
         "#;
 
@@ -376,6 +404,23 @@ impl AuditStore {
         row.map(Self::row_to_event).transpose()
     }
 
+    /// Retrieves an audit event by its unique `event_id`.
+    pub async fn get_event_by_id(&self, event_id: &str) -> Result<Option<AuditEvent>, AuditError> {
+        let row = sqlx::query(
+            r#"
+            SELECT sequence, event_id, trace_id, ts, source, category, action,
+                   actor, subject, outcome, details, prev_hash, hash, created_at
+            FROM audit_events
+            WHERE event_id = ?
+            "#,
+        )
+        .bind(event_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(Self::row_to_event).transpose()
+    }
+
     /// Queries events matching given filter criteria.
     pub async fn query_events(&self, filter: EventFilter) -> Result<Vec<AuditEvent>, AuditError> {
         let mut query_builder = String::from(
@@ -517,6 +562,134 @@ impl AuditStore {
             prev_hash,
             hash,
             created_at,
+        })
+    }
+
+    /// Creates and persists a signed audit checkpoint committing to the current head of the audit chain.
+    pub async fn create_checkpoint(
+        &self,
+        signing_key: &SigningKey,
+        key_id: &str,
+    ) -> Result<AuditCheckpoint, AuditError> {
+        let _guard = self.append_lock.lock().await;
+
+        let mut tx = self.pool.begin().await?;
+
+        // 1. Determine last event sequence and hash
+        let last_event_row =
+            sqlx::query("SELECT sequence, hash FROM audit_events ORDER BY sequence DESC LIMIT 1")
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        let (event_count, last_hash) = match last_event_row {
+            Some(row) => (
+                row.try_get::<i64, _>("sequence")?,
+                row.try_get::<String, _>("hash")?,
+            ),
+            None => (0, GENESIS_HASH.to_string()),
+        };
+
+        // 2. Determine next checkpoint sequence
+        let last_cp_row =
+            sqlx::query("SELECT sequence FROM audit_checkpoints ORDER BY sequence DESC LIMIT 1")
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        let next_sequence = match last_cp_row {
+            Some(row) => row.try_get::<i64, _>("sequence")? + 1,
+            None => 1,
+        };
+
+        let checkpoint_id = uuid::Uuid::now_v7().to_string();
+        let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let payload = CheckpointPayload::new(
+            checkpoint_id,
+            next_sequence,
+            last_hash,
+            event_count,
+            ts,
+            key_id,
+        );
+
+        let checkpoint = payload.sign(signing_key)?;
+
+        // 3. Insert checkpoint into DB
+        sqlx::query(
+            r#"
+            INSERT INTO audit_checkpoints (
+                sequence, checkpoint_id, last_hash, event_count, ts, key_id, signature
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(checkpoint.sequence)
+        .bind(&checkpoint.checkpoint_id)
+        .bind(&checkpoint.last_hash)
+        .bind(checkpoint.event_count)
+        .bind(&checkpoint.ts)
+        .bind(&checkpoint.key_id)
+        .bind(&checkpoint.signature)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(checkpoint)
+    }
+
+    /// Retrieves the most recent checkpoint in the store.
+    pub async fn get_last_checkpoint(&self) -> Result<Option<AuditCheckpoint>, AuditError> {
+        let row = sqlx::query(
+            r#"
+            SELECT sequence, checkpoint_id, last_hash, event_count, ts, key_id, signature
+            FROM audit_checkpoints
+            ORDER BY sequence DESC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(Self::row_to_checkpoint).transpose()
+    }
+
+    /// Queries all checkpoints in ascending sequence order.
+    pub async fn list_checkpoints(
+        &self,
+        limit: Option<i64>,
+    ) -> Result<Vec<AuditCheckpoint>, AuditError> {
+        let mut sql = String::from(
+            r#"
+            SELECT sequence, checkpoint_id, last_hash, event_count, ts, key_id, signature
+            FROM audit_checkpoints
+            ORDER BY sequence ASC
+            "#,
+        );
+        if limit.is_some() {
+            sql.push_str(" LIMIT ?");
+        }
+        let mut query = sqlx::query(&sql);
+        if let Some(l) = limit {
+            query = query.bind(l);
+        }
+        let rows = query.fetch_all(&self.pool).await?;
+        let mut results = Vec::with_capacity(rows.len());
+        for row in rows {
+            results.push(Self::row_to_checkpoint(row)?);
+        }
+        Ok(results)
+    }
+
+    fn row_to_checkpoint(row: sqlx::sqlite::SqliteRow) -> Result<AuditCheckpoint, AuditError> {
+        Ok(AuditCheckpoint {
+            sequence: row.try_get("sequence")?,
+            checkpoint_id: row.try_get("checkpoint_id")?,
+            last_hash: row.try_get("last_hash")?,
+            event_count: row.try_get("event_count")?,
+            ts: row.try_get("ts")?,
+            key_id: row.try_get("key_id")?,
+            signature: row.try_get("signature")?,
         })
     }
 }

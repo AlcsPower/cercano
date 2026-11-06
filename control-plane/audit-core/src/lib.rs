@@ -23,12 +23,14 @@
 //! serialized database writes, and offline chain verification.
 
 pub mod canonical;
+pub mod checkpoint;
 pub mod error;
 pub mod hash;
 pub mod model;
 pub mod store;
 
 pub use canonical::{to_canonical_json_bytes, to_canonical_json_string};
+pub use checkpoint::{sign_checkpoint, verify_checkpoint, AuditCheckpoint, CheckpointPayload};
 pub use error::AuditError;
 pub use hash::compute_hash;
 pub use model::{

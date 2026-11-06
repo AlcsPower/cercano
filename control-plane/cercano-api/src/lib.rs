@@ -17,12 +17,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod db;
 pub mod devices;
 pub mod health;
 pub mod middleware;
+pub mod routes;
 pub mod server_keys;
 pub mod shutdown;
 
@@ -31,11 +33,13 @@ use axum::Router;
 pub use config::Config;
 pub use db::init_db;
 use sqlx::SqlitePool;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
     pub db: SqlitePool,
+    pub audit: Arc<audit_core::AuditStore>,
 }
 
 /// Builds the Axum application router with all registered routes and middleware.
@@ -59,6 +63,27 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/server/keys/rotate",
             post(server_keys::rotate_keys_handler),
+        )
+        .route(
+            "/api/audit/events",
+            post(routes::audit::ingest_event_handler).get(routes::audit::query_events_handler),
+        )
+        .route(
+            "/api/audit/session/start",
+            post(routes::audit::session_start_handler),
+        )
+        .route(
+            "/api/audit/session/end",
+            post(routes::audit::session_end_handler),
+        )
+        .route(
+            "/api/audit/file-transfer",
+            post(routes::audit::file_transfer_handler),
+        )
+        .route("/api/audit/alarm", post(routes::audit::alarm_handler))
+        .route(
+            "/api/audit/verify",
+            get(routes::audit::verify_chain_handler),
         )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
@@ -89,18 +114,22 @@ mod tests {
 
     async fn setup_test_app() -> Router {
         let db = init_db("sqlite::memory:").await.unwrap();
+        let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
         let state = AppState {
             config: Config::default(),
             db,
+            audit,
         };
         create_app(state)
     }
 
     async fn setup_test_state() -> (AppState, Router) {
         let db = init_db("sqlite::memory:").await.unwrap();
+        let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
         let state = AppState {
             config: Config::default(),
             db,
+            audit,
         };
         let app = create_app(state.clone());
         (state, app)
@@ -171,10 +200,12 @@ mod tests {
     #[tokio::test]
     async fn test_healthz_endpoint_returns_503_when_db_closed() {
         let db = init_db("sqlite::memory:").await.unwrap();
+        let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
         db.close().await;
         let state = AppState {
             config: Config::default(),
             db,
+            audit,
         };
         let app = create_app(state);
 
@@ -848,12 +879,13 @@ mod tests {
         std::fs::write(&pub_path, &keys.public_key_base64).unwrap();
 
         let db = init_db("sqlite::memory:").await.unwrap();
+        let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
         let config = Config {
             server_key_path: pub_path.display().to_string(),
             ..Default::default()
         };
 
-        let state = AppState { config, db };
+        let state = AppState { config, db, audit };
         let app = create_app(state);
 
         let req = Request::builder()
@@ -875,12 +907,13 @@ mod tests {
     #[tokio::test]
     async fn test_get_public_key_not_found() {
         let db = init_db("sqlite::memory:").await.unwrap();
+        let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
         let config = Config {
             server_key_path: "nonexistent_dir/missing_id_ed25519.pub".to_string(),
             ..Default::default()
         };
 
-        let state = AppState { config, db };
+        let state = AppState { config, db, audit };
         let app = create_app(state);
 
         let req = Request::builder()
@@ -910,12 +943,13 @@ mod tests {
         let old_client_configured_key = initial_keys.public_key_base64.clone();
 
         let db = init_db("sqlite::memory:").await.unwrap();
+        let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
         let config = Config {
             server_key_path: pub_path.display().to_string(),
             ..Default::default()
         };
 
-        let state = AppState { config, db };
+        let state = AppState { config, db, audit };
 
         // 1. Unauthenticated rotation attempt rejected with 401 Unauthorized
         let app = create_app(state.clone());

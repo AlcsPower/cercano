@@ -19,6 +19,7 @@
 
 use cercano_api::{config::Config, create_app, db::init_db, init_logging, shutdown, AppState};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
 #[tokio::main]
@@ -38,9 +39,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let db = init_db(&config.database_url).await?;
 
+    let audit = Arc::new(
+        audit_core::AuditStore::new(db.clone())
+            .await
+            .map_err(|e| format!("Failed to initialize AuditStore: {}", e))?,
+    );
+
     let state = AppState {
         config: config.clone(),
         db,
+        audit,
     };
 
     let app = create_app(state);
