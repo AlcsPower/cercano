@@ -55,7 +55,8 @@ impl AuditStore {
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Normal);
+            .synchronous(SqliteSynchronous::Normal)
+            .busy_timeout(std::time::Duration::from_secs(5));
 
         let pool = SqlitePoolOptions::new()
             .max_connections(10)
@@ -475,6 +476,9 @@ impl AuditStore {
         if filter.outcome.is_some() {
             query_builder.push_str(" AND outcome = ?");
         }
+        if filter.severity.is_some() {
+            query_builder.push_str(" AND json_extract(details, '$.severity') = ? COLLATE NOCASE");
+        }
         if filter.from_ts.is_some() {
             query_builder.push_str(" AND ts >= ?");
         }
@@ -519,6 +523,9 @@ impl AuditStore {
         }
         if let Some(v) = &filter.outcome {
             query = query.bind(v.as_str());
+        }
+        if let Some(v) = &filter.severity {
+            query = query.bind(v);
         }
         if let Some(v) = &filter.from_ts {
             query = query.bind(v);
@@ -737,7 +744,8 @@ impl AuditStore {
         row.map(Self::row_to_checkpoint).transpose()
     }
 
-    /// Queries all checkpoints in ascending sequence order.
+    /// Queries checkpoints. Without a limit returns all in ascending order; with a limit
+    /// returns the latest N (still ascending), so a growing chain does not load everything.
     pub async fn list_checkpoints(
         &self,
         limit: Option<i64>,
@@ -746,9 +754,10 @@ impl AuditStore {
             r#"
             SELECT sequence, checkpoint_id, last_hash, event_count, ts, key_id, signature
             FROM audit_checkpoints
-            ORDER BY sequence ASC
+            ORDER BY sequence
             "#,
         );
+        sql.push_str(if limit.is_some() { " DESC" } else { " ASC" });
         if limit.is_some() {
             sql.push_str(" LIMIT ?");
         }
@@ -760,6 +769,9 @@ impl AuditStore {
         let mut results = Vec::with_capacity(rows.len());
         for row in rows {
             results.push(Self::row_to_checkpoint(row)?);
+        }
+        if limit.is_some() {
+            results.reverse();
         }
         Ok(results)
     }

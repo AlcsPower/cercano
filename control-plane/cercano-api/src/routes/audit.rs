@@ -29,7 +29,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use audit_core::{
-    Actor, AuditError, AuditEvent, Category, EventFilter, EventInput, Outcome, Source, Subject,
+    Actor, AuditCheckpoint, AuditError, AuditEvent, Category, EventFilter, EventInput, Outcome,
+    Source, Subject,
 };
 
 use crate::auth::AuthenticatedUser;
@@ -123,43 +124,25 @@ pub fn validate_security_details(value: &serde_json::Value) -> Result<(), AuditR
     Ok(())
 }
 
-/// Authenticates ingestion callers: admin session token, authenticated device, or internal key.
+/// Authenticates ingestion callers: an admin session token or the server-internal token.
+/// A device ID alone is NOT a credential (it is self-service through the heartbeat endpoint).
 pub async fn authenticate_ingestion_caller(
     headers: &HeaderMap,
     state: &AppState,
 ) -> Result<(), AuditRouteError> {
-    // 1. Check internal token header
+    // 1. Check internal token header (only when configured; compared in constant time)
     if let Some(internal_header) = headers
         .get("X-Cercano-Internal-Token")
         .or_else(|| headers.get("x-cercano-internal-token"))
         .and_then(|h| h.to_str().ok())
     {
-        if internal_header == state.config.internal_token {
+        let configured = state.config.internal_token.as_bytes();
+        if !configured.is_empty() && constant_time_eq(internal_header.as_bytes(), configured) {
             return Ok(());
         }
     }
 
-    // 2. Check device token/id header
-    if let Some(device_id) = headers
-        .get("X-Device-Id")
-        .or_else(|| headers.get("x-device-id"))
-        .or_else(|| headers.get("X-Cercano-Device-Token"))
-        .or_else(|| headers.get("x-cercano-device-token"))
-        .and_then(|h| h.to_str().ok())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        let device_row = sqlx::query("SELECT 1 FROM devices WHERE id = ?")
-            .bind(device_id)
-            .fetch_optional(&state.db)
-            .await?;
-
-        if device_row.is_some() {
-            return Ok(());
-        }
-    }
-
-    // 3. Check Bearer session token
+    // 2. Check Bearer session token
     if let Some(auth_header) = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -188,7 +171,8 @@ pub async fn authenticate_ingestion_caller(
             if let Some(row) = session_row {
                 use sqlx::Row;
                 let is_active: i64 = row.get("is_active");
-                if is_active == 1 {
+                let role: String = row.get("role");
+                if is_active == 1 && role == "admin" {
                     return Ok(());
                 }
             }
@@ -200,6 +184,14 @@ pub async fn authenticate_ingestion_caller(
     ))
 }
 
+/// Compares two secrets without leaking their length-independent prefix timing.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 /// Enforces that the request comes from an authenticated administrator.
 pub fn require_admin(user: &AuthenticatedUser) -> Result<(), AuditRouteError> {
     if user.role != "admin" {
@@ -208,6 +200,19 @@ pub fn require_admin(user: &AuthenticatedUser) -> Result<(), AuditRouteError> {
         ));
     }
     Ok(())
+}
+
+/// Appends to the audit chain and evaluates the event against alarm rules.
+/// Alarm failures never reject the audited action; they are logged.
+async fn append_and_evaluate(
+    state: &AppState,
+    input: EventInput,
+) -> Result<AuditEvent, AuditRouteError> {
+    let event = state.audit.append(input).await?;
+    if let Err(err) = state.alarms.evaluate_event(&event).await {
+        tracing::warn!(error = %err, "Alarm evaluation failed after audit append");
+    }
+    Ok(event)
 }
 
 // ----------------------------------------------------------------------------
@@ -355,7 +360,7 @@ pub struct PagedEvents {
     pub next_cursor: Option<i64>,
 }
 
-fn validate_page(params: &QueryEventsParams) -> Result<i64, AuditRouteError> {
+pub(crate) fn validate_page(params: &QueryEventsParams) -> Result<i64, AuditRouteError> {
     let limit = params.limit.unwrap_or(50);
     if !(1..=1000).contains(&limit) {
         return Err(AuditRouteError::Validation(
@@ -429,9 +434,9 @@ pub async fn session_note_handler(
     if let Some(eid) = payload.event_id {
         input = input.with_event_id(eid);
     }
-    match state.audit.append(input).await {
+    match append_and_evaluate(&state, input).await {
         Ok(created) => Ok((StatusCode::CREATED, Json(created))),
-        Err(err) => Err(AuditRouteError::Audit(err)),
+        Err(err) => Err(err),
     }
 }
 
@@ -474,7 +479,7 @@ pub async fn ingest_event_handler(
         event_input = event_input.with_subject(subject);
     }
 
-    match state.audit.append(event_input).await {
+    match append_and_evaluate(&state, event_input).await {
         Ok(created) => Ok((StatusCode::CREATED, Json(created))),
         Err(e) => {
             if let Some(ref eid) = payload.event_id {
@@ -482,7 +487,7 @@ pub async fn ingest_event_handler(
                     return Ok((StatusCode::OK, Json(existing)));
                 }
             }
-            Err(AuditRouteError::Audit(e))
+            Err(e)
         }
     }
 }
@@ -556,7 +561,7 @@ pub async fn session_start_handler(
         input = input.with_event_id(eid.clone());
     }
 
-    match state.audit.append(input).await {
+    match append_and_evaluate(&state, input).await {
         Ok(created) => Ok((StatusCode::CREATED, Json(created))),
         Err(e) => {
             if let Some(ref eid) = payload.event_id {
@@ -564,7 +569,7 @@ pub async fn session_start_handler(
                     return Ok((StatusCode::OK, Json(existing)));
                 }
             }
-            Err(AuditRouteError::Audit(e))
+            Err(e)
         }
     }
 }
@@ -619,7 +624,7 @@ pub async fn session_end_handler(
         input = input.with_event_id(eid.clone());
     }
 
-    match state.audit.append(input).await {
+    match append_and_evaluate(&state, input).await {
         Ok(created) => Ok((StatusCode::CREATED, Json(created))),
         Err(e) => {
             if let Some(ref eid) = payload.event_id {
@@ -627,7 +632,7 @@ pub async fn session_end_handler(
                     return Ok((StatusCode::OK, Json(existing)));
                 }
             }
-            Err(AuditRouteError::Audit(e))
+            Err(e)
         }
     }
 }
@@ -700,7 +705,7 @@ pub async fn file_transfer_handler(
         input = input.with_event_id(eid.clone());
     }
 
-    match state.audit.append(input).await {
+    match append_and_evaluate(&state, input).await {
         Ok(created) => Ok((StatusCode::CREATED, Json(created))),
         Err(e) => {
             if let Some(ref eid) = payload.event_id {
@@ -708,7 +713,7 @@ pub async fn file_transfer_handler(
                     return Ok((StatusCode::OK, Json(existing)));
                 }
             }
-            Err(AuditRouteError::Audit(e))
+            Err(e)
         }
     }
 }
@@ -782,7 +787,7 @@ pub async fn alarm_handler(
         input = input.with_event_id(eid.clone());
     }
 
-    match state.audit.append(input).await {
+    match append_and_evaluate(&state, input).await {
         Ok(created) => Ok((StatusCode::CREATED, Json(created))),
         Err(e) => {
             if let Some(ref eid) = payload.event_id {
@@ -790,7 +795,7 @@ pub async fn alarm_handler(
                     return Ok((StatusCode::OK, Json(existing)));
                 }
             }
-            Err(AuditRouteError::Audit(e))
+            Err(e)
         }
     }
 }
@@ -828,6 +833,7 @@ pub async fn query_events_handler(
         actor_id: params.actor_id,
         subject_id: params.subject_id,
         outcome,
+        severity: None,
         from_ts: params.from_ts,
         to_ts: params.to_ts,
         from_seq: params.from_seq,
@@ -887,6 +893,7 @@ pub async fn export_events_handler(
         actor_id: params.actor_id,
         subject_id: params.subject_id,
         outcome,
+        severity: None,
         from_ts: params.from_ts,
         to_ts: params.to_ts,
         from_seq: params.from_seq,
@@ -947,7 +954,17 @@ pub async fn export_events_handler(
 }
 
 fn csv_field(value: &str) -> String {
-    format!("\"{}\"", value.replace('"', "\"\""))
+    // Neutralize spreadsheet formulas (CSV injection) before quoting.
+    let formula = matches!(
+        value.chars().next(),
+        Some('=' | '+' | '-' | '@' | '\t' | '\r')
+    );
+    let escaped = value.replace('"', "\"\"");
+    if formula {
+        format!("\"'{}\"", escaped)
+    } else {
+        format!("\"{}\"", escaped)
+    }
 }
 fn csv_event(event: &AuditEvent) -> String {
     let subject = event
@@ -972,6 +989,15 @@ fn csv_event(event: &AuditEvent) -> String {
         csv_field(&event.hash),
         csv_field(&event.created_at)
     )
+}
+
+/// `GET /api/audit/checkpoints` — lists the signed checkpoints of the audit chain (admin).
+pub async fn list_checkpoints_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+) -> Result<Json<Vec<AuditCheckpoint>>, AuditRouteError> {
+    require_admin(&user)?;
+    Ok(Json(state.audit.list_checkpoints(Some(100)).await?))
 }
 
 /// `GET /api/audit/verify`
@@ -1006,5 +1032,194 @@ pub async fn verify_chain_handler(
                 "details": result.error,
             })),
         ))
+    }
+}
+
+/// `POST /api/audit/conn`
+/// Compatibility endpoint for client connection audits.
+pub async fn legacy_conn_audit_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<LegacyConnAuditRequest>,
+) -> Result<(StatusCode, &'static str), AuditRouteError> {
+    authenticate_ingestion_caller(&headers, &state).await?;
+
+    if let Some(ref nonce) = payload.nonce {
+        if state.audit.get_event_by_id(nonce).await?.is_some() {
+            return Ok((StatusCode::OK, ""));
+        }
+    }
+
+    let is_close = payload.action.as_deref() == Some("close");
+    let action = if is_close { "conn.end" } else { "conn.start" };
+    let trace_id = payload
+        .trace_id
+        .or(payload.conn_audit_ref)
+        .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+
+    let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
+    let actor = Actor::with_details(actor_id, "device", None, payload.ip.clone());
+
+    let mut details = serde_json::Map::new();
+    if let Some(conn_id) = payload.conn_id {
+        details.insert("conn_id".into(), json!(conn_id));
+    }
+    if let Some(session_id) = payload.session_id {
+        details.insert("session_id".into(), session_id);
+    }
+    if let Some(uuid) = payload.uuid {
+        details.insert("uuid".into(), json!(uuid));
+    }
+    if let Some(ip) = payload.ip {
+        details.insert("ip".into(), json!(ip));
+    }
+
+    let mut input = EventInput::new(
+        trace_id,
+        Source::Client,
+        Category::Conn,
+        action,
+        actor,
+        Outcome::Success,
+        serde_json::Value::Object(details),
+    );
+
+    if let Some(nonce) = payload.nonce {
+        input = input.with_event_id(nonce);
+    }
+
+    let _ = append_and_evaluate(&state, input).await?;
+    Ok((StatusCode::OK, ""))
+}
+
+/// `POST /api/audit/file`
+/// Compatibility endpoint for client file transfer audits.
+pub async fn legacy_file_audit_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<LegacyFileAuditRequest>,
+) -> Result<(StatusCode, &'static str), AuditRouteError> {
+    authenticate_ingestion_caller(&headers, &state).await?;
+
+    if let Some(ref nonce) = payload.nonce {
+        if state.audit.get_event_by_id(nonce).await?.is_some() {
+            return Ok((StatusCode::OK, ""));
+        }
+    }
+
+    let trace_id = payload
+        .trace_id
+        .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+    let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
+    let actor = Actor::new(actor_id);
+    let subject = payload.peer_id.map(Subject::new);
+
+    let direction = if payload.r#type == Some(0) {
+        "upload"
+    } else {
+        "download"
+    };
+    let mut details = serde_json::Map::new();
+    details.insert("direction".into(), json!(direction));
+    if let Some(path) = payload.path {
+        details.insert("path".into(), json!(path));
+    }
+    if let Some(is_file) = payload.is_file {
+        details.insert("is_file".into(), json!(is_file));
+    }
+    if let Some(info) = payload.info {
+        details.insert("info".into(), json!(info));
+    }
+    if let Some(conn_id) = payload.conn_id {
+        details.insert("conn_id".into(), json!(conn_id));
+    }
+
+    let mut input = EventInput::new(
+        trace_id,
+        Source::Client,
+        Category::File,
+        "file.transfer",
+        actor,
+        Outcome::Success,
+        serde_json::Value::Object(details),
+    );
+
+    if let Some(sub) = subject {
+        input = input.with_subject(sub);
+    }
+    if let Some(nonce) = payload.nonce {
+        input = input.with_event_id(nonce);
+    }
+
+    let _ = append_and_evaluate(&state, input).await?;
+    Ok((StatusCode::OK, ""))
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct LegacyConnAuditRequest {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default)]
+    pub ip: Option<String>,
+    #[serde(default)]
+    pub conn_id: Option<i64>,
+    #[serde(default)]
+    pub session_id: Option<serde_json::Value>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    #[serde(default)]
+    pub conn_audit_ref: Option<String>,
+    #[serde(default)]
+    pub uuid: Option<String>,
+    #[serde(default)]
+    pub nonce: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct LegacyFileAuditRequest {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub peer_id: Option<String>,
+    #[serde(default)]
+    pub conn_id: Option<i64>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    #[serde(default)]
+    pub r#type: Option<i8>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub is_file: Option<bool>,
+    #[serde(default)]
+    pub info: Option<String>,
+    #[serde(default)]
+    pub uuid: Option<String>,
+    #[serde(default)]
+    pub nonce: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn csv_field_neutralizes_spreadsheet_formulas() {
+        assert_eq!(csv_field("plain"), "\"plain\"");
+        assert_eq!(csv_field("a\"b"), "\"a\"\"b\"");
+        assert_eq!(csv_field("=1+1"), "\"'=1+1\"");
+        assert_eq!(csv_field("+1"), "\"'+1\"");
+        assert_eq!(csv_field("-1"), "\"'-1\"");
+        assert_eq!(csv_field("@x"), "\"'@x\"");
+    }
+
+    #[test]
+    fn constant_time_eq_matches_exact_secrets_only() {
+        assert!(constant_time_eq(b"secret", b"secret"));
+        assert!(!constant_time_eq(b"secret", b"secreT"));
+        assert!(!constant_time_eq(b"secret", b"secre"));
+        assert!(!constant_time_eq(b"", b"x"));
     }
 }

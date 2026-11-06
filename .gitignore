@@ -39,3 +39,7 @@ Thumbs.db
 
 # Root temp assets
 Logo Cercano.*
+
+# TLS certificates (never commit private keys)
+deploy/certs/*
+!deploy/certs/.gitkeep

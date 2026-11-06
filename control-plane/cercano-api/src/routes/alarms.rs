@@ -125,12 +125,25 @@ pub async fn list_alarms_handler(
 ) -> Result<Json<Vec<AuditEvent>>, AlarmRouteError> {
     require_admin(&user)?;
 
+    let limit = params.limit.unwrap_or(50);
+    if !(1..=1000).contains(&limit) {
+        return Err(AlarmRouteError::Validation(
+            "limit debe estar entre 1 y 1000".to_string(),
+        ));
+    }
+    if params.offset.unwrap_or(0) < 0 {
+        return Err(AlarmRouteError::Validation(
+            "offset no puede ser negativo".to_string(),
+        ));
+    }
+
     let filter = EventFilter {
         category: Some(Category::Alarm),
         action: params.action,
+        severity: params.severity,
         from_ts: params.from_ts,
         to_ts: params.to_ts,
-        limit: params.limit.or(Some(50)),
+        limit: Some(limit),
         offset: params.offset,
         trace_id: None,
         actor_id: None,
@@ -141,19 +154,7 @@ pub async fn list_alarms_handler(
         after_sequence: None,
     };
 
-    let mut events = state.audit.query_events(filter).await?;
-
-    if let Some(ref severity) = params.severity {
-        events.retain(|event| {
-            event
-                .details
-                .get("severity")
-                .and_then(|v| v.as_str())
-                .map(|s| s.eq_ignore_ascii_case(severity))
-                .unwrap_or(false)
-        });
-    }
-
+    let events = state.audit.query_events(filter).await?;
     Ok(Json(events))
 }
 

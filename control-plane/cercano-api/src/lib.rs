@@ -83,6 +83,14 @@ pub fn create_app(state: AppState) -> Router {
             post(routes::audit::ingest_event_handler).get(routes::audit::query_events_handler),
         )
         .route(
+            "/api/audit/conn",
+            post(routes::audit::legacy_conn_audit_handler),
+        )
+        .route(
+            "/api/audit/file",
+            post(routes::audit::legacy_file_audit_handler),
+        )
+        .route(
             "/api/audit/export",
             get(routes::audit::export_events_handler),
         )
@@ -114,6 +122,10 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/audit/verify",
             get(routes::audit::verify_chain_handler),
+        )
+        .route(
+            "/api/audit/checkpoints",
+            get(routes::audit::list_checkpoints_handler),
         )
         .route(
             "/api/audit/traces/:trace_id",

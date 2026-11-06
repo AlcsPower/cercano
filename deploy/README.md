@@ -14,7 +14,7 @@ Cumple con **PLAN-F0-F1.md** (F1-02), **docs/ARQUITECTURA.md** y mitiga los hall
 > ### Requisito de Seguridad Crítico: TLS en Redes Corporativas (Hallazgo H6)
 > En entornos corporativos o redes LAN donde puedan existir equipos no administrados o tráfico interceptable, **el acceso administrativo a la API y a la consola DEBE transitar obligatoriamente bajo TLS (HTTPS)**.
 > Por diseño endurecido, `cercano-api` no expone el puerto `21114` en texto plano hacia la red externa (`0.0.0.0`), sino que restringe su enlace a `127.0.0.1` o a la red privada de Docker, canalizando todo el tráfico externo de administración a través de `cercano-web` (puerto 443 HTTPS).
-> Si no se proveen certificados corporativos en `deploy/certs/`, Nginx operará en HTTP (puerto 80) para pruebas internas de laboratorio. En producción, monte los certificados corporativos (`cercano.crt` y `cercano.key`).
+> Si no se proveen certificados corporativos en `deploy/certs/`, `cercano-web` genera automáticamente un par autofirmado al arrancar (el navegador mostrará una advertencia). En producción, monte los certificados corporativos (`cercano.crt` y `cercano.key`).
 
 ---
 
@@ -22,7 +22,7 @@ Cumple con **PLAN-F0-F1.md** (F1-02), **docs/ARQUITECTURA.md** y mitiga los hall
 
 | Servicio | Binario / Imagen | Protocolo | Puertos | Propósito |
 |---|---|---|---|---|
-| `cercano-web` | `nginx:1.27-alpine` | TCP | `80` (HTTP), `443` (HTTPS) | Consola web SPA y terminación TLS para `cercano-api` |
+| `cercano-web` | `nginx:1.27-alpine-slim` | TCP | `80` (redirige a HTTPS), `443` (HTTPS) | Consola web SPA y terminación TLS para `cercano-api` |
 | `cercano-api` | `cercano-api` | TCP | `127.0.0.1:21114` (local) | API REST de control plane, autenticación y dispositivos |
 | `hbbs` | `cercano-server` | TCP | `21115` | Prueba de tipo NAT (rendezvous NAT test) |
 | `hbbs` | `cercano-server` | TCP/UDP | `21116` | Registro de ID, sincronización y heartbeat |
@@ -41,7 +41,10 @@ Los servicios comparten el volumen de datos persistente montado en `/opt/cercano
    - Ante rotación vía `POST /api/server/keys/rotate`, `cercano-api` respalda y actualiza el par de claves en `/opt/cercano/data/` con permisos `0600`.
 2. **Base de Datos SQLite (`cercano.db`):**
    - Base de datos relacional para usuarios, sesiones, roles y dispositivos administrada por `cercano-api`.
-3. **Seguridad y permisos:**
+3. **Clave de firma de checkpoints de auditoría (`audit_signing_key`):**
+   - `cercano-api` la crea en el primer arranque (semilla Ed25519, permisos `0600`) y firma un checkpoint de la cadena cada `CERCANO_AUDIT_CHECKPOINT_INTERVAL_SECS` segundos (300 por defecto).
+   - Consérvela junto con los respaldos: sin esta clave no se pueden verificar los checkpoints emitidos.
+4. **Seguridad y permisos:**
    - Todos los contenedores de backend se ejecutan sin privilegios de `root`, bajo el usuario del sistema `cercano` (UID `1000:1000`).
 
 ---
@@ -52,7 +55,14 @@ Los servicios comparten el volumen de datos persistente montado en `/opt/cercano
 - Docker Engine 24.0+
 - Docker Compose v2.20+
 
-### Paso 1: Configurar Certificados TLS (Recomendado)
+### Paso 1: Configurar el token interno (obligatorio)
+`cercano-api` no arranca sin un secreto de ingestión de al menos 32 bytes:
+```bash
+export CERCANO_INTERNAL_TOKEN="$(openssl rand -hex 32)"
+```
+Guárdelo en el gestor de secretos de la organización. Es la credencial que usan los componentes internos para escribir eventos de auditoría; si se filtra, se pueden inyectar eventos.
+
+### Paso 2: Configurar Certificados TLS (Recomendado)
 Para activar HTTPS en la consola administrativa, coloque su certificado y clave privada en el subdirectorio `deploy/certs/`:
 ```bash
 mkdir -p deploy/certs
@@ -63,17 +73,34 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -subj "/CN=cercano.lan/O=Cercano/C=NI"
 ```
 
-### Paso 2: Arranque del Stack
+### Paso 3: Arranque del Stack
 Desde la raíz del proyecto o desde el directorio `deploy/`:
 ```bash
 cd deploy
 docker compose up -d --build
 ```
 
-### Paso 3: Verificación
+### Paso 4: Verificación
 Verifique que los 4 contenedores estén en estado saludable (`healthy` o `running`):
 ```bash
 docker compose ps
 ```
 Acceso a la Consola Web:
-- **HTTPS:** `https://<IP-DEL-SERVIDOR>/` (o `http://<IP-DEL-SERVIDOR>/` en puerto 80).
+- **HTTPS:** `https://<IP-DEL-SERVIDOR>/`. El puerto 80 solo responde al healthcheck interno y redirige el resto a HTTPS.
+
+---
+
+## 4. Despliegue Bare-Metal con Systemd
+
+Las unidades están en `deploy/systemd/`. Además de las variables del ejemplo, la API necesita el secreto de ingestión fuera de la unidad:
+
+```bash
+sudo install -m 600 /dev/null /opt/cercano/api.env
+sudo tee /opt/cercano/api.env >/dev/null <<EOF
+CERCANO_INTERNAL_TOKEN=$(openssl rand -hex 32)
+# CERCANO_TRUSTED_PROXIES=127.0.0.1/32,::1/128
+EOF
+sudo chown cercano:cercano /opt/cercano/api.env
+```
+
+`cercano-api.service` carga ese archivo con `EnvironmentFile=-/opt/cercano/api.env`. Sin token, la API falla al arrancar (y `Restart=always` la reintentará): revise `journalctl -u cercano-api` si el servicio no queda activo.

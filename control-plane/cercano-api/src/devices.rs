@@ -243,7 +243,11 @@ pub async fn heartbeat_handler(
         .map(ToString::to_string);
 
     // H2: Use socket peer IP or trusted local proxy headers, never client-reported JSON IP
-    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
 
     if let Some(ref reported_ip) = payload.ip {
         if reported_ip != &client_ip {
@@ -493,7 +497,11 @@ pub async fn delete_device_handler(
         )));
     }
 
-    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
     let trace_id = extract_trace_id(&headers);
 
     let audit_input = EventInput::new(

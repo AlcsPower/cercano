@@ -28,7 +28,8 @@ pub const DEFAULT_DB_PATH: &str = "sqlite://cercano.db?mode=rwc";
 pub const DEFAULT_LOG_LEVEL: &str = "info";
 pub const DEFAULT_DEVICE_GRACE_PERIOD_SECS: u64 = 60;
 pub const DEFAULT_SERVER_KEY_PATH: &str = "/opt/cercano/data/id_ed25519.pub";
-pub const DEFAULT_INTERNAL_TOKEN: &str = "cercano_internal_token_secret";
+pub const DEFAULT_AUDIT_KEY_PATH: &str = "/opt/cercano/data/audit_signing_key";
+pub const DEFAULT_CHECKPOINT_INTERVAL_SECS: u64 = 300;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
@@ -38,9 +39,16 @@ pub struct Config {
     pub log_level: String,
     pub device_grace_period_secs: u64,
     pub server_key_path: String,
+    /// Shared secret for server-side audit ingestion. Empty means "not configured" and ingestion
+    /// through this channel is refused; the API refuses to start without it (see main).
     pub internal_token: String,
+    /// Proxies whose X-Forwarded-For header is trusted (CIDR or exact IP).
+    #[serde(default)]
+    pub trusted_proxies: Vec<String>,
     #[serde(default)]
     pub ip_whitelist: Vec<String>,
+    pub audit_key_path: String,
+    pub audit_checkpoint_interval_secs: u64,
 }
 
 impl Default for Config {
@@ -52,8 +60,11 @@ impl Default for Config {
             log_level: DEFAULT_LOG_LEVEL.to_string(),
             device_grace_period_secs: DEFAULT_DEVICE_GRACE_PERIOD_SECS,
             server_key_path: DEFAULT_SERVER_KEY_PATH.to_string(),
-            internal_token: DEFAULT_INTERNAL_TOKEN.to_string(),
+            internal_token: String::new(),
+            trusted_proxies: vec!["127.0.0.1/32".to_string(), "::1/128".to_string()],
             ip_whitelist: Vec::new(),
+            audit_key_path: DEFAULT_AUDIT_KEY_PATH.to_string(),
+            audit_checkpoint_interval_secs: DEFAULT_CHECKPOINT_INTERVAL_SECS,
         }
     }
 }
@@ -68,7 +79,10 @@ struct FileConfig {
     device_grace_period_secs: Option<u64>,
     server_key_path: Option<String>,
     internal_token: Option<String>,
+    trusted_proxies: Option<Vec<String>>,
     ip_whitelist: Option<Vec<String>>,
+    audit_key_path: Option<String>,
+    audit_checkpoint_interval_secs: Option<u64>,
 }
 
 impl Config {
@@ -133,6 +147,15 @@ impl Config {
         }
         if let Some(whitelist) = file_cfg.ip_whitelist {
             self.ip_whitelist = whitelist;
+        }
+        if let Some(proxies) = file_cfg.trusted_proxies {
+            self.trusted_proxies = proxies;
+        }
+        if let Some(path) = file_cfg.audit_key_path {
+            self.audit_key_path = path;
+        }
+        if let Some(secs) = file_cfg.audit_checkpoint_interval_secs {
+            self.audit_checkpoint_interval_secs = secs;
         }
 
         Ok(())
@@ -200,6 +223,27 @@ impl Config {
                 .collect();
         }
 
+        if let Ok(proxies_str) = env::var("CERCANO_TRUSTED_PROXIES") {
+            self.trusted_proxies = proxies_str
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect();
+        }
+
+        if let Ok(path) = env::var("CERCANO_AUDIT_KEY_PATH") {
+            if !path.trim().is_empty() {
+                self.audit_key_path = path.trim().to_string();
+            }
+        }
+
+        if let Ok(secs_str) = env::var("CERCANO_AUDIT_CHECKPOINT_INTERVAL_SECS") {
+            self.audit_checkpoint_interval_secs = secs_str
+                .parse::<u64>()
+                .map_err(|e| format!("Invalid CERCANO_AUDIT_CHECKPOINT_INTERVAL_SECS: {}", e))?;
+        }
+
         Ok(())
     }
 }
@@ -230,8 +274,11 @@ mod tests {
         assert_eq!(cfg.log_level, "info");
         assert_eq!(cfg.device_grace_period_secs, 60);
         assert_eq!(cfg.server_key_path, "/opt/cercano/data/id_ed25519.pub");
-        assert_eq!(cfg.internal_token, "cercano_internal_token_secret");
+        assert!(cfg.internal_token.is_empty());
+        assert_eq!(cfg.trusted_proxies, vec!["127.0.0.1/32", "::1/128"]);
         assert_eq!(cfg.ip_whitelist, Vec::<String>::new());
+        assert_eq!(cfg.audit_key_path, "/opt/cercano/data/audit_signing_key");
+        assert_eq!(cfg.audit_checkpoint_interval_secs, 300);
     }
 
     #[test]

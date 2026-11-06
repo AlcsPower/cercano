@@ -20,6 +20,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `001-server-rebranding.patch` | F1-01 | `vendor/server` | Rebranding mínimo de `hbbs`, `hbbr` y `cercano-server-util` (versión, banners de bienvenida, CLI) preservando protocolo de red y Ed25519 | `src/common.rs`, `src/hbbr.rs`, `src/main.rs`, `src/relay_server.rs`, `src/rendezvous_server.rs`, `src/utils.rs` | 2026-11-05 | Agente-Servidor |
 | `002-client-rebranding.patch` | F1-07 | `vendor/client` | Rebranding del cliente desktop y Flutter: nombre visible "Cercano", bundle ID `com.cercano.client`, rutas de config aisladas (`.config/cercano`, `AppData/Roaming/Cercano`), textos de interfaz, pantalla Acerca de con licencia AGPL-3.0 y enlace a repositorio | `Cargo.toml`, `res/*`, `src/*`, `flutter/*`, `vendor/server/libs/hbb_common/*` | 2026-11-05 | Agente-Cliente |
 | `003-client-default-endpoints.patch` | F1-08 | `vendor/client` | Configuración por defecto de red apuntando a ID Server `127.0.0.1:21116`, Relay `127.0.0.1:21117`, API Server `http://127.0.0.1:21114`, y latido de telemetría hacia `POST /api/devices/heartbeat` | `src/common.rs`, `src/rendezvous_mediator.rs`, `src/client.rs`, `src/hbbs_http/sync.rs`, `vendor/server/libs/hbb_common/src/config.rs` | 2026-11-05 | Agente-Cliente |
+| `004-client-audit-hooks.patch` | F2-05 | `vendor/client` | Añade el `trace_id` existente (`conn_audit_ref`) a los payloads de auditoría de conexión y transferencia de archivos, sin cambiar endpoints ni autenticación | `src/server/connection.rs` | 2026-11-06 | Agente-Cliente |
 
 ---
 
@@ -94,6 +95,18 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Estrategia de actualización (upstream sync):** Verificar la compatibilidad del formato del payload JSON enviado por `sync.rs` contra la especificación OpenAPI de `cercano-api` (`/api/devices/heartbeat`).
 
 ---
+
+### [004-client-audit-hooks.patch] Tarea F2-05: Hooks de auditoría del cliente
+
+- **Archivo:** `patches/004-client-audit-hooks.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F2-05`
+- **Fecha:** `2026-11-06`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** El cliente ya dispone de la ruta de auditoría y de `conn_audit_ref`; el parche propaga ese identificador como `trace_id` en auditorías de conexión y transferencia sin inventar un endpoint Cercano ni un mecanismo de token no disponible en este flujo.
+- **Archivos modificados:**
+  - `src/server/connection.rs`
+- **Estrategia de actualización (upstream sync):** Reaplicar sobre los métodos `post_conn_audit` y `post_file_audit`; si upstream cambia sus DTOs de auditoría, conservar el campo opcional `trace_id` y validar contra el endpoint de ingestión vigente.
 
 ### Plantilla de registro para nuevos parches
 

@@ -217,6 +217,58 @@ pub fn read_public_key<P: AsRef<Path>>(path: P) -> Result<String, ServerKeyError
     Ok(trimmed.to_string())
 }
 
+/// Loads the Ed25519 key used to sign audit checkpoints, creating it on first use.
+/// The file stores the 32-byte seed in base64 and is created with 0600 on Unix.
+pub fn load_or_create_audit_signing_key<P: AsRef<Path>>(
+    path: P,
+) -> Result<SigningKey, ServerKeyError> {
+    let path = path.as_ref();
+
+    if path.exists() {
+        let raw = fs::read_to_string(path)
+            .map_err(|e| ServerKeyError::Io(format!("Lectura de {}: {}", path.display(), e)))?;
+        let decoded = BASE64_STANDARD.decode(raw.trim()).map_err(|e| {
+            ServerKeyError::InvalidKey(format!("Clave de auditoría inválida: {}", e))
+        })?;
+        let seed: [u8; 32] = decoded.try_into().map_err(|_| {
+            ServerKeyError::InvalidKey(
+                "La clave de auditoría debe tener 32 bytes (semilla Ed25519)".to_string(),
+            )
+        })?;
+        return Ok(SigningKey::from_bytes(&seed));
+    }
+
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| {
+                ServerKeyError::Io(format!(
+                    "Creación de directorio {}: {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+        }
+    }
+
+    let key = SigningKey::generate(&mut OsRng);
+    let encoded = BASE64_STANDARD.encode(key.to_bytes());
+
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options
+        .open(path)
+        .map_err(|e| ServerKeyError::Io(format!("Creación de {}: {}", path.display(), e)))?;
+    use std::io::Write;
+    file.write_all(encoded.as_bytes())
+        .map_err(|e| ServerKeyError::Io(format!("Escritura de {}: {}", path.display(), e)))?;
+
+    Ok(key)
+}
+
 #[cfg(unix)]
 async fn set_secure_permissions<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
@@ -474,7 +526,11 @@ pub async fn rotate_keys_handler(
     user: AuthenticatedUser,
     body: Option<Json<RotateKeysRequest>>,
 ) -> Result<Json<RotateKeysResponse>, ServerKeyError> {
-    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
     let trace_id = extract_trace_id(&headers);
     let reason = body.as_ref().and_then(|b| b.reason.as_deref());
     let response = rotate_keys(
@@ -532,6 +588,25 @@ mod tests {
                 assert!(path.contains("nonexistent_dir"));
             }
             _ => panic!("Expected KeyNotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_load_or_create_audit_signing_key_is_stable() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("audit_signing_key");
+
+        let first = load_or_create_audit_signing_key(&path).unwrap();
+        let second = load_or_create_audit_signing_key(&path).unwrap();
+
+        assert_eq!(first.verifying_key(), second.verifying_key());
+        assert!(path.exists());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
         }
     }
 

@@ -50,7 +50,7 @@ fn archive_payload(envelope: &ArchiveEnvelope) -> Result<Vec<u8>, AuditError> {
     let mut copy = envelope.clone();
     copy.archive_sha256.clear();
     copy.signature.clear();
-    Ok(crate::to_canonical_json_bytes(&copy)?)
+    crate::to_canonical_json_bytes(&copy)
 }
 pub fn verify_archive(
     path: impl AsRef<Path>,
@@ -126,15 +126,11 @@ impl AuditStore {
         encoder.finish()?;
         Ok(Some(envelope))
     }
-    pub async fn purge_before(
-        &self,
-        cutoff: DateTime<Utc>,
-        signing_key: &SigningKey,
-        key_id: &str,
-    ) -> Result<u64, AuditError> {
-        // Physical deletion requires a verified chain truncation checkpoint; this API only records approval.
+    pub async fn purge_before(&self, cutoff: DateTime<Utc>) -> Result<u64, AuditError> {
+        // Physical deletion requires a verified chain truncation checkpoint; this records
+        // the approval request only, so the audit event must not claim a purge happened.
         let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM audit_events WHERE ts < ? AND action <> 'audit.purge'",
+            "SELECT COUNT(*) FROM audit_events WHERE ts < ? AND action <> 'retention.purge_approved'",
         )
         .bind(cutoff.to_rfc3339())
         .fetch_one(self.pool())
@@ -142,11 +138,7 @@ impl AuditStore {
         if count == 0 {
             return Ok(0);
         }
-        let archive_key = hex::encode(signing_key.verifying_key().to_bytes());
-        let event = self.append(EventInput { trace_id: "audit-retention".into(), source: Source::Api, category: Category::Other("audit".into()), action: "audit.purge".into(), actor: Actor::new("system"), subject: None, outcome: Outcome::Success, details: serde_json::json!({"cutoff": cutoff.to_rfc3339(), "purged_events": count, "key_id": key_id, "verifying_key": archive_key}), event_id: None, ts: None }).await?;
-        // The append-only store intentionally never deletes rows. The purge event
-        // records the approved cutoff; archived data is removed by an external
-        // lifecycle process after its signed archive is verified.
+        let event = self.append(EventInput { trace_id: "audit-retention".into(), source: Source::Api, category: Category::Other("audit".into()), action: "retention.purge_approved".into(), actor: Actor::new("system"), subject: None, outcome: Outcome::Success, details: serde_json::json!({"cutoff": cutoff.to_rfc3339(), "eligible_events": count, "executed": false}), event_id: None, ts: None }).await?;
         let _ = event;
         Ok(count as u64)
     }

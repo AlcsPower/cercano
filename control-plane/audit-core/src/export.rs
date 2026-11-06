@@ -77,7 +77,8 @@ impl ExportQueue {
     }
     pub async fn flush_once(&self) -> usize {
         let event = if let Some(store) = &self.store {
-            let cursor = match *self.cursor.lock().unwrap() {
+            let cached_cursor = { *self.cursor.lock().unwrap() };
+            let cursor = match cached_cursor {
                 Some(cursor) => cursor,
                 None => match store.load_export_cursor().await {
                     Ok(cursor) => {
@@ -87,9 +88,11 @@ impl ExportQueue {
                     Err(_) => return 0,
                 },
             };
-            let mut filter = EventFilter::default();
-            filter.after_sequence = Some(cursor);
-            filter.limit = Some(1);
+            let filter = EventFilter {
+                after_sequence: Some(cursor),
+                limit: Some(1),
+                ..Default::default()
+            };
             match store.query_events(filter).await {
                 Ok(mut events) => events.pop(),
                 Err(_) => None,
@@ -146,7 +149,7 @@ fn syslog_message(c: &SyslogConfig, ts: &str, payload: &[u8]) -> String {
         })
         .unwrap_or_else(|_| ts.to_string());
     format!(
-        "<{}>1 {} {} {} - - {}",
+        "<{}>1 {} {} {} - - - {}",
         c.facility * 8 + 6,
         timestamp,
         c.hostname,
@@ -245,7 +248,7 @@ mod tests {
         };
         assert_eq!(
             syslog_message(&config, "2026-01-02T03:04:05.678+02:00", b"{}"),
-            "<14>1 2026-01-02T01:04:05.678Z host cercano - - {}"
+            "<14>1 2026-01-02T01:04:05.678Z host cercano - - - {}"
         );
     }
 
@@ -266,7 +269,7 @@ mod tests {
         let (len, _) = receiver.recv_from(&mut buf).await.unwrap();
         assert_eq!(
             std::str::from_utf8(&buf[..len]).unwrap(),
-            "<14>1 2026-01-02T03:04:05.000Z host cercano - - {\"action\":\"test\"}"
+            "<14>1 2026-01-02T03:04:05.000Z host cercano - - - {\"action\":\"test\"}"
         );
     }
 }

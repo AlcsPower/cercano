@@ -251,6 +251,13 @@ impl AlarmEngine {
 
         let count = {
             let mut lock = self.ip_attempts.lock().unwrap();
+            // Bound memory: drop addresses that have been silent for a full window.
+            if lock.len() > 1024 {
+                lock.retain(|_, entries| {
+                    entries.retain(|t| *t > cutoff);
+                    !entries.is_empty()
+                });
+            }
             let entries = lock.entry(ip_str.to_string()).or_default();
             entries.retain(|t| *t > cutoff);
             entries.push(now);
@@ -312,6 +319,13 @@ impl AlarmEngine {
 
         let count = {
             let mut lock = self.failed_logins.lock().unwrap();
+            // Bound memory: drop subjects that have been silent for a full window.
+            if lock.len() > 1024 {
+                lock.retain(|_, entries| {
+                    entries.retain(|t| *t > cutoff);
+                    !entries.is_empty()
+                });
+            }
             let entries = lock.entry(user_or_subject.to_string()).or_default();
             entries.retain(|t| *t > cutoff);
             entries.push(now);

@@ -33,6 +33,7 @@ struct TestContext {
     state: AppState,
     admin_token: String,
     device_id: String,
+    internal_token: String,
 }
 
 async fn setup_test_context() -> TestContext {
@@ -99,6 +100,7 @@ async fn setup_test_context() -> TestContext {
         state,
         admin_token,
         device_id,
+        internal_token,
     }
 }
 
@@ -190,7 +192,7 @@ async fn test_coherent_trace_timeline_and_session_metrics() {
         .uri("/api/audit/session/start")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Device-Id", &ctx.device_id)
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&start_payload).unwrap()))
         .unwrap();
 
@@ -212,7 +214,7 @@ async fn test_coherent_trace_timeline_and_session_metrics() {
         .uri("/api/audit/file-transfer")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Device-Id", &ctx.device_id)
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&file1_payload).unwrap()))
         .unwrap();
 
@@ -234,7 +236,7 @@ async fn test_coherent_trace_timeline_and_session_metrics() {
         .uri("/api/audit/file-transfer")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Device-Id", &ctx.device_id)
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&file2_payload).unwrap()))
         .unwrap();
 
@@ -256,7 +258,7 @@ async fn test_coherent_trace_timeline_and_session_metrics() {
         .uri("/api/audit/alarm")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Device-Id", &ctx.device_id)
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&alarm_payload).unwrap()))
         .unwrap();
 
@@ -279,7 +281,7 @@ async fn test_coherent_trace_timeline_and_session_metrics() {
         .uri("/api/audit/session/end")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Device-Id", &ctx.device_id)
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&end_payload).unwrap()))
         .unwrap();
 
@@ -367,7 +369,7 @@ async fn test_active_session_assembly() {
         .uri("/api/audit/session/start")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Device-Id", &ctx.device_id)
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&start_payload).unwrap()))
         .unwrap();
 
@@ -389,7 +391,7 @@ async fn test_active_session_assembly() {
         .uri("/api/audit/file-transfer")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Device-Id", &ctx.device_id)
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&file_payload).unwrap()))
         .unwrap();
 

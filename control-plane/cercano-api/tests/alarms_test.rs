@@ -450,3 +450,108 @@ async fn test_tc_f2_025_acknowledge_alarm_records_verifiable_audit_event() {
     let res = ctx.app.clone().oneshot(not_found_req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn test_list_alarms_validates_limit() {
+    let ctx = setup_test_context(vec![]).await;
+
+    for bad in ["0", "-1", "1001"] {
+        let req = Request::builder()
+            .uri(format!("/api/audit/alarms?limit={bad}"))
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", ctx.admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let res = ctx.app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST, "limit={bad}");
+    }
+}
+
+#[tokio::test]
+async fn test_list_alarms_filters_severity_in_sql() {
+    let ctx = setup_test_context(vec![]).await;
+
+    // Low is appended first: a post-LIMIT filter would see only "low" with limit=1.
+    for (action, severity) in [("alarm.test_low", "low"), ("alarm.test_high", "high")] {
+        let input = audit_core::EventInput::new(
+            "trace-alarm-filter",
+            audit_core::Source::Api,
+            Category::Alarm,
+            action,
+            audit_core::Actor::new("sys_alarm_engine"),
+            audit_core::Outcome::Denied,
+            json!({ "severity": severity, "reason": "test" }),
+        );
+        ctx.state.audit.append(input).await.unwrap();
+    }
+
+    let req = Request::builder()
+        .uri("/api/audit/alarms?severity=high&limit=1")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    let events = body.as_array().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["action"], "alarm.test_high");
+}
+
+#[tokio::test]
+async fn test_login_outside_ip_whitelist_is_forbidden() {
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
+    let config = Config {
+        ip_whitelist: vec!["10.0.0.0/8".to_string()],
+        ..Default::default()
+    };
+    let state = AppState::new(config, db, audit);
+    let app = create_app(state);
+
+    let bootstrap = Request::builder()
+        .uri("/api/auth/bootstrap")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&json!({
+                "username": "admin_whitelist_test",
+                "password": "AdminPassword123!"
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(bootstrap).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Loopback (127.0.0.1) is outside 10.0.0.0/8, so login must be rejected, not just alarmed.
+    let login = Request::builder()
+        .uri("/api/auth/login")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&json!({
+                "username": "admin_whitelist_test",
+                "password": "AdminPassword123!"
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(login).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_list_alarms_rejects_negative_offset() {
+    let ctx = setup_test_context(vec![]).await;
+    let req = Request::builder()
+        .uri("/api/audit/alarms?offset=-1")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}

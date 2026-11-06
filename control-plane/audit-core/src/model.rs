@@ -507,6 +507,8 @@ pub struct EventFilter {
     pub actor_id: Option<String>,
     pub subject_id: Option<String>,
     pub outcome: Option<Outcome>,
+    /// Matches `details.severity` case-insensitively (alarm queries).
+    pub severity: Option<String>,
     pub from_ts: Option<String>,
     pub to_ts: Option<String>,
     pub from_seq: Option<i64>,

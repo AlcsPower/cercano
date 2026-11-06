@@ -135,7 +135,7 @@ async fn test_tc_f2_010_ingestion_authentication_methods() {
     assert_eq!(event["sequence"], 1);
     assert_eq!(event["prev_hash"], GENESIS_HASH);
 
-    // 3. Authenticated via X-Device-Id -> 201 Created
+    // 3. A device ID alone is NOT a credential (heartbeat enrollment is self-service) -> 401
     let req = Request::builder()
         .uri("/api/audit/events")
         .method("POST")
@@ -145,10 +145,7 @@ async fn test_tc_f2_010_ingestion_authentication_methods() {
         .unwrap();
 
     let res = ctx.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED);
-    let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    let event: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(event["sequence"], 2);
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 
     // 4. Authenticated via X-Cercano-Internal-Token -> 201 Created
     let req = Request::builder()
@@ -163,7 +160,7 @@ async fn test_tc_f2_010_ingestion_authentication_methods() {
     assert_eq!(res.status(), StatusCode::CREATED);
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     let event: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(event["sequence"], 3);
+    assert_eq!(event["sequence"], 2);
 }
 
 #[tokio::test]
@@ -345,7 +342,7 @@ async fn test_tc_f2_013_specialized_endpoints_and_chain() {
         .uri("/api/audit/alarm")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Device-Id", &ctx.device_id)
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&alarm_payload).unwrap()))
         .unwrap();
 
@@ -586,4 +583,123 @@ async fn test_tc_f2_014_query_events_with_filters() {
     let events = response["events"].as_array().unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["sequence"], 2);
+}
+
+#[tokio::test]
+async fn test_checkpoints_endpoint_lists_signed_checkpoints() {
+    let ctx = setup_test_context().await;
+
+    // Append one event so the chain has a head, then sign a checkpoint.
+    let input = audit_core::EventInput::new(
+        "trace-checkpoint-test",
+        audit_core::Source::Api,
+        audit_core::Category::Conn,
+        "conn.start",
+        audit_core::Actor::new("user-1"),
+        audit_core::Outcome::Success,
+        json!({ "session_type": "desktop" }),
+    );
+    ctx.state.audit.append(input).await.unwrap();
+
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+    let created = ctx
+        .state
+        .audit
+        .create_checkpoint(&signing_key, "test-audit-key")
+        .await
+        .unwrap();
+    assert_eq!(created.event_count, 1);
+
+    let req = Request::builder()
+        .uri("/api/audit/checkpoints")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body.as_array().unwrap().len(), 1);
+    assert_eq!(body[0]["signature"].as_str().unwrap().len(), 128);
+    assert_eq!(body[0]["event_count"], 1);
+}
+
+#[tokio::test]
+async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
+    let ctx = setup_test_context().await;
+    let trace_id = "trace-client-legacy-001";
+
+    // 1. Client sends conn audit to /api/audit/conn
+    let conn_payload = json!({
+        "id": "client-terminal-1",
+        "action": "new",
+        "ip": "192.168.1.55",
+        "conn_id": 9991,
+        "session_id": "sess-abc",
+        "trace_id": trace_id,
+        "nonce": "nonce-conn-001"
+    });
+    let req = Request::builder()
+        .uri("/api/audit/conn")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
+        .body(Body::from(serde_json::to_vec(&conn_payload).unwrap()))
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    assert!(
+        bytes.is_empty(),
+        "client expects empty response body on success"
+    );
+
+    // 2. Client sends file audit to /api/audit/file
+    let file_payload = json!({
+        "id": "client-terminal-1",
+        "peer_id": "remote-endpoint-2",
+        "conn_id": 9991,
+        "trace_id": trace_id,
+        "type": 0,
+        "path": "C:\\Docs\\report.pdf",
+        "is_file": true,
+        "info": "{\"files\": [[\"report.pdf\", 2048]]}",
+        "nonce": "nonce-file-001"
+    });
+    let req = Request::builder()
+        .uri("/api/audit/file")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
+        .body(Body::from(serde_json::to_vec(&file_payload).unwrap()))
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 3. Verify trace timeline has both events linked
+    let req = Request::builder()
+        .uri(format!("/api/audit/traces/{}", trace_id))
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let timeline: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(timeline["timeline"].as_array().unwrap().len(), 2);
+    assert_eq!(timeline["timeline"][0]["action"], "conn.start");
+    assert_eq!(timeline["timeline"][1]["action"], "file.transfer");
+
+    // 4. Verify chain integrity passes
+    let req = Request::builder()
+        .uri("/api/audit/verify")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
 }

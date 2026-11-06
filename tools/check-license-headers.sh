@@ -16,7 +16,7 @@ while IFS= read -r file; do
       missing=$((missing + 1))
     fi
   fi
-done < <(git ls-files "*.rs" ':!:vendor/**' 2>/dev/null || true)
+done < <(git ls-files "*.rs" "*.sh" ':!:vendor/**' 2>/dev/null || true)
 
 if (( missing > 0 )); then
   echo "ERROR: Se encontraron $missing archivo(s) sin encabezado de licencia AGPL-3.0." >&2

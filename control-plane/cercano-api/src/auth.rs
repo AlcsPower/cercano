@@ -58,6 +58,8 @@ pub enum AuthError {
     UserInactive,
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
     #[error("Audit error: {0}")]
     Audit(#[from] audit_core::AuditError),
 }
@@ -92,6 +94,7 @@ impl IntoResponse for AuthError {
                 "El usuario se encuentra inactivo.".to_string(),
             ),
             AuthError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "unauthorized", msg.clone()),
+            AuthError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
             AuthError::Db(err) => {
                 tracing::error!("Database error during auth operation: {:?}", err);
                 (
@@ -279,10 +282,21 @@ pub fn generate_session_token() -> String {
     token
 }
 
-/// Extracts client IP from standard HTTP headers or falls back to local address.
-pub fn extract_client_ip(headers: &HeaderMap, peer_addr: Option<SocketAddr>) -> String {
+/// Extracts client IP from standard HTTP headers or falls back to the socket peer address.
+///
+/// Proxy headers are honored only when the peer is one of the configured trusted proxies,
+/// otherwise a proxy (e.g. nginx on the Docker network) would be recorded as every client.
+pub fn extract_client_ip(
+    headers: &HeaderMap,
+    peer_addr: Option<SocketAddr>,
+    trusted_proxies: &[String],
+) -> String {
     let is_trusted_proxy = match peer_addr {
-        Some(addr) => addr.ip().is_loopback(),
+        Some(addr) => {
+            !trusted_proxies.is_empty()
+                && crate::alarms::is_ip_in_whitelist(&addr.ip().to_string(), trusted_proxies)
+        }
+        // Unit tests build the router without connect info; treat as the local proxy.
         None => true,
     };
 
@@ -423,7 +437,11 @@ pub async fn bootstrap_handler(
     headers: HeaderMap,
     Json(payload): Json<BootstrapRequest>,
 ) -> Result<(StatusCode, Json<UserResponse>), AuthError> {
-    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
     let trace_id = extract_trace_id(&headers);
 
     validate_credentials_input(&payload.username, &payload.password)?;
@@ -516,15 +534,30 @@ pub async fn login_handler(
     headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AuthError> {
-    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
     let trace_id = extract_trace_id(&headers);
     let username = payload.username.trim();
 
     // Evaluate IP whitelist and IP burst rate limits via alarm engine
-    let _ = state
+    match state
         .alarms
         .check_ip_whitelist(&client_ip, Some(&trace_id), Some(username))
-        .await;
+        .await
+    {
+        Ok(Some(_)) => {
+            tracing::warn!(ip = %client_ip, "Login blocked: IP outside configured whitelist");
+            return Err(AuthError::Forbidden(
+                "Acceso denegado: la IP no pertenece a la lista blanca configurada.".to_string(),
+            ));
+        }
+        Ok(None) => {}
+        // Fail closed: if the whitelist cannot be evaluated, do not authenticate.
+        Err(err) => return Err(AuthError::Audit(err)),
+    }
     let _ = state
         .alarms
         .record_ip_attempt(&client_ip, Some(&trace_id), Some(username))
@@ -756,7 +789,11 @@ pub async fn logout_handler(
     connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
 ) -> Result<Json<LogoutResponse>, AuthError> {
-    let client_ip = extract_client_ip(&headers, connect_info.map(|ci| ci.0));
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
     let trace_id = extract_trace_id(&headers);
 
     let auth_header = headers
@@ -888,28 +925,51 @@ mod tests {
     #[test]
     fn test_extract_client_ip() {
         let mut headers = HeaderMap::new();
+        let trusted = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let loopback_proxy = trusted(&["127.0.0.1/32", "::1/128"]);
 
         // 1. Without socket or headers -> default loopback
-        assert_eq!(extract_client_ip(&headers, None), "127.0.0.1");
+        assert_eq!(
+            extract_client_ip(&headers, None, &loopback_proxy),
+            "127.0.0.1"
+        );
 
         // 2. Loopback socket (trusted proxy) -> honors X-Forwarded-For and X-Real-IP
         let loopback: SocketAddr = "127.0.0.1:45678".parse().unwrap();
         headers.insert("x-forwarded-for", "192.168.1.50, 10.0.0.1".parse().unwrap());
-        assert_eq!(extract_client_ip(&headers, Some(loopback)), "192.168.1.50");
+        assert_eq!(
+            extract_client_ip(&headers, Some(loopback), &loopback_proxy),
+            "192.168.1.50"
+        );
 
         headers.remove("x-forwarded-for");
         headers.insert("x-real-ip", "10.10.10.20".parse().unwrap());
-        assert_eq!(extract_client_ip(&headers, Some(loopback)), "10.10.10.20");
+        assert_eq!(
+            extract_client_ip(&headers, Some(loopback), &loopback_proxy),
+            "10.10.10.20"
+        );
 
         // 3. IPv6 loopback [::1] (trusted proxy) -> honors headers
         let loopback_v6: SocketAddr = "[::1]:45678".parse().unwrap();
         assert_eq!(
-            extract_client_ip(&headers, Some(loopback_v6)),
+            extract_client_ip(&headers, Some(loopback_v6), &loopback_proxy),
             "10.10.10.20"
         );
 
         // 4. Remote socket (untrusted client) -> ignores spoofed proxy headers completely
         let remote: SocketAddr = "192.168.1.200:54321".parse().unwrap();
-        assert_eq!(extract_client_ip(&headers, Some(remote)), "192.168.1.200");
+        assert_eq!(
+            extract_client_ip(&headers, Some(remote), &loopback_proxy),
+            "192.168.1.200"
+        );
+
+        // 5. Docker bridge proxy configured as trusted -> uses the real forwarded client IP
+        let bridge: SocketAddr = "172.18.0.5:40000".parse().unwrap();
+        let docker_proxy = trusted(&["172.16.0.0/12"]);
+        headers.insert("x-forwarded-for", "192.168.1.77".parse().unwrap());
+        assert_eq!(
+            extract_client_ip(&headers, Some(bridge), &docker_proxy),
+            "192.168.1.77"
+        );
     }
 }

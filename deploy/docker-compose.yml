@@ -16,8 +16,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      # Opcional: Montar certificados corporativos (cercano.crt y cercano.key) para HTTPS
-      - ./certs:/etc/nginx/certs:ro
+      # Certificados corporativos; si faltan, cercano-web genera un par autofirmado aquí
+      - ./certs:/etc/nginx/certs
     depends_on:
       cercano-api:
         condition: service_healthy
@@ -38,6 +38,12 @@ services:
       - CERCANO_SERVER_KEY_PATH=/opt/cercano/data/id_ed25519.pub
       - CERCANO_LOG_LEVEL=info
       - CERCANO_DEVICE_GRACE_PERIOD_SECS=60
+      # Obligatorio: >=32 bytes. Sin él la API no arranca (ni acepta ingestión interna).
+      - CERCANO_INTERNAL_TOKEN=${CERCANO_INTERNAL_TOKEN:?defina CERCANO_INTERNAL_TOKEN con >=32 bytes}
+      # nginx llega desde la red bridge, no desde loopback
+      - CERCANO_TRUSTED_PROXIES=172.16.0.0/12
+      - CERCANO_AUDIT_KEY_PATH=/opt/cercano/data/audit_signing_key
+      - CERCANO_AUDIT_CHECKPOINT_INTERVAL_SECS=300
     # Enlaza a localhost del host para administración directa y expone internamente a cercano-web
     ports:
       - "127.0.0.1:21114:21114"

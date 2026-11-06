@@ -15,8 +15,15 @@ RUN npm run build
 # Etapa 2: Servidor Web Nginx ligero y endurecido
 FROM nginx:1.27-alpine-slim
 
+# openssl para generar el par autofirmado cuando no se montan certificados
+RUN apk add --no-cache openssl
+
 # Copiar configuración de proxy y TLS de Nginx
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Generar certificado autofirmado si no hay uno montado (evita que nginx no arranque)
+COPY deploy/web-entrypoint.sh /docker-entrypoint.d/10-certs.sh
+RUN chmod +x /docker-entrypoint.d/10-certs.sh
 
 # Copiar artefactos estáticos compilados
 COPY --from=builder /app/dist /usr/share/nginx/html
