@@ -165,6 +165,34 @@ mod tests {
         assert_eq!(json["status"], "ok");
         assert_eq!(json["service"], "cercano-api");
         assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(json["database"], "connected");
+    }
+
+    #[tokio::test]
+    async fn test_healthz_endpoint_returns_503_when_db_closed() {
+        let db = init_db("sqlite::memory:").await.unwrap();
+        db.close().await;
+        let state = AppState {
+            config: Config::default(),
+            db,
+        };
+        let app = create_app(state);
+
+        let req = Request::builder()
+            .uri("/healthz")
+            .method("GET")
+            .body(Body::empty())
+            .unwrap();
+
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(json["status"], "degraded");
+        assert_eq!(json["service"], "cercano-api");
+        assert_eq!(json["error"], "database unreachable");
     }
 
     #[tokio::test]
@@ -970,6 +998,11 @@ mod tests {
 
         assert_eq!(rotate_json["status"], "rotated");
         assert_eq!(rotate_json["key_type"], "ed25519");
+        assert_eq!(rotate_json["requires_restart"], true);
+        assert!(rotate_json["message"]
+            .as_str()
+            .unwrap()
+            .contains("reiniciar"));
         let new_public_key = rotate_json["public_key"].as_str().unwrap();
         assert_ne!(new_public_key, old_client_configured_key);
         assert!(rotate_json["backup_path"].is_string());

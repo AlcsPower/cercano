@@ -30,6 +30,8 @@ use thiserror::Error;
 use crate::auth::{extract_client_ip, AuthenticatedUser};
 use crate::AppState;
 
+pub const DEVICE_STATUS_EXPR: &str = "CASE WHEN last_seen_at IS NOT NULL AND (strftime('%s', 'now') - strftime('%s', last_seen_at)) <= ? THEN 'online' ELSE 'offline' END";
+
 #[derive(Debug, Error)]
 pub enum DeviceError {
     #[error("Database error: {0}")]
@@ -304,7 +306,7 @@ pub async fn list_devices_handler(
 ) -> Result<Json<Vec<DeviceResponse>>, DeviceError> {
     let grace_secs = state.config.device_grace_period_secs as i64;
 
-    let rows = sqlx::query(
+    let query_sql = format!(
         r#"
         SELECT
             id,
@@ -313,19 +315,19 @@ pub async fn list_devices_handler(
             os,
             version,
             ip_address,
-            CASE
-                WHEN last_seen_at IS NOT NULL AND (strftime('%s', 'now') - strftime('%s', last_seen_at)) <= ? THEN 'online'
-                ELSE 'offline'
-            END AS status,
+            {} AS status,
             last_seen_at,
             created_at
         FROM devices
         ORDER BY created_at DESC
         "#,
-    )
-    .bind(grace_secs)
-    .fetch_all(&state.db)
-    .await?;
+        DEVICE_STATUS_EXPR
+    );
+
+    let rows = sqlx::query(&query_sql)
+        .bind(grace_secs)
+        .fetch_all(&state.db)
+        .await?;
 
     let devices = rows
         .into_iter()
@@ -355,7 +357,7 @@ pub async fn get_device_handler(
 ) -> Result<Json<DeviceResponse>, DeviceError> {
     let grace_secs = state.config.device_grace_period_secs as i64;
 
-    let row = sqlx::query(
+    let query_sql = format!(
         r#"
         SELECT
             id,
@@ -364,20 +366,20 @@ pub async fn get_device_handler(
             os,
             version,
             ip_address,
-            CASE
-                WHEN last_seen_at IS NOT NULL AND (strftime('%s', 'now') - strftime('%s', last_seen_at)) <= ? THEN 'online'
-                ELSE 'offline'
-            END AS status,
+            {} AS status,
             last_seen_at,
             created_at
         FROM devices
         WHERE id = ?
         "#,
-    )
-    .bind(grace_secs)
-    .bind(&id)
-    .fetch_optional(&state.db)
-    .await?;
+        DEVICE_STATUS_EXPR
+    );
+
+    let row = sqlx::query(&query_sql)
+        .bind(grace_secs)
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await?;
 
     match row {
         Some(row) => Ok(Json(DeviceResponse {

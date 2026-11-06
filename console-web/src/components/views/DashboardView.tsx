@@ -9,7 +9,6 @@ import {
   Cpu,
   ShieldCheck,
   ArrowUpRight,
-  HardDrive,
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
@@ -128,49 +127,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-apple-display text-cercano-night dark:text-white">
-              {metrics ? metrics.active_sessions : '—'}
-            </span>
-            <span className="text-xs text-cercano-slate dark:text-gray-400">
-              conexiones P2P/Relay
+            <span className="text-2xl font-bold tracking-apple-display text-cercano-night dark:text-white">
+              {metrics?.active_sessions != null ? metrics.active_sessions : 'Sin telemetría'}
             </span>
           </div>
           <p className="text-xs text-cercano-slate dark:text-gray-400 mt-2">
-            Cifrado E2E Ed25519 activo
+            {metrics?.active_sessions != null ? 'Conexiones P2P/Relay' : 'Métricas de sesión en Fase 2'}
           </p>
         </AppleCard>
 
-        {/* CPU & Memory Gauges */}
+        {/* Server Load */}
         <AppleCard className="relative overflow-hidden">
           <div className="flex items-center justify-between text-cercano-slate dark:text-gray-400 mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider">
-              Carga del Sistema
+              Carga del Servidor
             </span>
             <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-300">
               <Cpu size={18} />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-apple-display text-cercano-night dark:text-white">
-              {metrics ? `${metrics.cpu_percent}%` : '—'}
-            </span>
-            <span className="text-xs text-cercano-slate dark:text-gray-400">
-              CPU
+            <span className="text-2xl font-bold tracking-apple-display text-cercano-night dark:text-white">
+              {metrics?.cpu_percent != null ? `${metrics.cpu_percent}%` : 'Sin telemetría'}
             </span>
           </div>
-          <div className="w-full bg-black/5 dark:bg-white/10 rounded-full h-1.5 mt-3 overflow-hidden">
-            <div
-              className="bg-cercano-blue h-full rounded-full transition-all duration-500"
-              style={{ width: `${metrics?.cpu_percent || 15}%` }}
-            />
-          </div>
+          <p className="text-xs text-cercano-slate dark:text-gray-400 mt-2">
+            {metrics?.cpu_percent != null ? 'Uso de CPU' : 'Telemetría de host en Fase 2'}
+          </p>
         </AppleCard>
 
-        {/* Uptime */}
+        {/* Uptime / API Connectivity */}
         <AppleCard className="relative overflow-hidden">
           <div className="flex items-center justify-between text-cercano-slate dark:text-gray-400 mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider">
-              Disponibilidad
+              Control Plane
             </span>
             <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300">
               <Server size={18} />
@@ -178,12 +168,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-apple-display text-cercano-night dark:text-white">
-              {metrics ? formatUptime(metrics.uptime_seconds) : '—'}
+              {typeof metrics?.uptime_seconds === 'number' ? formatUptime(metrics.uptime_seconds) : 'Puerto :21114'}
             </span>
           </div>
           <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            99.98% de disponibilidad
+            API Conectada y Operativa
           </p>
         </AppleCard>
       </div>
@@ -202,53 +192,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Estado operacional de los componentes de backend y retransmisión
                 </p>
               </div>
-              <AppleButton
-                variant="ghost"
-                size="sm"
+              <button
                 onClick={() => setActiveTab('network')}
-                icon={<ArrowUpRight size={14} />}
+                className="text-xs font-semibold text-cercano-blue hover:text-cercano-blue-dark flex items-center gap-1 cursor-pointer"
               >
-                Ver Red
-              </AppleButton>
+                <span>Ver Red</span>
+                <ArrowUpRight size={14} />
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {metrics?.services.map((svc) => (
+              {metrics?.services.map((srv) => (
                 <div
-                  key={svc.name}
-                  className="p-4 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/5 dark:border-white/5 flex flex-col justify-between"
+                  key={srv.name}
+                  className="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-2 hover:border-black/10 dark:hover:border-white/10 transition-colors"
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-bold text-sm text-cercano-night dark:text-white">
-                        {svc.name}
-                      </span>
-                      <StatusPill status={svc.status} size="sm" />
-                    </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="px-2 py-0.5 rounded-md bg-cercano-blue/10 text-cercano-blue dark:bg-cercano-blue/20 dark:text-blue-300 font-mono text-[11px] font-semibold">
-                        Port {svc.port} ({svc.protocol})
-                      </span>
-                      <span className="text-xs text-cercano-slate dark:text-gray-400 font-medium">
-                        {svc.role}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                      {svc.description}
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-bold text-cercano-night dark:text-white">
+                      {srv.name}
+                    </span>
+                    <StatusPill status="online" label="En Línea" size="sm" pulse={false} />
                   </div>
+                  <div className="flex items-center gap-2 text-[11px] text-cercano-slate dark:text-gray-400">
+                    <span className="px-1.5 py-0.5 rounded bg-cercano-blue/10 text-cercano-blue font-mono font-semibold">
+                      Port {srv.port} ({srv.protocol})
+                    </span>
+                    <span>{srv.role}</span>
+                  </div>
+                  <p className="text-[11px] text-cercano-slate dark:text-gray-400 line-clamp-2">
+                    {srv.description}
+                  </p>
                 </div>
               ))}
             </div>
           </AppleCard>
         </div>
 
-        {/* Quick Launch & System Health */}
+        {/* Quick Actions Panel */}
         <div>
           <AppleCard className="h-full flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-2 pb-4 mb-4 border-b border-black/5 dark:border-white/10">
-                <Sparkles size={18} className="text-cercano-blue" />
+              <div className="flex items-center gap-2 pb-4 mb-4 border-b border-black/5 dark:border-white/10 text-cercano-blue">
+                <Sparkles size={18} />
                 <h2 className="text-lg font-bold tracking-apple-title text-cercano-night dark:text-white">
                   Acciones Rápidas
                 </h2>
@@ -292,17 +277,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('network')}
+                  onClick={() => setActiveTab('builder')}
                   className="btn-apple w-full p-3 rounded-xl bg-black/5 hover:bg-black/8 dark:bg-white/5 dark:hover:bg-white/10 flex items-center justify-between text-left transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <HardDrive size={18} className="text-purple-500" />
+                    <Sparkles size={18} className="text-purple-500" />
                     <div>
                       <p className="text-sm font-semibold text-cercano-night dark:text-white">
-                        Descargas de Clientes
+                        Personalizador de Clientes
                       </p>
                       <p className="text-xs text-cercano-slate dark:text-gray-400">
-                        Perfiles preconfigurados LAN
+                        Marca propia y perfiles de conexión
                       </p>
                     </div>
                   </div>

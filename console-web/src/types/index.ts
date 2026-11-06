@@ -40,6 +40,7 @@ export interface RotateKeysResponse {
   key_type: string;
   rotated_at: string;
   backup_path?: string;
+  requires_restart?: boolean;
 }
 
 export interface ServerPortService {
@@ -52,15 +53,15 @@ export interface ServerPortService {
 }
 
 export interface SystemMetrics {
-  uptime_seconds: number;
-  cpu_percent: number;
-  memory_used_mb: number;
-  memory_total_mb: number;
+  uptime_seconds?: number | null;
+  cpu_percent?: number | null;
+  memory_used_mb?: number | null;
+  memory_total_mb?: number | null;
   total_devices: number;
   online_devices: number;
-  active_sessions: number;
-  network_in_mbps: number;
-  network_out_mbps: number;
+  active_sessions?: number | null;
+  network_in_mbps?: number | null;
+  network_out_mbps?: number | null;
   services: ServerPortService[];
 }
 
