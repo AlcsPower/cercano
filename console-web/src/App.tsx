@@ -18,24 +18,27 @@ export const App: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    return (
-      localStorage.getItem('cercano_theme') === 'dark' ||
-      (!('cercano_theme' in localStorage) &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches)
-    );
+    return document.documentElement.classList.contains('dark');
   });
   const [isRotateModalOpen, setIsRotateModalOpen] = useState(false);
   const [onlineCount, setOnlineCount] = useState<number>(0);
   const [totalDevices, setTotalDevices] = useState<number>(0);
 
-  // Sync dark class on document root
+  // Sync dark class on document root & dynamic theme-color meta tag
   useEffect(() => {
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (darkMode) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('cercano_theme', 'dark');
+      if (metaThemeColor) {
+        metaThemeColor.setAttribute('content', '#0B1426');
+      }
     } else {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('cercano_theme', 'light');
+      if (metaThemeColor) {
+        metaThemeColor.setAttribute('content', '#F5F5F7');
+      }
     }
   }, [darkMode]);
 
@@ -109,11 +112,11 @@ export const App: React.FC = () => {
       <footer className="w-full border-t border-black/5 dark:border-white/10 py-6 text-center text-xs text-cercano-slate dark:text-gray-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>
-            Cercano Â© 2026 Cercano Contributors. Distribuido bajo licencia{' '}
+            Cercano © 2026 Cercano Contributors. Distribuido bajo licencia{' '}
             <span className="font-semibold text-cercano-night dark:text-white">AGPL-3.0</span>.
           </p>
           <p className="text-[11px]">
-            Â«Soporte remoto, como si estuvieras ahÃ­.Â»
+            «Soporte remoto, como si estuvieras ahí.»
           </p>
         </div>
       </footer>

@@ -224,8 +224,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
       </div>
 
       {/* Rotate Key Modal / Apple Sheet */}
-      {isRotateModalOpen && (
-        <AppleSheet
+      <AppleSheet
           isOpen={isRotateModalOpen}
           onClose={() => setIsRotateModalOpen(false)}
           title="Rotar Clave Criptográfica del Servidor"
@@ -284,7 +283,6 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
             </form>
           )}
         </AppleSheet>
-      )}
     </div>
   );
 };

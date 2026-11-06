@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Cercano Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Search,
   Monitor,
@@ -31,6 +31,11 @@ export const DevicesView: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'online' | 'offline'>('all');
   const [activeDevice, setActiveDevice] = useState<Device | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const lastActiveDeviceRef = useRef<Device | null>(null);
+  if (activeDevice) {
+    lastActiveDeviceRef.current = activeDevice;
+  }
+  const modalDevice = activeDevice || lastActiveDeviceRef.current;
 
   // New Device Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -332,26 +337,26 @@ export const DevicesView: React.FC = () => {
       )}
 
       {/* Device Details Apple Sheet Modal */}
-      {activeDevice && (
-        <AppleSheet
-          isOpen={!!activeDevice}
-          onClose={() => setActiveDevice(null)}
-          title={activeDevice.name}
-          subtitle={`Dispositivo registrado en Cercano API • ID: ${activeDevice.id}`}
-        >
+      <AppleSheet
+        isOpen={!!activeDevice}
+        onClose={() => setActiveDevice(null)}
+        title={modalDevice?.name || ''}
+        subtitle={modalDevice ? `Dispositivo registrado en Cercano API • ID: ${modalDevice.id}` : ''}
+      >
+        {modalDevice && (
           <div className="space-y-6">
             {/* Status & Live Card */}
             <div className="p-4 rounded-2xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/5 dark:border-white/10 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-3 rounded-2xl bg-white dark:bg-zinc-800 shadow-sm">
-                  {getOsIcon(activeDevice.os)}
+                  {getOsIcon(modalDevice.os)}
                 </div>
                 <div>
                   <p className="text-xs text-cercano-slate dark:text-gray-400">
                     Estado en tiempo real
                   </p>
                   <p className="text-sm font-bold text-cercano-night dark:text-white flex items-center gap-2 mt-0.5">
-                    <StatusPill status={activeDevice.status} />
+                    <StatusPill status={modalDevice.status} />
                   </p>
                 </div>
               </div>
@@ -359,10 +364,10 @@ export const DevicesView: React.FC = () => {
               <AppleButton
                 variant="secondary"
                 size="sm"
-                onClick={() => copyToClipboard(activeDevice.id)}
-                icon={copiedId === activeDevice.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                onClick={() => copyToClipboard(modalDevice.id)}
+                icon={copiedId === modalDevice.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
               >
-                {copiedId === activeDevice.id ? '¡Copiado!' : 'Copiar ID'}
+                {copiedId === modalDevice.id ? '¡Copiado!' : 'Copiar ID'}
               </AppleButton>
             </div>
 
@@ -371,7 +376,7 @@ export const DevicesView: React.FC = () => {
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
                 <span className="text-gray-400">Hostname</span>
                 <p className="text-sm font-semibold text-cercano-night dark:text-white font-mono">
-                  {activeDevice.hostname || '—'}
+                  {modalDevice.hostname || '—'}
                 </p>
               </div>
 
@@ -379,35 +384,35 @@ export const DevicesView: React.FC = () => {
                 <span className="text-gray-400">Dirección IP de Red</span>
                 <p className="text-sm font-semibold text-cercano-night dark:text-white font-mono flex items-center gap-1.5">
                   <Wifi size={14} className="text-cercano-blue" />
-                  {activeDevice.ip_address || '127.0.0.1'}
+                  {modalDevice.ip_address || '127.0.0.1'}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
                 <span className="text-gray-400">Sistema Operativo</span>
                 <p className="text-sm font-semibold text-cercano-night dark:text-white">
-                  {activeDevice.os || 'Desconocido'}
+                  {modalDevice.os || 'Desconocido'}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
                 <span className="text-gray-400">Versión del Cliente Cercano</span>
                 <p className="text-sm font-semibold text-cercano-night dark:text-white font-mono">
-                  v{activeDevice.version || '1.4.0'}
+                  v{modalDevice.version || '1.4.0'}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
                 <span className="text-gray-400">Último Heartbeat</span>
                 <p className="text-xs font-semibold text-cercano-night dark:text-white font-mono">
-                  {activeDevice.last_seen_at ? new Date(activeDevice.last_seen_at).toLocaleString() : '—'}
+                  {modalDevice.last_seen_at ? new Date(modalDevice.last_seen_at).toLocaleString() : '—'}
                 </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
                 <span className="text-gray-400">Fecha de Alta</span>
                 <p className="text-xs font-semibold text-cercano-night dark:text-white font-mono">
-                  {new Date(activeDevice.created_at).toLocaleString()}
+                  {new Date(modalDevice.created_at).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -417,7 +422,7 @@ export const DevicesView: React.FC = () => {
               <AppleButton
                 variant="danger"
                 size="sm"
-                onClick={() => handleDeleteDevice(activeDevice.id)}
+                onClick={() => handleDeleteDevice(modalDevice.id)}
                 icon={<Trash2 size={14} />}
               >
                 Eliminar Registro
@@ -432,12 +437,11 @@ export const DevicesView: React.FC = () => {
               </AppleButton>
             </div>
           </div>
-        </AppleSheet>
-      )}
+        )}
+      </AppleSheet>
 
       {/* Add Device Modal */}
-      {isAddModalOpen && (
-        <AppleSheet
+      <AppleSheet
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
           title="Añadir / Registrar Dispositivo"
@@ -510,8 +514,7 @@ export const DevicesView: React.FC = () => {
               </AppleButton>
             </div>
           </form>
-        </AppleSheet>
-      )}
+      </AppleSheet>
     </div>
   );
 };
