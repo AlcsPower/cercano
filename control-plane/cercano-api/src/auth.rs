@@ -526,14 +526,17 @@ pub async fn login_handler(
     let user_role: String = user.get("role");
     let token = generate_session_token();
 
+    let expiration_modifier = format!("+{} hours", SESSION_EXPIRATION_HOURS);
+
     sqlx::query(
         r#"
         INSERT INTO sessions (token, user_id, expires_at)
-        VALUES (?, ?, datetime('now', '+24 hours'))
+        VALUES (?, ?, datetime('now', ?))
         "#,
     )
     .bind(&token)
     .bind(&user_id)
+    .bind(&expiration_modifier)
     .execute(&state.db)
     .await?;
 

@@ -32,13 +32,15 @@ use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
+use tokio::sync::Mutex;
 
 use crate::auth::AuthenticatedUser;
 use crate::AppState;
 
 pub const KEY_TYPE_ED25519: &str = "ed25519";
 pub const ED25519_PUBLIC_KEY_BYTES: usize = 32;
-pub const ED25519_KEYPAIR_BYTES: usize = 64;
+
+static ROTATE_MUTEX: Mutex<()> = Mutex::const_new(());
 
 #[derive(Debug, Error)]
 pub enum ServerKeyError {
@@ -104,6 +106,8 @@ pub struct RotateKeysResponse {
     pub public_key: String,
     pub key_type: &'static str,
     pub rotated_at: String,
+    pub requires_restart: bool,
+    pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub backup_path: Option<String>,
 }
@@ -189,15 +193,15 @@ pub fn read_public_key<P: AsRef<Path>>(path: P) -> Result<String, ServerKeyError
 }
 
 #[cfg(unix)]
-fn set_secure_permissions<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+async fn set_secure_permissions<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let mut perms = fs::metadata(path.as_ref())?.permissions();
+    let mut perms = tokio::fs::metadata(path.as_ref()).await?.permissions();
     perms.set_mode(0o600);
-    fs::set_permissions(path.as_ref(), perms)
+    tokio::fs::set_permissions(path.as_ref(), perms).await
 }
 
 #[cfg(not(unix))]
-fn set_secure_permissions<P: AsRef<Path>>(_path: P) -> std::io::Result<()> {
+async fn set_secure_permissions<P: AsRef<Path>>(_path: P) -> std::io::Result<()> {
     Ok(())
 }
 
@@ -255,16 +259,20 @@ fn current_utc_iso_timestamp() -> (String, String) {
     (iso, compact)
 }
 
-/// Rotates server Ed25519 keys:
-/// 1. Backs up existing public and private keys with timestamped suffixes.
-/// 2. Generates a fresh Ed25519 keypair.
-/// 3. Writes new private key (0600 on Unix) and public key to disk.
-/// 4. Logs audit event with public key only (private key NEVER logged).
-pub fn rotate_keys<P: AsRef<Path>>(
+/// Rotates server Ed25519 keys with atomic file operations and serialized execution:
+/// 1. Serializes rotation with an async Mutex to prevent race conditions.
+/// 2. Backs up existing public and private keys with timestamped suffixes.
+/// 3. Generates a fresh Ed25519 keypair.
+/// 4. Atomically writes new private key (0600 on Unix) and public key to disk via temporary files.
+/// 5. Logs audit event with public key only (private key NEVER logged).
+/// 6. Returns requires_restart flag indicating hbbs/hbbr must be restarted.
+pub async fn rotate_keys<P: AsRef<Path>>(
     pub_path: P,
     reason: Option<&str>,
     admin_user: &AuthenticatedUser,
 ) -> Result<RotateKeysResponse, ServerKeyError> {
+    let _guard = ROTATE_MUTEX.lock().await;
+
     if admin_user.role != "admin" {
         return Err(ServerKeyError::Forbidden(
             "Se requieren privilegios de administrador para rotar las claves del servidor"
@@ -277,7 +285,7 @@ pub fn rotate_keys<P: AsRef<Path>>(
 
     if let Some(parent) = pub_path_ref.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
-            fs::create_dir_all(parent).map_err(|e| {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
                 ServerKeyError::Io(format!(
                     "Creación de directorio {}: {}",
                     parent.display(),
@@ -292,7 +300,7 @@ pub fn rotate_keys<P: AsRef<Path>>(
     let mut backup_pub_path_str: Option<String> = None;
     if pub_path_ref.exists() {
         let pub_bak = format!("{}.bak.{}", pub_path_ref.display(), compact_ts);
-        fs::copy(pub_path_ref, &pub_bak).map_err(|e| {
+        tokio::fs::copy(pub_path_ref, &pub_bak).await.map_err(|e| {
             ServerKeyError::Io(format!("Respaldo de clave pública a {}: {}", pub_bak, e))
         })?;
         backup_pub_path_str = Some(pub_bak);
@@ -300,30 +308,54 @@ pub fn rotate_keys<P: AsRef<Path>>(
 
     if priv_path.exists() {
         let priv_bak = format!("{}.bak.{}", priv_path.display(), compact_ts);
-        fs::copy(&priv_path, &priv_bak).map_err(|e| {
+        tokio::fs::copy(&priv_path, &priv_bak).await.map_err(|e| {
             ServerKeyError::Io(format!("Respaldo de clave privada a {}: {}", priv_bak, e))
         })?;
-        let _ = set_secure_permissions(&priv_bak);
+        let _ = set_secure_permissions(&priv_bak).await;
     }
 
     let new_keys = generate_server_keypair()?;
 
-    fs::write(&priv_path, &new_keys.private_key_base64).map_err(|e| {
-        ServerKeyError::Io(format!(
-            "Escritura de nueva clave privada en {}: {}",
-            priv_path.display(),
-            e
-        ))
-    })?;
-    let _ = set_secure_permissions(&priv_path);
+    // Atomic write of private key: write to temporary file first with 0o600 permissions, then rename
+    let tmp_priv_path = format!("{}.tmp.{}", priv_path.display(), compact_ts);
+    tokio::fs::write(&tmp_priv_path, &new_keys.private_key_base64)
+        .await
+        .map_err(|e| {
+            ServerKeyError::Io(format!(
+                "Escritura de archivo temporal de clave privada en {}: {}",
+                tmp_priv_path, e
+            ))
+        })?;
+    let _ = set_secure_permissions(&tmp_priv_path).await;
+    tokio::fs::rename(&tmp_priv_path, &priv_path)
+        .await
+        .map_err(|e| {
+            ServerKeyError::Io(format!(
+                "Renombrado atómico de clave privada a {}: {}",
+                priv_path.display(),
+                e
+            ))
+        })?;
 
-    fs::write(pub_path_ref, &new_keys.public_key_base64).map_err(|e| {
-        ServerKeyError::Io(format!(
-            "Escritura de nueva clave pública en {}: {}",
-            pub_path_ref.display(),
-            e
-        ))
-    })?;
+    // Atomic write of public key: write to temporary file first, then rename
+    let tmp_pub_path = format!("{}.tmp.{}", pub_path_ref.display(), compact_ts);
+    tokio::fs::write(&tmp_pub_path, &new_keys.public_key_base64)
+        .await
+        .map_err(|e| {
+            ServerKeyError::Io(format!(
+                "Escritura de archivo temporal de clave pública en {}: {}",
+                tmp_pub_path, e
+            ))
+        })?;
+    tokio::fs::rename(&tmp_pub_path, pub_path_ref)
+        .await
+        .map_err(|e| {
+            ServerKeyError::Io(format!(
+                "Renombrado atómico de clave pública a {}: {}",
+                pub_path_ref.display(),
+                e
+            ))
+        })?;
 
     tracing::info!(
         admin_id = %admin_user.id,
@@ -338,6 +370,8 @@ pub fn rotate_keys<P: AsRef<Path>>(
         public_key: new_keys.public_key_base64,
         key_type: KEY_TYPE_ED25519,
         rotated_at: iso_ts,
+        requires_restart: true,
+        message: "Claves rotadas exitosamente. Se requiere reiniciar el servicio de servidor (hbbs/hbbr) para aplicar el nuevo par de claves.".to_string(),
         backup_path: backup_pub_path_str,
     })
 }
@@ -367,7 +401,7 @@ pub async fn rotate_keys_handler(
     body: Option<Json<RotateKeysRequest>>,
 ) -> Result<Json<RotateKeysResponse>, ServerKeyError> {
     let reason = body.as_ref().and_then(|b| b.reason.as_deref());
-    let response = rotate_keys(&state.config.server_key_path, reason, &user)?;
+    let response = rotate_keys(&state.config.server_key_path, reason, &user).await?;
     Ok(Json(response))
 }
 
@@ -430,8 +464,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_rotate_keys_flow_and_backup() {
+    #[tokio::test]
+    async fn test_rotate_keys_flow_and_backup() {
         let dir = tempdir().unwrap();
         let pub_path = dir.path().join("id_ed25519.pub");
         let priv_path = dir.path().join("id_ed25519");
@@ -447,11 +481,14 @@ mod tests {
             created_at: "2026-11-05 10:00:00".to_string(),
         };
 
-        let rotate_res =
-            rotate_keys(&pub_path, Some("scheduled maintenance"), &admin_user).unwrap();
+        let rotate_res = rotate_keys(&pub_path, Some("scheduled maintenance"), &admin_user)
+            .await
+            .unwrap();
 
         assert_eq!(rotate_res.status, "rotated");
         assert_eq!(rotate_res.key_type, "ed25519");
+        assert!(rotate_res.requires_restart);
+        assert!(!rotate_res.message.is_empty());
         assert_ne!(rotate_res.public_key, initial_keys.public_key_base64);
         assert!(rotate_res.backup_path.is_some());
 
@@ -463,8 +500,8 @@ mod tests {
         assert_eq!(new_on_disk_priv.trim().len(), 88);
     }
 
-    #[test]
-    fn test_rotate_keys_rejects_non_admin() {
+    #[tokio::test]
+    async fn test_rotate_keys_rejects_non_admin() {
         let dir = tempdir().unwrap();
         let pub_path = dir.path().join("id_ed25519.pub");
 
@@ -475,7 +512,7 @@ mod tests {
             created_at: "2026-11-05 10:00:00".to_string(),
         };
 
-        let res = rotate_keys(&pub_path, None, &operator_user);
+        let res = rotate_keys(&pub_path, None, &operator_user).await;
         match res {
             Err(ServerKeyError::Forbidden(msg)) => {
                 assert!(msg.contains("administrador"));

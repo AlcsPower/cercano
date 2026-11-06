@@ -143,6 +143,10 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool, DbError> {
 
     run_migrations(&pool).await?;
 
+    if let Err(e) = purge_stale_records(&pool).await {
+        tracing::warn!("Failed to purge stale records during init_db: {:?}", e);
+    }
+
     Ok(pool)
 }
 
@@ -219,6 +223,32 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), DbError> {
     }
 
     Ok(())
+}
+
+/// Purges expired sessions and login attempts older than 24 hours.
+pub async fn purge_stale_records(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let deleted_attempts =
+        sqlx::query("DELETE FROM login_attempts WHERE attempted_at < datetime('now', '-24 hours')")
+            .execute(pool)
+            .await?
+            .rows_affected();
+
+    let deleted_sessions = sqlx::query("DELETE FROM sessions WHERE expires_at < datetime('now')")
+        .execute(pool)
+        .await?
+        .rows_affected();
+
+    let total = deleted_attempts + deleted_sessions;
+    if total > 0 {
+        tracing::info!(
+            deleted_attempts = deleted_attempts,
+            deleted_sessions = deleted_sessions,
+            total = total,
+            "Purged stale sessions and login attempts"
+        );
+    }
+
+    Ok(total)
 }
 
 fn ensure_parent_dir(database_url: &str) -> Result<(), std::io::Error> {
@@ -306,5 +336,72 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(rows.len(), 3);
+    }
+    #[tokio::test]
+    async fn test_purge_stale_records() {
+        let pool = init_db("sqlite::memory:").await.unwrap();
+
+        // Insert a user for foreign key constraint on sessions
+        sqlx::query(
+            "INSERT INTO users (id, username, password_hash, role, is_active) VALUES (?, ?, ?, 'user', 1)",
+        )
+        .bind("user-test-purge")
+        .bind("purge_user")
+        .bind("hash")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // 1. Insert an expired session (yesterday) and an active session (tomorrow)
+        sqlx::query(
+            "INSERT INTO sessions (token, user_id, expires_at) VALUES ('expired_tok', 'user-test-purge', datetime('now', '-2 hours'))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO sessions (token, user_id, expires_at) VALUES ('active_tok', 'user-test-purge', datetime('now', '+2 hours'))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // 2. Insert an old login attempt (> 24 hours ago) and a fresh login attempt
+        sqlx::query(
+            "INSERT INTO login_attempts (username, ip_address, attempted_at, success) VALUES ('purge_user', '127.0.0.1', datetime('now', '-25 hours'), 0)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO login_attempts (username, ip_address, attempted_at, success) VALUES ('purge_user', '127.0.0.1', datetime('now', '-1 hour'), 0)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // 3. Run purge
+        let purged = purge_stale_records(&pool).await.unwrap();
+        assert_eq!(purged, 2);
+
+        // 4. Verify expired session deleted, active preserved
+        let remaining_sessions = sqlx::query("SELECT token FROM sessions")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining_sessions.len(), 1);
+        assert_eq!(
+            remaining_sessions[0].get::<String, _>("token"),
+            "active_tok"
+        );
+
+        // 5. Verify old attempt deleted, fresh preserved
+        let remaining_attempts = sqlx::query("SELECT count(*) as cnt FROM login_attempts")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining_attempts.get::<i64, _>("cnt"), 1);
     }
 }

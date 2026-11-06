@@ -17,29 +17,58 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use axum::response::IntoResponse;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
+
+use crate::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HealthResponse {
     pub status: String,
     pub service: String,
     pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
-pub async fn health_handler() -> impl IntoResponse {
-    Json(HealthResponse {
-        status: "ok".to_string(),
-        service: "cercano-api".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-    })
+pub async fn health_handler(State(state): State<AppState>) -> Response {
+    match sqlx::query("SELECT 1").execute(&state.db).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(HealthResponse {
+                status: "ok".to_string(),
+                service: "cercano-api".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                database: Some("connected".to_string()),
+                error: None,
+            }),
+        )
+            .into_response(),
+        Err(err) => {
+            tracing::error!("Health check database ping failed: {:?}", err);
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "status": "degraded",
+                    "service": "cercano-api",
+                    "error": "database unreachable"
+                })),
+            )
+                .into_response()
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::response::IntoResponse;
+    use crate::config::Config;
+    use crate::db::init_db;
 
     #[tokio::test]
     async fn test_health_response_values() {
@@ -47,16 +76,36 @@ mod tests {
             status: "ok".to_string(),
             service: "cercano-api".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
+            database: Some("connected".to_string()),
+            error: None,
         };
 
         assert_eq!(response.status, "ok");
         assert_eq!(response.service, "cercano-api");
         assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(response.database.as_deref(), Some("connected"));
     }
 
     #[tokio::test]
     async fn test_health_handler_execution() {
-        let resp = health_handler().await.into_response();
-        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let db = init_db("sqlite::memory:").await.unwrap();
+        let state = AppState {
+            config: Config::default(),
+            db,
+        };
+        let resp = health_handler(State(state)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_health_handler_db_unreachable() {
+        let db = init_db("sqlite::memory:").await.unwrap();
+        db.close().await;
+        let state = AppState {
+            config: Config::default(),
+            db,
+        };
+        let resp = health_handler(State(state)).await;
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

@@ -28,7 +28,6 @@ pub const DEFAULT_DB_PATH: &str = "sqlite://cercano.db?mode=rwc";
 pub const DEFAULT_LOG_LEVEL: &str = "info";
 pub const DEFAULT_DEVICE_GRACE_PERIOD_SECS: u64 = 60;
 pub const DEFAULT_SERVER_KEY_PATH: &str = "/opt/cercano/data/id_ed25519.pub";
-pub const DEV_SERVER_KEY_PATH: &str = "tests/lab/data/server/id_ed25519.pub";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
@@ -42,21 +41,13 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        let server_key_path = if Path::new(DEFAULT_SERVER_KEY_PATH).exists() {
-            DEFAULT_SERVER_KEY_PATH.to_string()
-        } else if Path::new(DEV_SERVER_KEY_PATH).exists() {
-            DEV_SERVER_KEY_PATH.to_string()
-        } else {
-            DEFAULT_SERVER_KEY_PATH.to_string()
-        };
-
         Self {
             host: DEFAULT_HOST.to_string(),
             port: DEFAULT_PORT,
             database_url: DEFAULT_DB_PATH.to_string(),
             log_level: DEFAULT_LOG_LEVEL.to_string(),
             device_grace_period_secs: DEFAULT_DEVICE_GRACE_PERIOD_SECS,
-            server_key_path,
+            server_key_path: DEFAULT_SERVER_KEY_PATH.to_string(),
         }
     }
 }
@@ -209,6 +200,7 @@ mod tests {
         assert_eq!(cfg.database_url, "sqlite://cercano.db?mode=rwc");
         assert_eq!(cfg.log_level, "info");
         assert_eq!(cfg.device_grace_period_secs, 60);
+        assert_eq!(cfg.server_key_path, "/opt/cercano/data/id_ed25519.pub");
     }
 
     #[test]
