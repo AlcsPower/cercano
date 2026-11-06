@@ -82,12 +82,26 @@ impl AuditStore {
         signing_key: &SigningKey,
         key_id: &str,
     ) -> Result<Option<ArchiveEnvelope>, AuditError> {
-        let events = self
-            .query_events(crate::model::EventFilter {
-                to_ts: Some(cutoff.to_rfc3339()),
-                ..Default::default()
-            })
-            .await?;
+        const ARCHIVE_PAGE_SIZE: i64 = 10_000;
+        // Pages bound database fetches; the signed envelope remains one file for compatibility.
+        let mut events = Vec::new();
+        let mut offset = 0;
+        loop {
+            let page = self
+                .query_events(crate::model::EventFilter {
+                    to_ts: Some(cutoff.to_rfc3339()),
+                    limit: Some(ARCHIVE_PAGE_SIZE),
+                    offset: Some(offset),
+                    ..Default::default()
+                })
+                .await?;
+            let done = page.len() < ARCHIVE_PAGE_SIZE as usize;
+            events.extend(page);
+            if done {
+                break;
+            }
+            offset += ARCHIVE_PAGE_SIZE;
+        }
         if events.is_empty() {
             return Ok(None);
         }
@@ -118,6 +132,7 @@ impl AuditStore {
         signing_key: &SigningKey,
         key_id: &str,
     ) -> Result<u64, AuditError> {
+        // Physical deletion requires a verified chain truncation checkpoint; this API only records approval.
         let count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM audit_events WHERE ts < ? AND action <> 'audit.purge'",
         )

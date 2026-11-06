@@ -121,6 +121,12 @@ impl AuditStore {
         CREATE INDEX IF NOT EXISTS idx_audit_checkpoints_ts ON audit_checkpoints(ts);
         CREATE INDEX IF NOT EXISTS idx_audit_checkpoints_key_id ON audit_checkpoints(key_id);
 
+        CREATE TABLE IF NOT EXISTS audit_export_checkpoint (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            sequence INTEGER NOT NULL DEFAULT 0,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TRIGGER IF NOT EXISTS trg_audit_checkpoints_no_update
         BEFORE UPDATE ON audit_checkpoints
         BEGIN
@@ -385,6 +391,25 @@ impl AuditStore {
             last_sequence: Some(last_seq),
             error: None,
         })
+    }
+
+    /// Loads the persisted SIEM export cursor, defaulting to zero.
+    pub async fn load_export_cursor(&self) -> Result<i64, AuditError> {
+        let row = sqlx::query("SELECT sequence FROM audit_export_checkpoint WHERE id = 1")
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row.map(|r| r.try_get("sequence")).transpose()?.unwrap_or(0))
+    }
+
+    /// Persists the SIEM export cursor atomically.
+    pub async fn save_export_cursor(&self, sequence: i64) -> Result<(), AuditError> {
+        sqlx::query(
+            "INSERT INTO audit_export_checkpoint (id, sequence) VALUES (1, ?)\n             ON CONFLICT(id) DO UPDATE SET sequence = excluded.sequence, updated_at = CURRENT_TIMESTAMP",
+        )
+        .bind(sequence)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     /// Retrieves the most recent event in the store.

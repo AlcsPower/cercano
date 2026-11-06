@@ -406,6 +406,37 @@ async fn test_f2_12_session_note_is_authenticated_immutable_and_trace_linked() {
     let ctx = setup_test_context().await;
     let trace_id = "trace-note-001";
     let payload = json!({"trace_id": trace_id, "note": "Incidente resuelto por soporte", "event_id": "note-001"});
+
+    // 1. Attempt note on non-existent trace_id -> 404 Not Found
+    let req_nonexistent = Request::builder()
+        .uri("/api/audit/session/note")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+    let res_nonexistent = ctx.app.clone().oneshot(req_nonexistent).await.unwrap();
+    assert_eq!(res_nonexistent.status(), StatusCode::NOT_FOUND);
+
+    // 2. Create the session event so trace_id exists
+    let start_payload = json!({
+        "trace_id": trace_id,
+        "controller_id": "user-123",
+        "controlled_id": ctx.device_id,
+        "session_type": "remote_desktop",
+        "auth_method": "password"
+    });
+    let req_start = Request::builder()
+        .uri("/api/audit/session/start")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::from(serde_json::to_vec(&start_payload).unwrap()))
+        .unwrap();
+    let res_start = ctx.app.clone().oneshot(req_start).await.unwrap();
+    assert_eq!(res_start.status(), StatusCode::CREATED);
+
+    // 3. Post note on existing trace_id -> 201 Created
     let req = Request::builder()
         .uri("/api/audit/session/note")
         .method("POST")
@@ -420,18 +451,22 @@ async fn test_f2_12_session_note_is_authenticated_immutable_and_trace_linked() {
     assert_eq!(event["action"], "session.note");
     assert_eq!(event["trace_id"], trace_id);
     assert_eq!(event["details"]["note"], payload["note"]);
-    let req = Request::builder()
+
+    // 4. Unauthenticated -> 401 Unauthorized
+    let req_unauth = Request::builder()
         .uri("/api/audit/session/note")
         .method("POST")
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_vec(&payload).unwrap()))
         .unwrap();
     assert_eq!(
-        ctx.app.clone().oneshot(req).await.unwrap().status(),
+        ctx.app.clone().oneshot(req_unauth).await.unwrap().status(),
         StatusCode::UNAUTHORIZED
     );
+
+    // 5. Blank note -> 400 Bad Request
     let bad = json!({"trace_id": trace_id, "note": "   "});
-    let req = Request::builder()
+    let req_bad = Request::builder()
         .uri("/api/audit/session/note")
         .method("POST")
         .header("content-type", "application/json")
@@ -439,7 +474,7 @@ async fn test_f2_12_session_note_is_authenticated_immutable_and_trace_linked() {
         .body(Body::from(serde_json::to_vec(&bad).unwrap()))
         .unwrap();
     assert_eq!(
-        ctx.app.clone().oneshot(req).await.unwrap().status(),
+        ctx.app.clone().oneshot(req_bad).await.unwrap().status(),
         StatusCode::BAD_REQUEST
     );
 }

@@ -405,6 +405,18 @@ pub async fn session_note_handler(
             return Ok((StatusCode::OK, Json(existing)));
         }
     }
+    if state
+        .audit
+        .query_events(EventFilter {
+            trace_id: Some(payload.trace_id.clone()),
+            limit: Some(1),
+            ..Default::default()
+        })
+        .await?
+        .is_empty()
+    {
+        return Err(AuditRouteError::NotFound("trace_id no existe".into()));
+    }
     let mut input = EventInput::new(
         payload.trace_id,
         Source::Api,
@@ -880,10 +892,16 @@ pub async fn export_events_handler(
         from_seq: params.from_seq,
         to_seq: params.to_seq,
         after_sequence: params.cursor,
-        limit: Some(limit),
+        limit: Some(limit + 1),
         offset: params.offset,
     };
-    let events = state.audit.query_events(filter).await?;
+    let mut events = state.audit.query_events(filter).await?;
+    let next_cursor = if events.len() > limit as usize {
+        events.truncate(limit as usize);
+        events.last().map(|event| event.sequence)
+    } else {
+        None
+    };
     let mut body = String::new();
     if format == "csv" {
         body.push_str("sequence,event_id,trace_id,ts,source,category,action,actor,subject,outcome,details,prev_hash,hash,created_at\n");
@@ -918,6 +936,13 @@ pub async fn export_events_handler(
     response
         .headers_mut()
         .insert(header::CONTENT_DISPOSITION, disposition);
+    if let Some(cursor) = next_cursor {
+        response.headers_mut().insert(
+            header::HeaderName::from_static("x-next-cursor"),
+            HeaderValue::from_str(&cursor.to_string())
+                .map_err(|e| AuditRouteError::Validation(format!("cursor inválido: {e}")))?,
+        );
+    }
     Ok(response)
 }
 
