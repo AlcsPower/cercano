@@ -38,8 +38,8 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F2-01 | Especificación del esquema de eventos | F1 cerrado | ControlPlane | Seguridad | Pendiente |
-| F2-02 | Núcleo `audit-core`: almacén append-only y cadena de hashes | F2-01 | ControlPlane | QA | Pendiente |
+| F2-01 | Especificación del esquema de eventos | F1 cerrado | ControlPlane | Seguridad | En verificación |
+| F2-02 | Núcleo `audit-core`: almacén append-only y cadena de hashes | F2-01 | ControlPlane | QA | En verificación |
 | F2-03 | Checkpoints firmados y `cercano-audit verify` | F2-02 | ControlPlane | Seguridad | Pendiente |
 | F2-04 | Endpoints de ingestión (conexión, archivo, alarma) | F2-02, F0-06 | ControlPlane | QA | Pendiente |
 | F2-05 | Parches al cliente para hooks faltantes | F2-04 | Cliente | QA | Pendiente |

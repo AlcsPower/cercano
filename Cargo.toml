@@ -2,4 +2,5 @@
 resolver = "2"
 members = [
     "control-plane/cercano-api",
+    "control-plane/audit-core",
 ]

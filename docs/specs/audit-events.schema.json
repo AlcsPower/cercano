@@ -1,0 +1,171 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cercano.local/schemas/audit-events.schema.json",
+  "title": "CercanoAuditEvent",
+  "description": "Esquema unificado para eventos de auditoría append-only con encadenamiento criptográfico en el ecosistema Cercano.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "trace_id",
+    "ts",
+    "source",
+    "category",
+    "action",
+    "actor",
+    "outcome",
+    "details",
+    "prev_hash",
+    "hash"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "Identificador universalmente único del evento (UUIDv7 obligatorio o UUIDv4 válido)."
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Identificador de trazabilidad extremo a extremo para correlacionar todos los eventos de una misma sesión u operación."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Marca de tiempo UTC en formato ISO 8601 / RFC 3339 con precisión de milisegundos (ej. 2026-11-06T15:00:00.000Z)."
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "client",
+        "hbbs",
+        "hbbr",
+        "api",
+        "console",
+        "builder"
+      ],
+      "description": "Subsistema o componente de Cercano que originó el evento."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "conn",
+        "file",
+        "alarm",
+        "console",
+        "auth",
+        "build"
+      ],
+      "description": "Categoría taxonómica del evento de auditoría."
+    },
+    "action": {
+      "type": "string",
+      "pattern": "^(conn|file|alarm|console|auth|build)(\\.[a-z0-9_]+)+$",
+      "description": "Acción específica auditada estructurada con notación de punto bajo su categoría (ej. conn.start, file.transfer, auth.login)."
+    },
+    "actor": {
+      "$ref": "#/definitions/Actor"
+    },
+    "subject": {
+      "$ref": "#/definitions/Subject"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failure",
+        "denied"
+      ],
+      "description": "Resultado de la acción: éxito (success), fallo funcional o de conexión (failure), o denegación por política o permisos (denied)."
+    },
+    "details": {
+      "type": "object",
+      "description": "Atributos contextuales y metadatos específicos de la acción. Queda ESTRICTAMENTE PROHIBIDO almacenar secretos, contraseñas en texto claro, claves privadas, tokens de sesión o contenidos binarios no resumidos en este objeto.",
+      "additionalProperties": true
+    },
+    "prev_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Hash SHA-256 en minúsculas (64 caracteres hexadecimales) del evento inmediatamente anterior en la cadena. Para el bloque génesis inicial, corresponde a 64 ceros."
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Hash criptográfico SHA-256 en minúsculas (64 caracteres hexadecimales) que sella este evento: SHA-256(prev_hash_ascii || canonical_json_without_hash_fields)."
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "Actor": {
+      "type": "object",
+      "description": "Entidad que ejecuta o intenta ejecutar la acción.",
+      "required": [
+        "id",
+        "actor_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Identificador único del actor (ID de usuario, UUID de dispositivo o identificador del sistema)."
+        },
+        "actor_type": {
+          "type": "string",
+          "enum": [
+            "user",
+            "device",
+            "system"
+          ],
+          "description": "Tipo de entidad que actúa."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Nombre legible de usuario, host o alias asignado (opcional)."
+        },
+        "ip": {
+          "type": "string",
+          "description": "Dirección IP (IPv4 o IPv6) desde la cual actuó el actor (opcional)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "Subject": {
+      "type": "object",
+      "description": "Entidad, recurso o dispositivo sobre el cual recae la acción (opcional).",
+      "required": [
+        "id",
+        "subject_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Identificador único de la entidad receptora o afectada."
+        },
+        "subject_type": {
+          "type": "string",
+          "enum": [
+            "device",
+            "user",
+            "group",
+            "session",
+            "installer",
+            "setting",
+            "system"
+          ],
+          "description": "Tipo de entidad sujeta a la acción."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Nombre descriptivo o denominación del sujeto (opcional)."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
