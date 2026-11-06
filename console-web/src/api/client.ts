@@ -180,57 +180,74 @@ class CercanoApiClient {
     const userTrim = (username || '').trim();
     const passTrim = (password || '').trim();
 
+    if (!userTrim || !passTrim) {
+      throw new Error('Por favor complete todos los campos.');
+    }
+
+    // Explicit Demo Mode: Only active if explicitly enabled via environment variable
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      const mockResponse: AuthResponse = {
+        token: 'cercano_sess_demo_' + Math.random().toString(36).substring(2),
+        expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+        user: {
+          id: 'usr-admin-demo',
+          username: userTrim,
+          role: 'admin',
+          created_at: '2026-01-01T00:00:00Z',
+        },
+      };
+
+      this.setToken(mockResponse.token);
+      this.notifyStatus(false);
+      return mockResponse;
+    }
+
+    let res: Response;
     try {
-      const res = await fetch('/api/auth/login', {
+      res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: userTrim, password: passTrim }),
-        signal: AbortSignal.timeout(2500),
+        signal: AbortSignal.timeout(5000),
       });
+    } catch {
+      throw new Error('Error de conexión: No se pudo conectar con el servidor cercano-api.');
+    }
 
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        // Only accept if backend returned real token AND user object
-        if (data && typeof data === 'object' && 'token' in data && 'user' in data) {
-          const authData = data as AuthResponse;
-          this.setToken(authData.token);
-          this.notifyStatus(true);
-          return authData;
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && typeof data === 'object' && 'token' in data && 'user' in data) {
+        const authData = data as AuthResponse;
+        this.setToken(authData.token);
+        this.notifyStatus(true);
+        return authData;
+      }
+      throw new Error('Respuesta inválida recibida del servidor cercano-api.');
+    }
+
+    if (res.status === 401) {
+      throw new Error('Credenciales incorrectas. Verifique usuario y contraseña.');
+    }
+
+    if (res.status === 429) {
+      throw new Error('Demasiados intentos fallidos. Su acceso está temporalmente bloqueado (15 min).');
+    }
+
+    let errorMessage = `Error del servidor (${res.status}): No se pudo procesar la autenticación.`;
+    try {
+      const errData = await res.json();
+      if (errData && typeof errData === 'object') {
+        if (typeof errData.message === 'string' && errData.message.trim()) {
+          errorMessage = errData.message.trim();
+        } else if (typeof errData.error === 'string' && errData.error.trim()) {
+          errorMessage = errData.error.trim();
         }
-      } else if (res.status === 401) {
-        throw new Error('Credenciales incorrectas. Verifique usuario y contraseña.');
       }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes('Credenciales incorrectas')) {
-        throw err;
-      }
-      // If server unreachable or stub responded, seamless fallback to autonomous mode
+    } catch {
+      // response body was not JSON or could not be parsed
     }
 
-    // Autonomous demo credentials verification
-    const isAccepted =
-      passTrim === 'CercanoAdmin2026!' ||
-      passTrim === 'admin' ||
-      passTrim === 'admin123';
-
-    if (!isAccepted) {
-      throw new Error('Contraseña incorrecta para el usuario administrador.');
-    }
-
-    const mockResponse: AuthResponse = {
-      token: 'cercano_sess_' + Math.random().toString(36).substring(2),
-      expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
-      user: {
-        id: 'usr-admin-01',
-        username: userTrim || 'admin',
-        role: 'admin',
-        created_at: '2026-01-01T00:00:00Z',
-      },
-    };
-
-    this.setToken(mockResponse.token);
-    this.notifyStatus(false);
-    return mockResponse;
+    throw new Error(errorMessage);
   }
 
   // Auth: Logout
@@ -251,25 +268,39 @@ class CercanoApiClient {
 
   // Auth: Get current user
   public async getMe(): Promise<User> {
-    if (this.isConnectedToLiveApi) {
-      try {
-        const res = await fetch('/api/auth/me', {
-          headers: this.getHeaders(),
-          signal: AbortSignal.timeout(2000),
-        });
-        if (res.ok) {
-          return await res.json();
-        }
-      } catch {
-        // Fallback below
-      }
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      return {
+        id: 'usr-admin-demo',
+        username: 'admin',
+        role: 'admin',
+        created_at: '2026-01-01T00:00:00Z',
+      };
     }
-    return {
-      id: 'usr-admin-01',
-      username: 'admin',
-      role: 'admin',
-      created_at: '2026-01-01T00:00:00Z',
-    };
+
+    if (!this.token) {
+      throw new Error('No hay sesión activa.');
+    }
+
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: this.getHeaders(),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        this.notifyStatus(true);
+        return await res.json();
+      }
+      if (res.status === 401) {
+        this.setToken(null);
+        throw new Error('Sesión expirada o inválida.');
+      }
+      throw new Error(`Error al verificar sesión (${res.status}).`);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        throw err;
+      }
+      throw new Error('Error de conexión: No se pudo verificar la sesión con cercano-api.');
+    }
   }
 
   // Devices: List all devices

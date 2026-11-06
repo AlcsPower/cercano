@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useState } from 'react';
-import { Lock, ArrowRight, AlertCircle, KeyRound, Server } from 'lucide-react';
+import { Lock, ArrowRight, AlertCircle, Server } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApi } from '../../context/ApiContext';
 import { CercanoLogo } from '../common/CercanoLogo';
@@ -11,8 +11,8 @@ import { AppleButton } from '../common/AppleButton';
 export const LoginView: React.FC = () => {
   const { login } = useAuth();
   const { isLiveApi } = useApi();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('CercanoAdmin2026!');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasShaked, setHasShaked] = useState(false);
@@ -47,12 +47,6 @@ export const LoginView: React.FC = () => {
     setTimeout(() => setHasShaked(false), 450);
   };
 
-  const fillDemoCredentials = () => {
-    setUsername('admin');
-    setPassword('CercanoAdmin2026!');
-    setError(null);
-  };
-
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden bg-gradient-to-br from-[#E2E8F6] via-[#F2F5FB] to-[#DDE5F5] dark:from-[#070D18] dark:via-[#0B1426] dark:to-[#040810]">
       {/* Decorative ambient Apple aura */}
@@ -73,7 +67,7 @@ export const LoginView: React.FC = () => {
             </div>
             {/* Live indicator dot */}
             <span
-              title={isLiveApi ? 'cercano-api disponible' : 'Modo local autónomo'}
+              title={isLiveApi ? 'cercano-api disponible' : 'cercano-api no detectado'}
               className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white dark:border-zinc-900 flex items-center justify-center ${
                 isLiveApi ? 'bg-cercano-green pulse-emerald' : 'bg-amber-400'
               }`}
@@ -150,18 +144,10 @@ export const LoginView: React.FC = () => {
           </div>
         </form>
 
-        {/* Quick Demo Fill Helper */}
+        {/* Status footer */}
         <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/10 text-center">
-          <button
-            type="button"
-            onClick={fillDemoCredentials}
-            className="btn-apple text-xs text-cercano-blue dark:text-blue-400 hover:underline flex items-center justify-center gap-1.5 mx-auto font-medium"
-          >
-            <KeyRound size={13} />
-            <span>Rellenar credenciales por defecto (admin)</span>
-          </button>
-          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">
-            Compatible con <code className="font-mono text-gray-600 dark:text-gray-300">cercano-api</code> en puerto 21114
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">
+            Conexión con <code className="font-mono text-gray-600 dark:text-gray-300">cercano-api</code> en puerto 21114
           </p>
         </div>
       </div>

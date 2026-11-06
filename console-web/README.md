@@ -15,7 +15,7 @@ Portal web oficial de administración y supervisión de infraestructura de **Cer
 
 1. **Autenticación (macOS Lock Screen / Apple ID):**
    - Tarjeta flotante con efecto de cristal esmerilado, avatar con anillo de marca y animación de agitación (*shake*) ante credenciales incorrectas.
-   - Credenciales de administrador por defecto: `admin` / `CercanoAdmin2026!`.
+   - Autenticación segura contra `cercano-api` (`POST /api/auth/login`) con emisión de Bearer token y bloqueo temporal tras intentos fallidos.
 2. **Panel General (Dashboard):**
    - Métricas de disponibilidad (*uptime*), uso de CPU/Memoria, sesiones remotas activas cifradas y relación de dispositivos conectados vs. registrados.
    - Estado de los 4 procesos clave (`cercano-api`, `cercano-nat`, `hbbs`, `hbbr`).
@@ -35,7 +35,7 @@ Portal web oficial de administración y supervisión de infraestructura de **Cer
 ## 3. Integración con el Backend (`cercano-api`)
 
 - **Detección automática de conectividad:** La consola verifica el endpoint `/healthz` y las rutas `/api/*` en el puerto `21114`.
-- **Modo Demostración / Autónomo:** Si la API no está en ejecución, la consola conmuta automáticamente al modo local interactivo sin bloquear la experiencia de usuario, permitiendo probar rotación de llaves, registro de dispositivos y navegación completa.
+- **Modo Demostración / Simulación:** Activado exclusivamente si la variable `VITE_DEMO_MODE=true` está presente en el entorno; en producción o por defecto, la autenticación se realiza de forma estricta contra `cercano-api` sin fallbacks silenciosos.
 
 ## 4. Comandos de Ejecución
 
