@@ -184,6 +184,45 @@ pub async fn authenticate_ingestion_caller(
     ))
 }
 
+/// Authenticates legacy client audit ingestion calls (`/api/audit/conn` and `/api/audit/file`).
+///
+/// Accepts:
+/// 1. `X-Cercano-Internal-Token` or Bearer admin token (relay/server forwarding).
+/// 2. Direct client ingestion from a registered device ID present in the `devices` table,
+///    verifying that the device exists to prevent unauthenticated/rogue event injection (H46).
+pub async fn authenticate_legacy_client_caller(
+    headers: &HeaderMap,
+    state: &AppState,
+    device_id: Option<&str>,
+) -> Result<(), AuditRouteError> {
+    // 1. Internal token or admin session
+    if authenticate_ingestion_caller(headers, state).await.is_ok() {
+        return Ok(());
+    }
+
+    // 2. Direct client ingestion requires a valid registered device ID
+    let dev_id = device_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            AuditRouteError::Unauthorized(
+                "Autenticación requerida: se requiere token interno, sesión de admin o dispositivo registrado".into(),
+            )
+        })?;
+
+    let row = sqlx::query("SELECT id FROM devices WHERE id = ?")
+        .bind(dev_id)
+        .fetch_optional(&state.db)
+        .await?;
+
+    match row {
+        Some(_) => Ok(()),
+        None => Err(AuditRouteError::Unauthorized(format!(
+            "Dispositivo '{dev_id}' no registrado en el sistema"
+        ))),
+    }
+}
+
 /// Compares two secrets without leaking their length-independent prefix timing.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
@@ -1042,7 +1081,7 @@ pub async fn legacy_conn_audit_handler(
     headers: HeaderMap,
     Json(payload): Json<LegacyConnAuditRequest>,
 ) -> Result<(StatusCode, &'static str), AuditRouteError> {
-    authenticate_ingestion_caller(&headers, &state).await?;
+    authenticate_legacy_client_caller(&headers, &state, payload.id.as_deref()).await?;
 
     if let Some(ref nonce) = payload.nonce {
         if state.audit.get_event_by_id(nonce).await?.is_some() {
@@ -1050,15 +1089,42 @@ pub async fn legacy_conn_audit_handler(
         }
     }
 
-    let is_close = payload.action.as_deref() == Some("close");
-    let action = if is_close { "conn.end" } else { "conn.start" };
+    let action = match payload.action.as_deref() {
+        Some("close") => "conn.end",
+        Some("new") => "conn.start",
+        None if payload.peer.is_some()
+            || payload.conn_type.is_some()
+            || payload.primary_auth.is_some() =>
+        {
+            "conn.auth"
+        }
+        _ => "conn.event",
+    };
+
     let trace_id = payload
         .trace_id
         .or(payload.conn_audit_ref)
-        .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+        .unwrap_or_else(|| {
+            let dev = payload.id.as_deref().unwrap_or("anon");
+            let conn = payload
+                .conn_id
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "0".into());
+            format!("conn-{dev}-{conn}")
+        });
 
     let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
     let actor = Actor::with_details(actor_id, "device", None, payload.ip.clone());
+
+    let mut subject = None;
+    if let Some(ref peer_val) = payload.peer {
+        if let Some(arr) = peer_val.as_array() {
+            if let Some(p_id) = arr.first().and_then(|v| v.as_str()) {
+                let p_name = arr.get(1).and_then(|v| v.as_str()).map(str::to_owned);
+                subject = Some(Subject::with_details(p_id, "device", p_name));
+            }
+        }
+    }
 
     let mut details = serde_json::Map::new();
     if let Some(conn_id) = payload.conn_id {
@@ -1073,6 +1139,18 @@ pub async fn legacy_conn_audit_handler(
     if let Some(ip) = payload.ip {
         details.insert("ip".into(), json!(ip));
     }
+    if let Some(peer) = payload.peer {
+        details.insert("peer".into(), peer);
+    }
+    if let Some(conn_type) = payload.conn_type {
+        details.insert("conn_type".into(), conn_type);
+    }
+    if let Some(pa) = payload.primary_auth {
+        details.insert("primary_auth".into(), json!(pa));
+    }
+    if let Some(tf) = payload.two_factor {
+        details.insert("two_factor".into(), json!(tf));
+    }
 
     let mut input = EventInput::new(
         trace_id,
@@ -1083,6 +1161,10 @@ pub async fn legacy_conn_audit_handler(
         Outcome::Success,
         serde_json::Value::Object(details),
     );
+
+    if let Some(sub) = subject {
+        input = input.with_subject(sub);
+    }
 
     if let Some(nonce) = payload.nonce {
         input = input.with_event_id(nonce);
@@ -1099,7 +1181,7 @@ pub async fn legacy_file_audit_handler(
     headers: HeaderMap,
     Json(payload): Json<LegacyFileAuditRequest>,
 ) -> Result<(StatusCode, &'static str), AuditRouteError> {
-    authenticate_ingestion_caller(&headers, &state).await?;
+    authenticate_legacy_client_caller(&headers, &state, payload.id.as_deref()).await?;
 
     if let Some(ref nonce) = payload.nonce {
         if state.audit.get_event_by_id(nonce).await?.is_some() {
@@ -1107,9 +1189,14 @@ pub async fn legacy_file_audit_handler(
         }
     }
 
-    let trace_id = payload
-        .trace_id
-        .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+    let trace_id = payload.trace_id.unwrap_or_else(|| {
+        let dev = payload.id.as_deref().unwrap_or("anon");
+        let conn = payload
+            .conn_id
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "0".into());
+        format!("conn-{dev}-{conn}")
+    });
     let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
     let actor = Actor::new(actor_id);
     let subject = payload.peer_id.map(Subject::new);
@@ -1175,6 +1262,14 @@ pub struct LegacyConnAuditRequest {
     pub uuid: Option<String>,
     #[serde(default)]
     pub nonce: Option<String>,
+    #[serde(default)]
+    pub peer: Option<serde_json::Value>,
+    #[serde(default, rename = "type")]
+    pub conn_type: Option<serde_json::Value>,
+    #[serde(default)]
+    pub primary_auth: Option<i64>,
+    #[serde(default)]
+    pub two_factor: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

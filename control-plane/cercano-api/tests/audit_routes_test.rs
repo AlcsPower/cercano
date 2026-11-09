@@ -629,24 +629,51 @@ async fn test_checkpoints_endpoint_lists_signed_checkpoints() {
 #[tokio::test]
 async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
     let ctx = setup_test_context().await;
-    let trace_id = "trace-client-legacy-001";
 
-    // 1. Client sends conn audit to /api/audit/conn
-    let conn_payload = json!({
-        "id": "client-terminal-1",
+    // 0. An unregistered device without any token is rejected with 401 Unauthorized (H46)
+    let rogue_payload = json!({
+        "id": "unregistered-rogue-device",
         "action": "new",
-        "ip": "192.168.1.55",
-        "conn_id": 9991,
-        "session_id": "sess-abc",
-        "trace_id": trace_id,
-        "nonce": "nonce-conn-001"
+        "conn_id": 999
     });
     let req = Request::builder()
         .uri("/api/audit/conn")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Cercano-Internal-Token", &ctx.internal_token)
-        .body(Body::from(serde_json::to_vec(&conn_payload).unwrap()))
+        .body(Body::from(serde_json::to_vec(&rogue_payload).unwrap()))
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // Register a valid device in `devices` table (simulating client heartbeat registration)
+    sqlx::query(
+        "INSERT INTO devices (id, name, hostname, os, status, last_seen_at) VALUES (?, ?, ?, ?, 'online', datetime('now'))"
+    )
+    .bind("dev-client-legacy-1")
+    .bind("Laptop-Admin")
+    .bind("laptop-adm")
+    .bind("Windows 11")
+    .execute(&ctx.state.db)
+    .await
+    .unwrap();
+
+    let conn_id = 9991i64;
+    let expected_trace_id = format!("conn-dev-client-legacy-1-{}", conn_id);
+
+    // 1. Client sends conn open (`action: "new"`) without auth header (direct client ingestion)
+    let open_payload = json!({
+        "id": "dev-client-legacy-1",
+        "action": "new",
+        "ip": "192.168.1.55",
+        "conn_id": conn_id,
+        "session_id": "sess-abc",
+        "nonce": "nonce-conn-open-001"
+    });
+    let req = Request::builder()
+        .uri("/api/audit/conn")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&open_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -656,12 +683,30 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         "client expects empty response body on success"
     );
 
-    // 2. Client sends file audit to /api/audit/file
+    // 2. Client sends conn auth details (`peer`, `type`, `primary_auth`, without `action`) (H44)
+    let auth_payload = json!({
+        "id": "dev-client-legacy-1",
+        "peer": ["remote-endpoint-2", "RemotePC"],
+        "conn_id": conn_id,
+        "type": "remote",
+        "primary_auth": 1,
+        "two_factor": 0,
+        "nonce": "nonce-conn-auth-001"
+    });
+    let req = Request::builder()
+        .uri("/api/audit/conn")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&auth_payload).unwrap()))
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 3. Client sends file transfer audit without trace_id (correlates via dev+conn_id) (H45)
     let file_payload = json!({
-        "id": "client-terminal-1",
+        "id": "dev-client-legacy-1",
         "peer_id": "remote-endpoint-2",
-        "conn_id": 9991,
-        "trace_id": trace_id,
+        "conn_id": conn_id,
         "type": 0,
         "path": "C:\\Docs\\report.pdf",
         "is_file": true,
@@ -672,15 +717,30 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/file")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&file_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 3. Verify trace timeline has both events linked
+    // 4. Client sends conn close (`action: "close"`) without trace_id
+    let close_payload = json!({
+        "id": "dev-client-legacy-1",
+        "action": "close",
+        "conn_id": conn_id,
+        "nonce": "nonce-conn-close-001"
+    });
     let req = Request::builder()
-        .uri(format!("/api/audit/traces/{}", trace_id))
+        .uri("/api/audit/conn")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&close_payload).unwrap()))
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 5. Verify trace timeline has all 4 events unified under the deterministic trace_id (H44, H45)
+    let req = Request::builder()
+        .uri(format!("/api/audit/traces/{}", expected_trace_id))
         .method("GET")
         .header("Authorization", format!("Bearer {}", ctx.admin_token))
         .body(Body::empty())
@@ -689,11 +749,14 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
     assert_eq!(res.status(), StatusCode::OK);
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     let timeline: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(timeline["timeline"].as_array().unwrap().len(), 2);
-    assert_eq!(timeline["timeline"][0]["action"], "conn.start");
-    assert_eq!(timeline["timeline"][1]["action"], "file.transfer");
+    let events = timeline["timeline"].as_array().unwrap();
+    assert_eq!(events.len(), 4, "expected 4 events unified in trace");
+    assert_eq!(events[0]["action"], "conn.start");
+    assert_eq!(events[1]["action"], "conn.auth");
+    assert_eq!(events[2]["action"], "file.transfer");
+    assert_eq!(events[3]["action"], "conn.end");
 
-    // 4. Verify chain integrity passes
+    // 6. Verify chain integrity passes across all ingested events
     let req = Request::builder()
         .uri("/api/audit/verify")
         .method("GET")
