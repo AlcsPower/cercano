@@ -24,6 +24,7 @@ base64 = "0.22"
 sha2 = "0.10"
 audit-core = { path = "../audit-core" }
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }

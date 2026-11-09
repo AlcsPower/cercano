@@ -118,6 +118,37 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_devices_last_seen_at ON devices(last_seen_at);
         "#,
     },
+    Migration {
+        version: 4,
+        name: "004_build_jobs_schema",
+        sql: r#"
+        CREATE TABLE IF NOT EXISTS build_jobs (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            role TEXT NOT NULL,
+            profile_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            artifact_path TEXT,
+            error_message TEXT,
+            logs TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            started_at TEXT,
+            completed_at TEXT,
+            expires_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS user_permissions (
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            permission TEXT NOT NULL,
+            PRIMARY KEY (user_id, permission)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_build_jobs_user_id ON build_jobs(user_id);
+        CREATE INDEX IF NOT EXISTS idx_build_jobs_status ON build_jobs(status);
+        CREATE INDEX IF NOT EXISTS idx_build_jobs_created_at ON build_jobs(created_at);
+        CREATE INDEX IF NOT EXISTS idx_user_permissions_user_id ON user_permissions(user_id);
+        "#,
+    },
 ];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
@@ -281,13 +312,22 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 3);
+        assert_eq!(rows.len(), 4);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
         assert_eq!(rows[1].get::<i64, _>("version"), 2);
         assert_eq!(rows[1].get::<String, _>("name"), "002_auth_schema");
         assert_eq!(rows[2].get::<i64, _>("version"), 3);
         assert_eq!(rows[2].get::<String, _>("name"), "003_device_metadata");
+        assert_eq!(rows[3].get::<i64, _>("version"), 4);
+        assert_eq!(rows[3].get::<String, _>("name"), "004_build_jobs_schema");
+
+        // Verify build_jobs table exists
+        let build_jobs = sqlx::query("SELECT count(*) as cnt FROM build_jobs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(build_jobs.get::<i64, _>("cnt"), 0);
 
         // Verify devices table exists and columns can be queried
         let devices = sqlx::query("SELECT count(*) as cnt FROM devices")
@@ -335,7 +375,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 3);
+        assert_eq!(rows.len(), 4);
     }
     #[tokio::test]
     async fn test_purge_stale_records() {

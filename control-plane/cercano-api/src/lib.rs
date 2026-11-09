@@ -20,6 +20,7 @@
 pub mod alarms;
 pub mod audit;
 pub mod auth;
+pub mod builder;
 pub mod config;
 pub mod db;
 pub mod devices;
@@ -43,16 +44,19 @@ pub struct AppState {
     pub db: SqlitePool,
     pub audit: Arc<audit_core::AuditStore>,
     pub alarms: Arc<alarms::AlarmEngine>,
+    pub build_queue: Arc<builder::BuildQueue>,
 }
 
 impl AppState {
     pub fn new(config: Config, db: SqlitePool, audit: Arc<audit_core::AuditStore>) -> Self {
         let alarms = Arc::new(alarms::AlarmEngine::new(config.clone(), audit.clone()));
+        let build_queue = Arc::new(builder::BuildQueue::new(&config, db.clone()));
         Self {
             config,
             db,
             audit,
             alarms,
+            build_queue,
         }
     }
 }
@@ -131,6 +135,15 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/audit/traces/:trace_id",
             get(routes::traces::get_trace_timeline_handler),
+        )
+        .route(
+            "/api/builds",
+            post(routes::builds::enqueue_build_handler).get(routes::builds::list_builds_handler),
+        )
+        .route("/api/builds/:id", get(routes::builds::get_build_handler))
+        .route(
+            "/api/builds/:id/download",
+            get(routes::builds::download_build_handler),
         )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))

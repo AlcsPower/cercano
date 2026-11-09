@@ -30,6 +30,9 @@ pub const DEFAULT_DEVICE_GRACE_PERIOD_SECS: u64 = 60;
 pub const DEFAULT_SERVER_KEY_PATH: &str = "/opt/cercano/data/id_ed25519.pub";
 pub const DEFAULT_AUDIT_KEY_PATH: &str = "/opt/cercano/data/audit_signing_key";
 pub const DEFAULT_CHECKPOINT_INTERVAL_SECS: u64 = 300;
+pub const DEFAULT_BUILDS_DIR: &str = "./data/builds";
+pub const DEFAULT_BUILD_CONCURRENCY: usize = 2;
+pub const DEFAULT_BUILD_RETENTION_SECS: u64 = 7 * 24 * 3600;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
@@ -53,6 +56,26 @@ pub struct Config {
     pub ip_whitelist: Vec<String>,
     pub audit_key_path: String,
     pub audit_checkpoint_interval_secs: u64,
+    #[serde(default = "default_builds_dir")]
+    pub builds_dir: String,
+    #[serde(default = "default_build_concurrency")]
+    pub build_concurrency: usize,
+    #[serde(default = "default_build_retention_secs")]
+    pub build_retention_secs: u64,
+    #[serde(default)]
+    pub build_signing_key_path: Option<String>,
+}
+
+fn default_builds_dir() -> String {
+    DEFAULT_BUILDS_DIR.to_string()
+}
+
+fn default_build_concurrency() -> usize {
+    DEFAULT_BUILD_CONCURRENCY
+}
+
+fn default_build_retention_secs() -> u64 {
+    DEFAULT_BUILD_RETENTION_SECS
 }
 
 impl Default for Config {
@@ -70,6 +93,10 @@ impl Default for Config {
             ip_whitelist: Vec::new(),
             audit_key_path: DEFAULT_AUDIT_KEY_PATH.to_string(),
             audit_checkpoint_interval_secs: DEFAULT_CHECKPOINT_INTERVAL_SECS,
+            builds_dir: DEFAULT_BUILDS_DIR.to_string(),
+            build_concurrency: DEFAULT_BUILD_CONCURRENCY,
+            build_retention_secs: DEFAULT_BUILD_RETENTION_SECS,
+            build_signing_key_path: None,
         }
     }
 }
@@ -89,6 +116,10 @@ struct FileConfig {
     ip_whitelist: Option<Vec<String>>,
     audit_key_path: Option<String>,
     audit_checkpoint_interval_secs: Option<u64>,
+    builds_dir: Option<String>,
+    build_concurrency: Option<usize>,
+    build_retention_secs: Option<u64>,
+    build_signing_key_path: Option<String>,
 }
 
 impl Config {
@@ -165,6 +196,18 @@ impl Config {
         }
         if let Some(secs) = file_cfg.audit_checkpoint_interval_secs {
             self.audit_checkpoint_interval_secs = secs;
+        }
+        if let Some(dir) = file_cfg.builds_dir {
+            self.builds_dir = dir;
+        }
+        if let Some(concurrency) = file_cfg.build_concurrency {
+            self.build_concurrency = concurrency;
+        }
+        if let Some(retention) = file_cfg.build_retention_secs {
+            self.build_retention_secs = retention;
+        }
+        if let Some(key_path) = file_cfg.build_signing_key_path {
+            self.build_signing_key_path = Some(key_path);
         }
 
         Ok(())
@@ -257,6 +300,30 @@ impl Config {
             self.audit_checkpoint_interval_secs = secs_str
                 .parse::<u64>()
                 .map_err(|e| format!("Invalid CERCANO_AUDIT_CHECKPOINT_INTERVAL_SECS: {}", e))?;
+        }
+
+        if let Ok(dir) = env::var("CERCANO_BUILDS_DIR") {
+            if !dir.trim().is_empty() {
+                self.builds_dir = dir.trim().to_string();
+            }
+        }
+
+        if let Ok(concurrency_str) = env::var("CERCANO_BUILD_CONCURRENCY") {
+            self.build_concurrency = concurrency_str
+                .parse::<usize>()
+                .map_err(|e| format!("Invalid CERCANO_BUILD_CONCURRENCY: {}", e))?;
+        }
+
+        if let Ok(retention_str) = env::var("CERCANO_BUILD_RETENTION_SECS") {
+            self.build_retention_secs = retention_str
+                .parse::<u64>()
+                .map_err(|e| format!("Invalid CERCANO_BUILD_RETENTION_SECS: {}", e))?;
+        }
+
+        if let Ok(key_path) = env::var("CERCANO_BUILD_SIGNING_KEY_PATH") {
+            if !key_path.trim().is_empty() {
+                self.build_signing_key_path = Some(key_path.trim().to_string());
+            }
         }
 
         Ok(())

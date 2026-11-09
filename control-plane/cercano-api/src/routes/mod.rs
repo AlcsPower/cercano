@@ -19,4 +19,5 @@
 
 pub mod alarms;
 pub mod audit;
+pub mod builds;
 pub mod traces;
