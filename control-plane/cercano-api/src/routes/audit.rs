@@ -1124,23 +1124,42 @@ pub async fn legacy_conn_audit_handler(
         payload.trace_id.or(payload.conn_audit_ref),
     );
 
-    let ip = extract_client_ip(
+    let socket_ip = extract_client_ip(
         &headers,
         connect_info.map(|c| c.0),
         &state.config.trusted_proxies,
     );
-    let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
-    let actor = Actor::with_details(actor_id, "device", None, Some(ip));
 
-    let mut subject = None;
-    if let Some(ref peer_val) = payload.peer {
-        if let Some(arr) = peer_val.as_array() {
-            if let Some(p_id) = arr.first().and_then(|v| v.as_str()) {
-                let p_name = arr.get(1).and_then(|v| v.as_str()).map(str::to_owned);
-                subject = Some(Subject::with_details(p_id, "device", p_name));
-            }
-        }
-    }
+    // Option (a): Actor = who initiates the connection / action; Subject = accessed terminal (payload.id).
+    // The initiator's IP comes from payload.ip, avoiding attributing the controlled host's socket IP to the initiator.
+    let (actor, subject) = if let Some(ref peer_val) = payload.peer {
+        let (peer_id, peer_name) = if let Some(arr) = peer_val.as_array() {
+            let pid = arr.first().and_then(|v| v.as_str()).unwrap_or("unknown");
+            let pname = arr.get(1).and_then(|v| v.as_str()).map(str::to_owned);
+            (pid.to_string(), pname)
+        } else {
+            ("unknown".to_string(), None)
+        };
+        let actor_ip = payload.ip.clone().or_else(|| Some(socket_ip.clone()));
+        let actor = Actor::with_details(peer_id, "device", peer_name, actor_ip);
+        let subject = payload
+            .id
+            .clone()
+            .map(|id| Subject::with_details(id, "device", None));
+        (actor, subject)
+    } else {
+        let actor_id = payload
+            .ip
+            .clone()
+            .unwrap_or_else(|| "remote-client".to_string());
+        let actor_ip = payload.ip.clone().or_else(|| Some(socket_ip.clone()));
+        let actor = Actor::with_details(actor_id, "device", None, actor_ip);
+        let subject = payload
+            .id
+            .clone()
+            .map(|id| Subject::with_details(id, "device", None));
+        (actor, subject)
+    };
 
     let mut details = serde_json::Map::new();
     if let Some(conn_id) = payload.conn_id {
@@ -1213,25 +1232,99 @@ pub async fn legacy_file_audit_handler(
     }
 
     let trace_id = legacy_trace_id(payload.id.as_deref(), payload.conn_id, payload.trace_id);
-    let ip = extract_client_ip(
+    let socket_ip = extract_client_ip(
         &headers,
         connect_info.map(|c| c.0),
         &state.config.trusted_proxies,
     );
-    let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
-    let actor = Actor::with_details(actor_id, "device", None, Some(ip));
-    let subject = payload.peer_id.map(Subject::new);
+
+    // Option (a): Actor = initiator of file transfer (`peer_id`), with IP extracted from info.ip (or payload.ip).
+    // Subject = accessed terminal receiving/sending files (`payload.id`).
+    let info_ip = payload.info.as_deref().and_then(|raw| {
+        serde_json::from_str::<serde_json::Value>(raw)
+            .ok()
+            .and_then(|v| v.get("ip").and_then(|ip| ip.as_str().map(str::to_owned)))
+    });
+    let actor_ip = info_ip.or(payload.ip).or(Some(socket_ip));
+    let actor_id = payload
+        .peer_id
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+    let actor = Actor::with_details(actor_id, "device", None, actor_ip);
+    let subject = payload
+        .id
+        .clone()
+        .map(|id| Subject::with_details(id, "device", None));
 
     let direction = if payload.r#type == Some(0) {
         "upload"
     } else {
         "download"
     };
+    let legacy_files = payload
+        .info
+        .as_deref()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+        .and_then(|v| v.get("files").and_then(|f| f.as_array()).cloned());
+    let file_name = legacy_files
+        .as_ref()
+        .and_then(|files| files.first())
+        .and_then(|f| f.as_array())
+        .and_then(|entry| entry.first())
+        .and_then(|name| name.as_str())
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            payload
+                .path
+                .as_deref()
+                .and_then(|path| std::path::Path::new(path).file_name())
+                .and_then(|name| name.to_str())
+                .map(str::to_owned)
+        });
+    let bytes_transferred = payload.bytes.or_else(|| {
+        legacy_files.as_ref().map(|files| {
+            files
+                .iter()
+                .filter_map(|f| f.as_array()?.get(1)?.as_u64())
+                .sum()
+        })
+    });
+    let sha256 = match payload.sha256.as_deref().map(str::trim) {
+        Some("") | None => None,
+        Some(value) => {
+            let value = value.to_ascii_lowercase();
+            if value.len() != 64 || !value.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Err(AuditRouteError::Validation(
+                    "El campo 'sha256' debe ser un hash SHA-256 hexadecimal de 64 caracteres"
+                        .to_string(),
+                ));
+            }
+            Some(value)
+        }
+    };
+    let transfer_mode = if payload.path.as_deref().is_none_or(str::is_empty) {
+        "clipboard_copy_paste"
+    } else {
+        "dedicated_session"
+    };
     let mut details = serde_json::Map::new();
     details.insert("direction".into(), json!(direction));
-    if let Some(path) = payload.path {
-        details.insert("path".into(), json!(path));
+    if let Some(ref path) = payload.path {
+        if !path.is_empty() {
+            details.insert("remote_path".into(), json!(path));
+        }
     }
+    if let Some(file_name) = file_name {
+        details.insert("file_name".into(), json!(file_name));
+    }
+    if let Some(bytes) = bytes_transferred {
+        details.insert("bytes_transferred".into(), json!(bytes));
+    }
+    if let Some(ref sha256) = sha256 {
+        details.insert("sha256".into(), json!(sha256));
+    }
+    details.insert("transfer_mode".into(), json!(transfer_mode));
     if let Some(is_file) = payload.is_file {
         details.insert("is_file".into(), json!(is_file));
     }
@@ -1305,6 +1398,8 @@ pub struct LegacyFileAuditRequest {
     #[serde(default)]
     pub peer_id: Option<String>,
     #[serde(default)]
+    pub ip: Option<String>,
+    #[serde(default)]
     pub conn_id: Option<i64>,
     #[serde(default)]
     pub trace_id: Option<String>,
@@ -1314,6 +1409,10 @@ pub struct LegacyFileAuditRequest {
     pub path: Option<String>,
     #[serde(default)]
     pub is_file: Option<bool>,
+    #[serde(default)]
+    pub bytes: Option<u64>,
+    #[serde(default)]
+    pub sha256: Option<String>,
     #[serde(default)]
     pub info: Option<String>,
     #[serde(default)]
@@ -1356,5 +1455,16 @@ mod tests {
         assert!(!constant_time_eq(b"secret", b"secreT"));
         assert!(!constant_time_eq(b"secret", b"secre"));
         assert!(!constant_time_eq(b"", b"x"));
+    }
+
+    #[test]
+    fn normalize_conn_type_maps_integers_and_strings() {
+        assert_eq!(normalize_conn_type(&json!(0)), "remote");
+        assert_eq!(normalize_conn_type(&json!(1)), "file_transfer");
+        assert_eq!(normalize_conn_type(&json!(2)), "port_forward");
+        assert_eq!(normalize_conn_type(&json!(3)), "view_camera");
+        assert_eq!(normalize_conn_type(&json!(4)), "terminal");
+        assert_eq!(normalize_conn_type(&json!(99)), "99");
+        assert_eq!(normalize_conn_type(&json!("custom")), "custom");
     }
 }

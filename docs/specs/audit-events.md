@@ -247,8 +247,9 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 - **Emisor (`source`):** `client`.
 - **Categoría (`category`):** `conn`.
 - **Condición:** Se emite cuando una conexión establecida completa exitosamente la autenticación de pares.
+- **Actor (`actor`):** Dispositivo o usuario par que inicia o controla la sesión (`peer`).
+- **Sujeto (`subject`):** Equipo o terminal accedido/controlado (`id`).
 - **Campos en `details`:** `peer` (id y nombre del par), `conn_type` (`remote`, `file_transfer`, `port_forward`, `view_camera`, `terminal`), `primary_auth` (`0` ninguno, `1` contraseña, `2` clave), `two_factor` (`0` o `1`).
-- **Sujeto (`subject`):** Dispositivo o usuario par autenticado.
 
 ---
 

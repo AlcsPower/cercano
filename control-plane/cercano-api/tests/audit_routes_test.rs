@@ -733,7 +733,9 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         "type": 0,
         "path": "C:\\Docs\\report.pdf",
         "is_file": true,
-        "info": "{\"files\": [[\"report.pdf\", 2048]]}",
+        "bytes": 4096,
+        "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "info": "{\"files\": [[\"report.pdf\", 4096]], \"ip\": \"192.168.1.55\"}",
         "nonce": "nonce-file-001"
     });
     let req = Request::builder()
@@ -746,11 +748,12 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 4. Relay/server forwards conn close (`action: "close"`) without trace_id
+    // 4. Relay/server forwards conn close (`action: "close"`) with the session type
     let close_payload = json!({
         "id": "dev-client-legacy-1",
         "action": "close",
         "conn_id": conn_id,
+        "type": "remote",
         "nonce": "nonce-conn-close-001"
     });
     let req = Request::builder()
@@ -776,10 +779,38 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
     let timeline: Value = serde_json::from_slice(&bytes).unwrap();
     let events = timeline["timeline"].as_array().unwrap();
     assert_eq!(events.len(), 4, "expected 4 events unified in trace");
+
+    // Event 0: conn.start (H44/H45: Actor is connecting client IP, Subject is accessed host)
     assert_eq!(events[0]["action"], "conn.start");
+    assert_eq!(events[0]["actor"]["id"], "192.168.1.55");
+    assert_eq!(events[0]["subject"]["id"], "dev-client-legacy-1");
+
+    // Event 1: conn.auth (H44: Actor is authenticated remote peer, Subject is accessed host, conn_type normalized)
     assert_eq!(events[1]["action"], "conn.auth");
+    assert_eq!(events[1]["details"]["conn_type"], "remote");
+    assert_eq!(events[1]["actor"]["id"], "remote-endpoint-2");
+    assert_eq!(events[1]["actor"]["name"], "RemotePC");
+    assert_eq!(events[1]["subject"]["id"], "dev-client-legacy-1");
+
+    // Event 2: file.transfer (Actor is peer transferring file, Subject is accessed host)
     assert_eq!(events[2]["action"], "file.transfer");
+    assert_eq!(events[2]["actor"]["id"], "remote-endpoint-2");
+    assert_eq!(events[2]["actor"]["ip"], "192.168.1.55");
+    assert_eq!(events[2]["subject"]["id"], "dev-client-legacy-1");
+    assert_eq!(events[2]["details"]["direction"], "upload");
+    assert_eq!(events[2]["details"]["remote_path"], "C:\\Docs\\report.pdf");
+    assert_eq!(events[2]["details"]["file_name"], "report.pdf");
+    assert_eq!(events[2]["details"]["bytes_transferred"], 4096);
+    assert_eq!(
+        events[2]["details"]["sha256"],
+        "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    );
+    assert_eq!(events[2]["details"]["transfer_mode"], "dedicated_session");
+
+    // Event 3: conn.end carries the session type so the end event is typed (F2-05)
     assert_eq!(events[3]["action"], "conn.end");
+    assert_eq!(events[3]["details"]["conn_type"], "remote");
+    assert_eq!(events[3]["subject"]["id"], "dev-client-legacy-1");
 
     // 6. Verify chain integrity passes across all ingested events
     let req = Request::builder()
@@ -790,4 +821,71 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_client_legacy_file_audit_validates_sha256_and_derives_volume() {
+    let ctx = setup_test_context().await;
+
+    // A malformed content hash is a deterministic client error, never a dropped event.
+    let bad_hash = json!({
+        "id": "dev-client-legacy-2",
+        "peer_id": "remote-endpoint-3",
+        "conn_id": 42,
+        "type": 1,
+        "path": "C:\\Docs\\clip.txt",
+        "sha256": "not-a-sha256",
+        "info": "{\"files\": [[\"clip.txt\", 12]]}"
+    });
+    let req = Request::builder()
+        .uri("/api/audit/file")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
+        .body(Body::from(serde_json::to_vec(&bad_hash).unwrap()))
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+    // Older clients omit `bytes`: the volume falls back to the file sizes in `info`.
+    let conn_id = 4242i64;
+    let clipboard_file = json!({
+        "id": "dev-client-legacy-2",
+        "peer_id": "remote-endpoint-3",
+        "conn_id": conn_id,
+        "type": 1,
+        "path": "",
+        "info": "{\"files\": [[\"clip.txt\", 12]], \"ip\": \"192.168.1.56\"}"
+    });
+    let req = Request::builder()
+        .uri("/api/audit/file")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
+        .body(Body::from(serde_json::to_vec(&clipboard_file).unwrap()))
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let trace_id = format!(
+        "conn-dev-client-legacy-2-{}-{}",
+        conn_id,
+        chrono::Utc::now().format("%Y%m%d")
+    );
+    let req = Request::builder()
+        .uri(format!("/api/audit/traces/{}", trace_id))
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", ctx.admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = ctx.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let timeline: Value = serde_json::from_slice(&bytes).unwrap();
+    let event = &timeline["timeline"].as_array().unwrap()[0];
+    assert_eq!(event["action"], "file.transfer");
+    assert_eq!(event["details"]["direction"], "download");
+    assert_eq!(event["details"]["bytes_transferred"], 12);
+    assert_eq!(event["details"]["file_name"], "clip.txt");
+    assert_eq!(event["details"]["transfer_mode"], "clipboard_copy_paste");
 }
