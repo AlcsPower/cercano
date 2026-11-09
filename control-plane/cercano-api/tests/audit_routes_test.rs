@@ -657,10 +657,31 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
     .await
     .unwrap();
 
-    let conn_id = 9991i64;
-    let expected_trace_id = format!("conn-dev-client-legacy-1-{}", conn_id);
+    // Registered device without token must also be rejected (bypass closed)
+    let req = Request::builder()
+        .uri("/api/audit/conn")
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&json!({
+                "id": "dev-client-legacy-1", "action": "new", "conn_id": 1
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+    assert_eq!(
+        ctx.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
 
-    // 1. Client sends conn open (`action: "new"`) without auth header (direct client ingestion)
+    let conn_id = 9991i64;
+    let expected_trace_id = format!(
+        "conn-dev-client-legacy-1-{}-{}",
+        conn_id,
+        chrono::Utc::now().format("%Y%m%d")
+    );
+
+    // 1. Relay/server forwards conn open (`action: "new"`) with internal token
     let open_payload = json!({
         "id": "dev-client-legacy-1",
         "action": "new",
@@ -673,6 +694,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/conn")
         .method("POST")
         .header("content-type", "application/json")
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&open_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
@@ -683,7 +705,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         "client expects empty response body on success"
     );
 
-    // 2. Client sends conn auth details (`peer`, `type`, `primary_auth`, without `action`) (H44)
+    // 2. Relay/server forwards conn auth details (`peer`, `type`, `primary_auth`, without `action`) (H44)
     let auth_payload = json!({
         "id": "dev-client-legacy-1",
         "peer": ["remote-endpoint-2", "RemotePC"],
@@ -697,15 +719,17 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/conn")
         .method("POST")
         .header("content-type", "application/json")
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&auth_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 3. Client sends file transfer audit without trace_id (correlates via dev+conn_id) (H45)
+    // 3. Relay/server forwards file transfer audit without trace_id (correlates via dev+conn_id+date) (H45)
     let file_payload = json!({
         "id": "dev-client-legacy-1",
-        "peer_id": "remote-endpoint-2",
+        "peer_id": "local-endpoint-1",
+        "remote_id": "remote-endpoint-2",
         "conn_id": conn_id,
         "type": 0,
         "path": "C:\\Docs\\report.pdf",
@@ -717,12 +741,13 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/file")
         .method("POST")
         .header("content-type", "application/json")
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&file_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 4. Client sends conn close (`action: "close"`) without trace_id
+    // 4. Relay/server forwards conn close (`action: "close"`) without trace_id
     let close_payload = json!({
         "id": "dev-client-legacy-1",
         "action": "close",
@@ -733,6 +758,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/conn")
         .method("POST")
         .header("content-type", "application/json")
+        .header("X-Cercano-Internal-Token", &ctx.internal_token)
         .body(Body::from(serde_json::to_vec(&close_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();

@@ -17,10 +17,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
-use axum::extract::{Query, State};
+use axum::extract::{ConnectInfo, Query, State};
 use axum::http::header;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -33,7 +37,7 @@ use audit_core::{
     Source, Subject,
 };
 
-use crate::auth::AuthenticatedUser;
+use crate::auth::{extract_client_ip, AuthenticatedUser};
 use crate::AppState;
 
 /// Error type for audit route handling.
@@ -49,6 +53,8 @@ pub enum AuditRouteError {
     Unauthorized(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
+    #[error("Rate limited: {0}")]
+    RateLimited(String),
     #[error("Not found: {0}")]
     NotFound(String),
 }
@@ -64,6 +70,9 @@ impl IntoResponse for AuditRouteError {
                 (StatusCode::UNAUTHORIZED, "unauthorized", msg.clone())
             }
             AuditRouteError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
+            AuditRouteError::RateLimited(msg) => {
+                (StatusCode::TOO_MANY_REQUESTS, "rate_limited", msg.clone())
+            }
             AuditRouteError::Db(err) => {
                 tracing::error!("Database error in audit route: {:?}", err);
                 (
@@ -184,43 +193,31 @@ pub async fn authenticate_ingestion_caller(
     ))
 }
 
-/// Authenticates legacy client audit ingestion calls (`/api/audit/conn` and `/api/audit/file`).
-///
-/// Accepts:
-/// 1. `X-Cercano-Internal-Token` or Bearer admin token (relay/server forwarding).
-/// 2. Direct client ingestion from a registered device ID present in the `devices` table,
-///    verifying that the device exists to prevent unauthenticated/rogue event injection (H46).
-pub async fn authenticate_legacy_client_caller(
-    headers: &HeaderMap,
-    state: &AppState,
-    device_id: Option<&str>,
-) -> Result<(), AuditRouteError> {
-    // 1. Internal token or admin session
-    if authenticate_ingestion_caller(headers, state).await.is_ok() {
-        return Ok(());
+// Devices are bounded; no pruning needed.
+static INGEST: LazyLock<Mutex<HashMap<String, (Instant, u32)>>> = LazyLock::new(Default::default);
+
+fn allow_ingest(device: &str) -> bool {
+    let mut map = INGEST.lock().unwrap();
+    let now = Instant::now();
+    let (start, count) = map.entry(device.to_owned()).or_insert((now, 0));
+    if now.duration_since(*start) >= Duration::from_secs(1) {
+        *start = now;
+        *count = 0;
     }
+    *count += 1;
+    *count <= 1000
+}
 
-    // 2. Direct client ingestion requires a valid registered device ID
-    let dev_id = device_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            AuditRouteError::Unauthorized(
-                "Autenticación requerida: se requiere token interno, sesión de admin o dispositivo registrado".into(),
-            )
-        })?;
-
-    let row = sqlx::query("SELECT id FROM devices WHERE id = ?")
-        .bind(dev_id)
-        .fetch_optional(&state.db)
-        .await?;
-
-    match row {
-        Some(_) => Ok(()),
-        None => Err(AuditRouteError::Unauthorized(format!(
-            "Dispositivo '{dev_id}' no registrado en el sistema"
-        ))),
-    }
+// shortcut: a session crossing midnight splits; upgrade when the server issues trace ids.
+fn legacy_trace_id(device: Option<&str>, conn_id: Option<i64>, explicit: Option<String>) -> String {
+    explicit.unwrap_or_else(|| {
+        format!(
+            "conn-{}-{}-{}",
+            device.unwrap_or("anon"),
+            conn_id.unwrap_or(0),
+            chrono::Utc::now().format("%Y%m%d")
+        )
+    })
 }
 
 /// Compares two secrets without leaking their length-independent prefix timing.
@@ -1078,10 +1075,15 @@ pub async fn verify_chain_handler(
 /// Compatibility endpoint for client connection audits.
 pub async fn legacy_conn_audit_handler(
     State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Json(payload): Json<LegacyConnAuditRequest>,
 ) -> Result<(StatusCode, &'static str), AuditRouteError> {
-    authenticate_legacy_client_caller(&headers, &state, payload.id.as_deref()).await?;
+    authenticate_ingestion_caller(&headers, &state).await?;
+
+    if !allow_ingest(payload.id.as_deref().unwrap_or("anon")) {
+        return Err(AuditRouteError::RateLimited("Ingesta excedida".into()));
+    }
 
     if let Some(ref nonce) = payload.nonce {
         if state.audit.get_event_by_id(nonce).await?.is_some() {
@@ -1101,20 +1103,19 @@ pub async fn legacy_conn_audit_handler(
         _ => "conn.event",
     };
 
-    let trace_id = payload
-        .trace_id
-        .or(payload.conn_audit_ref)
-        .unwrap_or_else(|| {
-            let dev = payload.id.as_deref().unwrap_or("anon");
-            let conn = payload
-                .conn_id
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| "0".into());
-            format!("conn-{dev}-{conn}")
-        });
+    let trace_id = legacy_trace_id(
+        payload.id.as_deref(),
+        payload.conn_id,
+        payload.trace_id.or(payload.conn_audit_ref),
+    );
 
+    let ip = extract_client_ip(
+        &headers,
+        connect_info.map(|c| c.0),
+        &state.config.trusted_proxies,
+    );
     let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
-    let actor = Actor::with_details(actor_id, "device", None, payload.ip.clone());
+    let actor = Actor::with_details(actor_id, "device", None, Some(ip));
 
     let mut subject = None;
     if let Some(ref peer_val) = payload.peer {
@@ -1135,9 +1136,6 @@ pub async fn legacy_conn_audit_handler(
     }
     if let Some(uuid) = payload.uuid {
         details.insert("uuid".into(), json!(uuid));
-    }
-    if let Some(ip) = payload.ip {
-        details.insert("ip".into(), json!(ip));
     }
     if let Some(peer) = payload.peer {
         details.insert("peer".into(), peer);
@@ -1170,7 +1168,12 @@ pub async fn legacy_conn_audit_handler(
         input = input.with_event_id(nonce);
     }
 
-    let _ = append_and_evaluate(&state, input).await?;
+    match append_and_evaluate(&state, input).await {
+        Ok(_) => {}
+        Err(AuditRouteError::Audit(AuditError::Database(sqlx::Error::Database(e))))
+            if e.is_unique_violation() => {}
+        Err(e) => return Err(e),
+    }
     Ok((StatusCode::OK, ""))
 }
 
@@ -1178,10 +1181,15 @@ pub async fn legacy_conn_audit_handler(
 /// Compatibility endpoint for client file transfer audits.
 pub async fn legacy_file_audit_handler(
     State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Json(payload): Json<LegacyFileAuditRequest>,
 ) -> Result<(StatusCode, &'static str), AuditRouteError> {
-    authenticate_legacy_client_caller(&headers, &state, payload.id.as_deref()).await?;
+    authenticate_ingestion_caller(&headers, &state).await?;
+
+    if !allow_ingest(payload.id.as_deref().unwrap_or("anon")) {
+        return Err(AuditRouteError::RateLimited("Ingesta excedida".into()));
+    }
 
     if let Some(ref nonce) = payload.nonce {
         if state.audit.get_event_by_id(nonce).await?.is_some() {
@@ -1189,17 +1197,15 @@ pub async fn legacy_file_audit_handler(
         }
     }
 
-    let trace_id = payload.trace_id.unwrap_or_else(|| {
-        let dev = payload.id.as_deref().unwrap_or("anon");
-        let conn = payload
-            .conn_id
-            .map(|c| c.to_string())
-            .unwrap_or_else(|| "0".into());
-        format!("conn-{dev}-{conn}")
-    });
+    let trace_id = legacy_trace_id(payload.id.as_deref(), payload.conn_id, payload.trace_id);
+    let ip = extract_client_ip(
+        &headers,
+        connect_info.map(|c| c.0),
+        &state.config.trusted_proxies,
+    );
     let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
-    let actor = Actor::new(actor_id);
-    let subject = payload.peer_id.map(Subject::new);
+    let actor = Actor::with_details(actor_id, "device", None, Some(ip));
+    let subject = payload.remote_id.or(payload.peer_id).map(Subject::new);
 
     let direction = if payload.r#type == Some(0) {
         "upload"
@@ -1238,7 +1244,12 @@ pub async fn legacy_file_audit_handler(
         input = input.with_event_id(nonce);
     }
 
-    let _ = append_and_evaluate(&state, input).await?;
+    match append_and_evaluate(&state, input).await {
+        Ok(_) => {}
+        Err(AuditRouteError::Audit(AuditError::Database(sqlx::Error::Database(e))))
+            if e.is_unique_violation() => {}
+        Err(e) => return Err(e),
+    }
     Ok((StatusCode::OK, ""))
 }
 
@@ -1278,6 +1289,8 @@ pub struct LegacyFileAuditRequest {
     pub id: Option<String>,
     #[serde(default)]
     pub peer_id: Option<String>,
+    #[serde(default)]
+    pub remote_id: Option<String>,
     #[serde(default)]
     pub conn_id: Option<i64>,
     #[serde(default)]

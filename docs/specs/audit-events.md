@@ -149,6 +149,9 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 - **Condición:** Se emite en el momento exacto en que se establece la conexión interactiva entre el controlador y el controlado.
 - **Campos esperados en `details`:** `session_type` (`desktop`, `file_transfer`, `port_forward`, `camera`, `terminal`), `auth_method` (`manual_confirm`, `password_preset`, `temporary_password`, `side_switch`), `two_factor_verified` (`boolean`), `client_version`, `rendezvous_server`, `relay_server` (opcional), `is_direct_lan` (`boolean`).
 
+> [!NOTE]
+> **Compatibilidad cliente heredado:** Los campos heredados (`auth_method`, `session_type`, `client_version`) son opcionales cuando el evento proviene de la ingestión del cliente legado vía `/api/audit/conn` (`action: "new"`).
+
 #### Vector de Prueba: Evento Génesis (Índice 1)
 
 **JSON Completo:**
@@ -239,7 +242,26 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.3 `conn.fail` — Intento Fallido de Conexión
+### 6.3 `conn.auth` — Autenticación de Conexión Abierta
+
+- **Emisor (`source`):** `client`.
+- **Categoría (`category`):** `conn`.
+- **Condición:** Se emite cuando una conexión establecida completa exitosamente la autenticación de pares.
+- **Campos en `details`:** `peer` (id y nombre del par), `conn_type` (`remote`, `file_transfer`, `port_forward`, `view_camera`, `terminal`), `primary_auth` (`0` ninguno, `1` contraseña, `2` clave), `two_factor` (`0` o `1`).
+- **Sujeto (`subject`):** Dispositivo o usuario par autenticado.
+
+---
+
+### 6.4 `conn.event` — Evento de Conexión No Clasificado (Compatibilidad)
+
+- **Emisor (`source`):** `client`.
+- **Categoría (`category`):** `conn`.
+- **Condición:** Se registra solo si el cliente heredado envía una acción de conexión no clasificada o desconocida en `/api/audit/conn`.
+
+---
+
+
+### 6.5 `conn.fail` — Intento Fallido de Conexión
 
 - **Emisor (`source`):** `hbbs` o `client`.
 - **Categoría (`category`):** `conn`.
@@ -282,7 +304,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.4 `file.transfer` — Transferencia de Archivos
+### 6.6 `file.transfer` — Transferencia de Archivos
 
 - **Emisor (`source`):** `client`.
 - **Categoría (`category`):** `file`.
@@ -403,7 +425,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.7 `auth.logout` — Cierre de Sesión de Usuario
+### 6.9 `auth.logout` — Cierre de Sesión de Usuario
 
 - **Emisor (`source`):** `api`.
 - **Categoría (`category`):** `auth`.
