@@ -208,6 +208,21 @@ fn allow_ingest(device: &str) -> bool {
     *count <= 1000
 }
 
+fn normalize_conn_type(val: &serde_json::Value) -> String {
+    match val {
+        serde_json::Value::Number(n) => match n.as_i64() {
+            Some(0) => "remote".to_string(),
+            Some(1) => "file_transfer".to_string(),
+            Some(2) => "port_forward".to_string(),
+            Some(3) => "view_camera".to_string(),
+            Some(4) => "terminal".to_string(),
+            _ => n.to_string(),
+        },
+        serde_json::Value::String(s) => s.clone(),
+        _ => "remote".to_string(),
+    }
+}
+
 // shortcut: a session crossing midnight splits; upgrade when the server issues trace ids.
 fn legacy_trace_id(device: Option<&str>, conn_id: Option<i64>, explicit: Option<String>) -> String {
     explicit.unwrap_or_else(|| {
@@ -1140,8 +1155,8 @@ pub async fn legacy_conn_audit_handler(
     if let Some(peer) = payload.peer {
         details.insert("peer".into(), peer);
     }
-    if let Some(conn_type) = payload.conn_type {
-        details.insert("conn_type".into(), conn_type);
+    if let Some(ref conn_type) = payload.conn_type {
+        details.insert("conn_type".into(), json!(normalize_conn_type(conn_type)));
     }
     if let Some(pa) = payload.primary_auth {
         details.insert("primary_auth".into(), json!(pa));
@@ -1205,7 +1220,7 @@ pub async fn legacy_file_audit_handler(
     );
     let actor_id = payload.id.clone().unwrap_or_else(|| "unknown".into());
     let actor = Actor::with_details(actor_id, "device", None, Some(ip));
-    let subject = payload.remote_id.or(payload.peer_id).map(Subject::new);
+    let subject = payload.peer_id.map(Subject::new);
 
     let direction = if payload.r#type == Some(0) {
         "upload"
@@ -1290,8 +1305,6 @@ pub struct LegacyFileAuditRequest {
     #[serde(default)]
     pub peer_id: Option<String>,
     #[serde(default)]
-    pub remote_id: Option<String>,
-    #[serde(default)]
     pub conn_id: Option<i64>,
     #[serde(default)]
     pub trace_id: Option<String>,
@@ -1321,6 +1334,20 @@ mod tests {
         assert_eq!(csv_field("+1"), "\"'+1\"");
         assert_eq!(csv_field("-1"), "\"'-1\"");
         assert_eq!(csv_field("@x"), "\"'@x\"");
+    }
+
+    #[test]
+    fn allow_ingest_limits_device_to_1000_per_second() {
+        let dev1 = "throttle-test-device-1";
+        let dev2 = "throttle-test-device-2";
+        for _ in 0..1000 {
+            assert!(allow_ingest(dev1));
+        }
+        assert!(!allow_ingest(dev1), "1001st call must be rate limited");
+        assert!(
+            allow_ingest(dev2),
+            "independent device must not be throttled"
+        );
     }
 
     #[test]

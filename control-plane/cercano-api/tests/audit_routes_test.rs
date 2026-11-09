@@ -710,7 +710,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         "id": "dev-client-legacy-1",
         "peer": ["remote-endpoint-2", "RemotePC"],
         "conn_id": conn_id,
-        "type": "remote",
+        "type": 0,
         "primary_auth": 1,
         "two_factor": 0,
         "nonce": "nonce-conn-auth-001"
@@ -728,8 +728,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
     // 3. Relay/server forwards file transfer audit without trace_id (correlates via dev+conn_id+date) (H45)
     let file_payload = json!({
         "id": "dev-client-legacy-1",
-        "peer_id": "local-endpoint-1",
-        "remote_id": "remote-endpoint-2",
+        "peer_id": "remote-endpoint-2",
         "conn_id": conn_id,
         "type": 0,
         "path": "C:\\Docs\\report.pdf",

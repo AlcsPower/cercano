@@ -4,7 +4,7 @@ Date: 2026-11-06
 Component: vendor/client
 Task: F2-05
 
-Propaga el trace_id (conn_audit_ref) y remote_id en los eventos de conexion y transferencia de archivos
+Propaga el trace_id (conn_audit_ref) en los eventos de conexion y transferencia de archivos
 del cliente hacia los endpoints de auditoria de cercano-api.
 
 ---
@@ -21,11 +21,10 @@ diff --git a/vendor/client/src/server/connection.rs b/vendor/client/src/server/c
          // Unique per record; the api server dedups retried posts by it.
          v["nonce"] = json!(uuid::Uuid::new_v4().to_string());
          allow_err!(self.tx_post_seq.send((url, v)));
-@@ -1615,6 +1618,8 @@ impl Connection {
+@@ -1615,6 +1618,7 @@ impl Connection {
              "uuid":json!(crate::encode64(hbb_common::get_uuid())),
              "peer_id":json!(self.lr.my_id),
              "conn_id":json!(self.inner.id()),
-+            "remote_id":json!(self.lr.peer_id),
 +            "trace_id": self.conn_audit_ref().map(str::to_owned),
              "type": r#type as i8,
              "path":path,

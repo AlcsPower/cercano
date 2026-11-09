@@ -350,7 +350,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.5 `auth.login` — Autenticación Exitosa en la API / Consola
+### 6.7 `auth.login` — Autenticación Exitosa en la API / Consola
 
 - **Emisor (`source`):** `api`.
 - **Categoría (`category`):** `auth`.
@@ -388,7 +388,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.6 `auth.fail` — Intento Fallido de Autenticación en la API
+### 6.8 `auth.fail` — Intento Fallido de Autenticación en la API
 
 - **Emisor (`source`):** `api`.
 - **Categoría (`category`):** `auth`.
@@ -462,7 +462,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.8 `console.rotate_key` — Rotación de Clave Criptográfica
+### 6.10 `console.rotate_key` — Rotación de Clave Criptográfica
 
 - **Emisor (`source`):** `console`.
 - **Categoría (`category`):** `console`.
@@ -506,7 +506,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.9 `console.user_create` — Creación de Usuario Administrativo u Operador
+### 6.11 `console.user_create` — Creación de Usuario Administrativo u Operador
 
 - **Emisor (`source`):** `console`.
 - **Categoría (`category`):** `console`.
@@ -553,7 +553,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.10 `alarm.ip_burst` — Disparo de Alarma por Ráfaga de Tráfico Anómala
+### 6.12 `alarm.ip_burst` — Disparo de Alarma por Ráfaga de Tráfico Anómala
 
 - **Emisor (`source`):** `api` (Motor de alarmas).
 - **Categoría (`category`):** `alarm`.
@@ -598,7 +598,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.11 `alarm.scope_violation` — Intento de Acceso Fuera de Alcance
+### 6.13 `alarm.scope_violation` — Intento de Acceso Fuera de Alcance
 
 - **Emisor (`source`):** `hbbs`.
 - **Categoría (`category`):** `alarm`.
@@ -643,7 +643,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
-### 6.12 `build.installer_generated` — Generación de Instalador Personalizado
+### 6.14 `build.installer_generated` — Generación de Instalador Personalizado
 
 - **Emisor (`source`):** `builder` (`cercano-builder`).
 - **Categoría (`category`):** `build`.
