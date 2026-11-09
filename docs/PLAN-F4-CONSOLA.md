@@ -12,7 +12,7 @@
 - **Consola:** usuarios, roles, auditoría, ajustes, 2FA y la integración del generador. Se reutiliza el diseño existente; no se rehace la interfaz.
 - **Enforcement** en el API; el frontend oculta acciones, pero el servidor es la autoridad.
 
-**F4 / F3:** F4 **no** depende técnicamente de F3 salvo la integración del generador (F4-07, que espera F3-07). F4 puede ejecutarse en paralelo con F3 una vez F1-04 y F2-08 están hechos. El orden F3 → F4 del roadmap es de planificación, no una dependencia dura.
+**F4 / F3:** F4 **no** depende técnicamente de F3 salvo la integración del generador (F4-07). F3-07 ya está hecho (2026-11-09); F4-07 sigue esperando F4-05/06 (RBAC/consola). F4 puede ejecutarse en paralelo con F3 una vez F1-04 y F2-08 están hechos. El orden F3 → F4 del roadmap es de planificación, no una dependencia dura.
 
 ## 2. Dependencias reales
 
@@ -20,7 +20,7 @@
 |---|---|---|
 | F1-04 — auth, usuarios y sesiones | Hecho; `users`, `sessions`, `AuthenticatedUser`, login/logout | Base de RBAC y 2FA |
 | F2-08 — auditoría de API/consola | Hecho; eventos `auth.*`/`console.*` y consulta | Auditoría de RBAC/2FA y vista de auditoría |
-| F3-07 — servicio de build en `cercano-api` | Pendiente; cola, jobs, artefactos | Solo F4-07 (generador en la consola) |
+| F3-07 — servicio de build en `cercano-api` | **Hecho (2026-11-09)**; cola, jobs, artefactos | F4-07 desbloqueado en la parte F3; sigue esperando F4-05/06 |
 | F4.5 — Cercano Chat | Planificado; permisos `chat:attend/manage/read`, marca en F4.5-16 | F4 debe incluirlos en la matriz de permisos |
 
 ## 3. Roles y permisos
@@ -168,7 +168,7 @@ Casos principales (detalle en `tests/cases/`):
 - **Secreto TOTP en BD:** en v1 se protege el volumen/BD; no se cifra el campo. Si el Agente-Seguridad lo exige, F4-01 debe añadir cifrado con una clave de entorno y su gestión.
 - **Bloqueo:** 5 fallos/15 min por cuenta/IP; no bloquear la cuenta de servicio/admin de bootstrap sin una ruta de recuperación documentada.
 - **Legacy `user`:** se trata como `operator` de solo lectura hasta que un admin lo cambie; no se migra en bloque.
-- **Builder:** F4-07 espera F3-07; el resto de F4 puede ir en paralelo con F3.
+- **Builder:** F4-07 ya tiene F3-07; espera F4-05/06 (RBAC/consola). El resto de F4 puede ir en paralelo con F3.
 
 ## 10. Relación con F4.5
 
