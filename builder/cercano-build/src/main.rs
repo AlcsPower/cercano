@@ -83,10 +83,24 @@ struct Args {
     /// Contraseña del certificado PKCS#12 (o usar CERCANO_SIGNING_CERT_PASS)
     #[arg(long = "cert-pass")]
     cert_pass: Option<String>,
+
+    /// Genera SBOM (Software Bill of Materials) y atestación de procedencia (activo por defecto)
+    #[arg(long = "sbom", default_value_t = true, overrides_with = "no_sbom")]
+    sbom: bool,
+
+    /// Desactiva la generación de SBOM y atestación de procedencia
+    #[arg(long = "no-sbom", action = clap::ArgAction::SetTrue)]
+    no_sbom: bool,
+
+    /// Formato del SBOM generado: "cyclonedx" o "spdx"
+    #[arg(long = "sbom-format", value_enum, default_value = "cyclonedx")]
+    sbom_format: cercano_build::SbomFormat,
 }
 
 fn main() -> ExitCode {
     let args = Args::parse();
+
+    let generate_sbom = if args.no_sbom { false } else { args.sbom };
 
     let options = BuildOptions {
         profile_path: args.profile,
@@ -102,6 +116,8 @@ fn main() -> ExitCode {
         timestamp_url: args.timestamp_url,
         cert_path: args.cert_path,
         cert_pass: args.cert_pass,
+        generate_sbom,
+        sbom_format: args.sbom_format,
     };
 
     match execute_build(&options) {
@@ -123,6 +139,12 @@ fn main() -> ExitCode {
             );
             println!("  - Manifiesto:     {}", result.manifest_path.display());
             println!("  - Checksums:      {}", result.checksums_path.display());
+            if let Some(ref sbom) = result.sbom_path {
+                println!("  - SBOM:           {}", sbom.display());
+            }
+            if let Some(ref prov) = result.provenance_path {
+                println!("  - Procedencia:    {}", prov.display());
+            }
             if let Some(ref bin) = result.base_binary_path {
                 println!("  - Binario base:   {}", bin.display());
             }

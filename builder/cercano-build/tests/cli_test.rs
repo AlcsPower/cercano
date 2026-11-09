@@ -321,7 +321,7 @@ fn test_build_soporte_strategy_a_under_30s() {
     let checksums_content = fs::read_to_string(&checksums_file).unwrap();
 
     let lines: Vec<&str> = checksums_content.lines().collect();
-    assert_eq!(lines.len(), 3, "Expected 3 entries in SHA256SUMS");
+    assert_eq!(lines.len(), 5, "Expected 5 entries in SHA256SUMS (base binary, signed profile, provenance, sbom, manifest)");
 
     for line in lines {
         let parts: Vec<&str> = line.split("  ").collect();
@@ -561,8 +561,8 @@ fn test_windows_packaging_soporte() {
     let lines: Vec<&str> = checksums_str.lines().collect();
     assert_eq!(
         lines.len(),
-        6,
-        "Expected 6 files in bundle (profile, exe, msi, wxs, metadata, manifest)"
+        8,
+        "Expected 8 files in bundle (profile, exe, msi, wxs, metadata, provenance, sbom, manifest)"
     );
 
     for line in lines {

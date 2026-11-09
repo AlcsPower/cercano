@@ -149,6 +149,27 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_user_permissions_user_id ON user_permissions(user_id);
         "#,
     },
+    Migration {
+        version: 5,
+        name: "005_revocations_schema",
+        sql: r#"
+        ALTER TABLE build_jobs ADD COLUMN revoked_at TEXT;
+        ALTER TABLE build_jobs ADD COLUMN revocation_reason TEXT;
+
+        CREATE TABLE IF NOT EXISTS revoked_roles (
+            role TEXT PRIMARY KEY,
+            revoked_at TEXT NOT NULL,
+            revocation_reason TEXT,
+            revoked_by TEXT REFERENCES users(id)
+        );
+
+        ALTER TABLE devices ADD COLUMN installer_id TEXT;
+        ALTER TABLE devices ADD COLUMN profile_id TEXT;
+
+        CREATE INDEX IF NOT EXISTS idx_build_jobs_role ON build_jobs(role);
+        CREATE INDEX IF NOT EXISTS idx_devices_installer_id ON devices(installer_id);
+        "#,
+    },
 ];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
@@ -312,7 +333,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 4);
+        assert_eq!(rows.len(), 5);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
         assert_eq!(rows[1].get::<i64, _>("version"), 2);
@@ -321,6 +342,8 @@ mod tests {
         assert_eq!(rows[2].get::<String, _>("name"), "003_device_metadata");
         assert_eq!(rows[3].get::<i64, _>("version"), 4);
         assert_eq!(rows[3].get::<String, _>("name"), "004_build_jobs_schema");
+        assert_eq!(rows[4].get::<i64, _>("version"), 5);
+        assert_eq!(rows[4].get::<String, _>("name"), "005_revocations_schema");
 
         // Verify build_jobs table exists
         let build_jobs = sqlx::query("SELECT count(*) as cnt FROM build_jobs")
@@ -375,7 +398,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 4);
+        assert_eq!(rows.len(), 5);
     }
     #[tokio::test]
     async fn test_purge_stale_records() {

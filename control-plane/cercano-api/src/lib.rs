@@ -27,6 +27,7 @@ pub mod devices;
 pub mod health;
 pub mod middleware;
 pub mod profile;
+pub mod revocation;
 pub mod routes;
 pub mod server_keys;
 pub mod shutdown;
@@ -45,18 +46,25 @@ pub struct AppState {
     pub audit: Arc<audit_core::AuditStore>,
     pub alarms: Arc<alarms::AlarmEngine>,
     pub build_queue: Arc<builder::BuildQueue>,
+    pub revocation_checker: Arc<revocation::RevocationChecker>,
 }
 
 impl AppState {
     pub fn new(config: Config, db: SqlitePool, audit: Arc<audit_core::AuditStore>) -> Self {
         let alarms = Arc::new(alarms::AlarmEngine::new(config.clone(), audit.clone()));
         let build_queue = Arc::new(builder::BuildQueue::new(&config, db.clone(), audit.clone()));
+        let revocation_checker = Arc::new(revocation::RevocationChecker::new(
+            db.clone(),
+            std::time::Duration::from_secs(config.revocation_cache_ttl_secs),
+            config.revocation_fail_closed,
+        ));
         Self {
             config,
             db,
             audit,
             alarms,
             build_queue,
+            revocation_checker,
         }
     }
 }
@@ -139,6 +147,18 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/builds",
             post(routes::builds::enqueue_build_handler).get(routes::builds::list_builds_handler),
+        )
+        .route(
+            "/api/builds/revocations",
+            get(routes::builds::get_revocations_handler),
+        )
+        .route(
+            "/api/revocations",
+            get(routes::builds::get_revocations_handler),
+        )
+        .route(
+            "/api/builds/revoke-role/:role",
+            post(routes::builds::revoke_role_handler),
         )
         .route("/api/builds/:id", get(routes::builds::get_build_handler))
         .route(

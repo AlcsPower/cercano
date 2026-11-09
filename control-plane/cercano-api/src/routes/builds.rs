@@ -832,11 +832,17 @@ pub async fn revoke_build_handler(
         .and_then(|p| p.reason)
         .unwrap_or_else(|| "Instalador revocado por el usuario".to_string());
 
-    // 3. Actualizar estado a 'revoked'
-    if let Err(e) = sqlx::query("UPDATE build_jobs SET status = 'revoked' WHERE id = ?")
-        .bind(&id)
-        .execute(&state.db)
-        .await
+    let revoked_at = Utc::now().to_rfc3339();
+
+    // 3. Actualizar estado a 'revoked' y guardar timestamp y motivo
+    if let Err(e) = sqlx::query(
+        "UPDATE build_jobs SET status = 'revoked', revoked_at = ?, revocation_reason = ? WHERE id = ?",
+    )
+    .bind(&revoked_at)
+    .bind(&reason_str)
+    .bind(&id)
+    .execute(&state.db)
+    .await
     {
         tracing::error!("Error actualizando estado a revoked para {}: {:?}", id, e);
         return (
@@ -849,7 +855,9 @@ pub async fn revoke_build_handler(
             .into_response();
     }
 
-    let revoked_at = Utc::now().to_rfc3339();
+    // Invalida caché en memoria para que el cambio surta efecto inmediato
+    state.revocation_checker.invalidate_cache().await;
+
     let client_ip = extract_client_ip(&headers, None, &state.config.trusted_proxies);
     let trace_id = extract_trace_id(&headers);
 
@@ -890,7 +898,256 @@ pub async fn revoke_build_handler(
             "status": "revoked",
             "role": role,
             "profile_id": profile_id,
+            "revoked_at": revoked_at,
+            "reason": reason_str
+        })),
+    )
+        .into_response()
+}
+
+/// Endpoint público/autenticado que publica la lista activa de revocaciones con soporte de caché HTTP.
+pub async fn get_revocations_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Response {
+    let (data, etag) = match state.revocation_checker.get_revocations().await {
+        Ok(res) => res,
+        Err(e) => {
+            tracing::error!("Error consultando lista de revocaciones: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "database_error",
+                    "message": "Fallo al consultar lista de revocaciones"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    if let Some(if_none_match) = headers.get("if-none-match").and_then(|v| v.to_str().ok()) {
+        if if_none_match.trim() == etag.trim() {
+            let mut res_headers = HeaderMap::new();
+            res_headers.insert(
+                CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=60"),
+            );
+            if let Ok(etag_val) = HeaderValue::from_str(&etag) {
+                res_headers.insert("etag", etag_val);
+            }
+            return (StatusCode::NOT_MODIFIED, res_headers).into_response();
+        }
+    }
+
+    let mut res_headers = HeaderMap::new();
+    res_headers.insert(
+        CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=60"),
+    );
+    if let Ok(etag_val) = HeaderValue::from_str(&etag) {
+        res_headers.insert("etag", etag_val);
+    }
+    res_headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+    (StatusCode::OK, res_headers, Json(data)).into_response()
+}
+
+/// Revoca en lote todos los instaladores asociados a un rol (`soporte` o `tecnico`),
+/// y registra la revocación global del rol.
+pub async fn revoke_role_handler(
+    headers: HeaderMap,
+    user: AuthenticatedUser,
+    State(state): State<AppState>,
+    Path(role): Path<String>,
+    body: axum::body::Bytes,
+) -> Response {
+    let client_ip = extract_client_ip(&headers, None, &state.config.trusted_proxies);
+    let trace_id = extract_trace_id(&headers);
+
+    let role_norm = role.trim().to_lowercase();
+    if role_norm != "soporte" && role_norm != "tecnico" {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": "invalid_role",
+                "message": format!("Rol '{}' no válido para revocación. Debe ser 'soporte' o 'tecnico'", role)
+            })),
+        )
+            .into_response();
+    }
+
+    // RBAC: admin o usuario con permiso builder:revoke
+    let is_admin = user.role == "admin";
+    let has_revoke_perm = if !is_admin {
+        let perm_row = sqlx::query(
+            "SELECT 1 FROM user_permissions WHERE user_id = ? AND permission = 'builder:revoke'",
+        )
+        .bind(&user.id)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or(None);
+        perm_row.is_some()
+    } else {
+        true
+    };
+
+    if !has_revoke_perm {
+        let actor = Actor::with_details(
+            &user.id,
+            "user",
+            Some(user.username.clone()),
+            Some(client_ip),
+        );
+        let subject = Subject::with_details(
+            format!("role:{}", role_norm),
+            "build_role",
+            Some(role_norm.clone()),
+        );
+        let denied_input = EventInput::new(
+            trace_id,
+            Source::Api,
+            Category::Auth,
+            "auth.denied",
+            actor,
+            Outcome::Denied,
+            json!({
+                "error": "forbidden",
+                "target_role": role_norm,
+                "required_permission": "builder:revoke",
+                "message": "Se requieren permisos administrativos o 'builder:revoke' para revocar un rol completo"
+            }),
+        )
+        .with_subject(subject);
+        let _ = state.audit.append(denied_input).await;
+
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "forbidden",
+                "message": "No tiene permisos para revocar roles de instaladores"
+            })),
+        )
+            .into_response();
+    }
+
+    let payload: Option<RevokeBuildPayload> = if !body.is_empty() {
+        serde_json::from_slice(&body).ok()
+    } else {
+        None
+    };
+
+    let reason_str = payload.and_then(|p| p.reason).unwrap_or_else(|| {
+        format!(
+            "Revocación masiva de instaladores para el rol '{}'",
+            role_norm
+        )
+    });
+
+    let revoked_at = Utc::now().to_rfc3339();
+
+    // 1. Actualizar todos los jobs de ese rol a 'revoked'
+    let update_res = sqlx::query(
+        r#"
+        UPDATE build_jobs
+        SET status = 'revoked',
+            revoked_at = COALESCE(revoked_at, ?),
+            revocation_reason = COALESCE(revocation_reason, ?)
+        WHERE role = ? AND status != 'revoked'
+        "#,
+    )
+    .bind(&revoked_at)
+    .bind(&reason_str)
+    .bind(&role_norm)
+    .execute(&state.db)
+    .await;
+
+    let affected_count = match update_res {
+        Ok(res) => res.rows_affected(),
+        Err(e) => {
+            tracing::error!("Error revocando jobs de rol {}: {:?}", role_norm, e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "database_error",
+                    "message": "Fallo al revocar instaladores del rol"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // 2. Insertar en tabla de roles revocados
+    let role_insert = sqlx::query(
+        r#"
+        INSERT INTO revoked_roles (role, revoked_at, revocation_reason, revoked_by)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(role) DO UPDATE SET
+            revoked_at = excluded.revoked_at,
+            revocation_reason = excluded.revocation_reason,
+            revoked_by = excluded.revoked_by
+        "#,
+    )
+    .bind(&role_norm)
+    .bind(&revoked_at)
+    .bind(&reason_str)
+    .bind(&user.id)
+    .execute(&state.db)
+    .await;
+
+    if let Err(e) = role_insert {
+        tracing::error!("Error registrando rol revocado en BD: {:?}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "database_error",
+                "message": "Fallo al registrar revocación de rol"
+            })),
+        )
+            .into_response();
+    }
+
+    // 3. Invalidar caché
+    state.revocation_checker.invalidate_cache().await;
+
+    // 4. Emitir auditoría build.revoked
+    let actor = Actor::with_details(
+        &user.id,
+        "user",
+        Some(user.username.clone()),
+        Some(client_ip),
+    );
+    let subject = Subject::with_details(
+        format!("role:{}", role_norm),
+        "build_role",
+        Some(role_norm.clone()),
+    );
+
+    let revoke_input = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Build,
+        "build.revoked",
+        actor,
+        Outcome::Success,
+        json!({
+            "target_role": role_norm,
+            "reason": reason_str,
+            "affected_installers": affected_count,
             "revoked_at": revoked_at
+        }),
+    )
+    .with_subject(subject);
+
+    let _ = state.audit.append(revoke_input).await;
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "role": role_norm,
+            "status": "revoked",
+            "affected_installers": affected_count,
+            "revoked_at": revoked_at,
+            "reason": reason_str
         })),
     )
         .into_response()

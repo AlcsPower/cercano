@@ -33,6 +33,8 @@ pub const DEFAULT_CHECKPOINT_INTERVAL_SECS: u64 = 300;
 pub const DEFAULT_BUILDS_DIR: &str = "./data/builds";
 pub const DEFAULT_BUILD_CONCURRENCY: usize = 2;
 pub const DEFAULT_BUILD_RETENTION_SECS: u64 = 7 * 24 * 3600;
+pub const DEFAULT_REVOCATION_CACHE_TTL_SECS: u64 = 60;
+pub const DEFAULT_REVOCATION_FAIL_CLOSED: bool = true;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
@@ -64,6 +66,10 @@ pub struct Config {
     pub build_retention_secs: u64,
     #[serde(default)]
     pub build_signing_key_path: Option<String>,
+    #[serde(default = "default_revocation_cache_ttl_secs")]
+    pub revocation_cache_ttl_secs: u64,
+    #[serde(default = "default_revocation_fail_closed")]
+    pub revocation_fail_closed: bool,
 }
 
 fn default_builds_dir() -> String {
@@ -76,6 +82,14 @@ fn default_build_concurrency() -> usize {
 
 fn default_build_retention_secs() -> u64 {
     DEFAULT_BUILD_RETENTION_SECS
+}
+
+fn default_revocation_cache_ttl_secs() -> u64 {
+    DEFAULT_REVOCATION_CACHE_TTL_SECS
+}
+
+fn default_revocation_fail_closed() -> bool {
+    DEFAULT_REVOCATION_FAIL_CLOSED
 }
 
 impl Default for Config {
@@ -97,6 +111,8 @@ impl Default for Config {
             build_concurrency: DEFAULT_BUILD_CONCURRENCY,
             build_retention_secs: DEFAULT_BUILD_RETENTION_SECS,
             build_signing_key_path: None,
+            revocation_cache_ttl_secs: DEFAULT_REVOCATION_CACHE_TTL_SECS,
+            revocation_fail_closed: DEFAULT_REVOCATION_FAIL_CLOSED,
         }
     }
 }
@@ -120,6 +136,8 @@ struct FileConfig {
     build_concurrency: Option<usize>,
     build_retention_secs: Option<u64>,
     build_signing_key_path: Option<String>,
+    revocation_cache_ttl_secs: Option<u64>,
+    revocation_fail_closed: Option<bool>,
 }
 
 impl Config {
@@ -208,6 +226,12 @@ impl Config {
         }
         if let Some(key_path) = file_cfg.build_signing_key_path {
             self.build_signing_key_path = Some(key_path);
+        }
+        if let Some(ttl) = file_cfg.revocation_cache_ttl_secs {
+            self.revocation_cache_ttl_secs = ttl;
+        }
+        if let Some(fail_closed) = file_cfg.revocation_fail_closed {
+            self.revocation_fail_closed = fail_closed;
         }
 
         Ok(())
@@ -324,6 +348,21 @@ impl Config {
             if !key_path.trim().is_empty() {
                 self.build_signing_key_path = Some(key_path.trim().to_string());
             }
+        }
+
+        if let Ok(ttl_str) = env::var("CERCANO_REVOCATION_CACHE_TTL_SECS") {
+            self.revocation_cache_ttl_secs = ttl_str
+                .parse::<u64>()
+                .map_err(|e| format!("Invalid CERCANO_REVOCATION_CACHE_TTL_SECS: {}", e))?;
+        }
+
+        if let Ok(fc_str) = env::var("CERCANO_REVOCATION_FAIL_CLOSED") {
+            let fc = match fc_str.trim().to_lowercase().as_str() {
+                "true" | "1" | "yes" => true,
+                "false" | "0" | "no" => false,
+                other => return Err(format!("Invalid CERCANO_REVOCATION_FAIL_CLOSED: {}", other)),
+            };
+            self.revocation_fail_closed = fc;
         }
 
         Ok(())
@@ -452,6 +491,8 @@ database_url = "sqlite:///custom/path.db"
         env::set_var("CERCANO_DEVICE_GRACE_PERIOD_SECS", "45");
         env::set_var("CERCANO_SERVER_KEY_PATH", "/env/path/id_ed25519.pub");
         env::set_var("CERCANO_CLIENT_INGEST_TOKEN", "client_token_test_123");
+        env::set_var("CERCANO_REVOCATION_CACHE_TTL_SECS", "42");
+        env::set_var("CERCANO_REVOCATION_FAIL_CLOSED", "false");
 
         let mut cfg = Config::default();
         cfg.merge_env().unwrap();
@@ -463,6 +504,8 @@ database_url = "sqlite:///custom/path.db"
         assert_eq!(cfg.device_grace_period_secs, 45);
         assert_eq!(cfg.server_key_path, "/env/path/id_ed25519.pub");
         assert_eq!(cfg.client_ingest_token, "client_token_test_123");
+        assert_eq!(cfg.revocation_cache_ttl_secs, 42);
+        assert!(!cfg.revocation_fail_closed);
 
         env::remove_var("CERCANO_HOST");
         env::remove_var("CERCANO_PORT");
@@ -471,6 +514,8 @@ database_url = "sqlite:///custom/path.db"
         env::remove_var("CERCANO_DEVICE_GRACE_PERIOD_SECS");
         env::remove_var("CERCANO_SERVER_KEY_PATH");
         env::remove_var("CERCANO_CLIENT_INGEST_TOKEN");
+        env::remove_var("CERCANO_REVOCATION_CACHE_TTL_SECS");
+        env::remove_var("CERCANO_REVOCATION_FAIL_CLOSED");
     }
 
     #[test]

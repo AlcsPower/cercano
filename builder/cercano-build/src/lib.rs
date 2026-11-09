@@ -28,8 +28,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+pub mod sbom;
 pub mod signing;
 pub mod windows;
+
+pub use sbom::SbomFormat;
 
 /// Clave privada de desarrollo por defecto (32 bytes deterministas).
 pub const DEFAULT_DEV_SIGNING_KEY_BYTES: [u8; 32] = [42u8; 32];
@@ -37,6 +40,9 @@ pub const DEFAULT_DEV_KEY_ID: &str = "cercano-dev-key";
 pub const DEFAULT_SIGNED_PROFILE_NAME: &str = "cercano-profile.signed.json";
 pub const DEFAULT_MANIFEST_NAME: &str = "build-manifest.json";
 pub const DEFAULT_CHECKSUMS_NAME: &str = "SHA256SUMS";
+pub const DEFAULT_SBOM_CDX_NAME: &str = sbom::DEFAULT_SBOM_CDX_NAME;
+pub const DEFAULT_SBOM_SPDX_NAME: &str = sbom::DEFAULT_SBOM_SPDX_NAME;
+pub const DEFAULT_PROVENANCE_NAME: &str = sbom::DEFAULT_PROVENANCE_NAME;
 
 #[derive(Debug, Error)]
 pub enum BuildError {
@@ -85,6 +91,8 @@ pub struct BuildOptions {
     pub timestamp_url: Option<String>,
     pub cert_path: Option<PathBuf>,
     pub cert_pass: Option<String>,
+    pub generate_sbom: bool,
+    pub sbom_format: sbom::SbomFormat,
 }
 
 impl BuildOptions {
@@ -103,6 +111,8 @@ impl BuildOptions {
             timestamp_url: None,
             cert_path: None,
             cert_pass: None,
+            generate_sbom: true,
+            sbom_format: sbom::SbomFormat::default(),
         }
     }
 }
@@ -128,6 +138,21 @@ pub struct AuthenticodeSignatureMetadata {
     pub verified: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SbomManifestInfo {
+    pub format: String,
+    pub file_name: String,
+    pub sha256: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProvenanceManifestInfo {
+    pub file_name: String,
+    pub sha256: String,
+    pub size_bytes: u64,
+}
+
 /// Manifiesto de compilación y procedencia `build-manifest.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BuildManifest {
@@ -148,6 +173,10 @@ pub struct BuildManifest {
     pub windows_metadata: Option<windows::WindowsInstallerMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authenticode: Option<AuthenticodeSignatureMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sbom: Option<SbomManifestInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<ProvenanceManifestInfo>,
     pub artifacts: Vec<BuildArtifact>,
 }
 
@@ -164,6 +193,8 @@ pub struct BuildResult {
     pub base_binary_path: Option<PathBuf>,
     pub windows_exe_path: Option<PathBuf>,
     pub windows_msi_path: Option<PathBuf>,
+    pub sbom_path: Option<PathBuf>,
+    pub provenance_path: Option<PathBuf>,
     pub elapsed_ms: u128,
 }
 
@@ -443,9 +474,51 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         windows_metadata = Some(win_res.metadata);
     }
 
-    // 8. Generar `build-manifest.json`
+    // 8. Generar SBOM y atestación de procedencia (F3-10) si está habilitado
     let build_id = uuid::Uuid::new_v4().to_string();
     let app_name = profile.identity.as_ref().and_then(|id| id.app_name.clone());
+    let created_at = chrono::Utc::now().to_rfc3339();
+
+    let mut sbom_path = None;
+    let mut provenance_path = None;
+    let mut sbom_info = None;
+    let mut prov_info = None;
+
+    if options.generate_sbom {
+        let sbom_ctx = sbom::SbomContext {
+            build_id: &build_id,
+            profile_id: &profile.profile_id,
+            role: role_str,
+            version: version_str,
+            app_name: app_name.as_deref(),
+            timestamp: &created_at,
+            base_binary: base_binary_info.as_ref(),
+            signing_key_id: signed_profile.key_id.as_deref(),
+        };
+
+        let (prov_art, sbom_art, p_path, s_path) =
+            sbom::write_sbom_and_provenance(&target_dir, &sbom_ctx, options, &artifacts)?;
+
+        sbom_info = Some(SbomManifestInfo {
+            format: options.sbom_format.as_str().to_string(),
+            file_name: sbom_art.file_name.clone(),
+            sha256: sbom_art.sha256.clone(),
+            size_bytes: sbom_art.size_bytes,
+        });
+
+        prov_info = Some(ProvenanceManifestInfo {
+            file_name: prov_art.file_name.clone(),
+            sha256: prov_art.sha256.clone(),
+            size_bytes: prov_art.size_bytes,
+        });
+
+        artifacts.push(prov_art);
+        artifacts.push(sbom_art);
+        provenance_path = Some(p_path);
+        sbom_path = Some(s_path);
+    }
+
+    // 9. Generar `build-manifest.json`
     let authenticode = code_signer.as_ref().map(|s| AuthenticodeSignatureMetadata {
         driver: s.driver().as_str().to_string(),
         timestamp_url: s.timestamp_url().to_string(),
@@ -460,11 +533,13 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         app_name,
         version: version_str.clone(),
         strategy: "A".to_string(),
-        created_at: chrono::Utc::now().to_rfc3339(),
+        created_at,
         signing_key_id: signed_profile.key_id.clone(),
         base_binary: base_binary_info,
         windows_metadata,
         authenticode,
+        sbom: sbom_info,
+        provenance: prov_info,
         artifacts,
     };
 
@@ -475,7 +550,7 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         source,
     })?;
 
-    // 9. Generar `SHA256SUMS` para todos los archivos generados (ordenados alfabéticamente)
+    // 10. Generar `SHA256SUMS` para todos los archivos generados (ordenados alfabéticamente)
     let checksums_path = target_dir.join(DEFAULT_CHECKSUMS_NAME);
     let mut file_entries = Vec::new();
 
@@ -525,6 +600,8 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         base_binary_path: packaged_base_path,
         windows_exe_path,
         windows_msi_path,
+        sbom_path,
+        provenance_path,
         elapsed_ms,
     }))
 }

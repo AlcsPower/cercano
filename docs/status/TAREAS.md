@@ -66,8 +66,8 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-06 | Firma Authenticode enchufable | F3-05 | Builder | Seguridad | Hecho |
 | F3-07 | Servicio de build en `cercano-api`: cola, jobs, almacenamiento | F3-04, F1-04 | ControlPlane | QA | Hecho |
 | F3-08 | Auditoría `build.*` | F3-07, F2-02 | ControlPlane | QA | Hecho |
-| F3-09 | Revocación y caducidad | F3-02, F3-07 | ControlPlane + Servidor | Seguridad | Pendiente |
-| F3-10 | SBOM y verificación de procedencia | F3-04 | Builder | Seguridad | Pendiente |
+| F3-09 | Revocación y caducidad | F3-02, F3-07 | ControlPlane + Servidor | Seguridad | Hecho |
+| F3-10 | SBOM y verificación de procedencia | F3-04 | Builder | Seguridad | Hecho |
 | F3-11 | Guía de despliegue masivo | F3-05, F3-14, F3-15 | Coordinador | QA | Pendiente |
 | F3-12 | Pruebas de extremo a extremo y cierre | F3-01…11, F3-13…18 | QA | Coordinador | Pendiente |
 | F3-13 | Roles de instalador: perfil y aplicación en el servidor | F3-01, F3-02, F3-07 | ControlPlane + Servidor | Seguridad | Pendiente |

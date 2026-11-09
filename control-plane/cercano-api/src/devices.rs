@@ -29,6 +29,7 @@ use std::net::SocketAddr;
 use thiserror::Error;
 
 use crate::auth::{extract_client_ip, extract_trace_id, AuthenticatedUser};
+use crate::revocation::RevocationStatus;
 use crate::AppState;
 
 pub const DEVICE_STATUS_EXPR: &str = "CASE WHEN last_seen_at IS NOT NULL AND (strftime('%s', 'now') - strftime('%s', last_seen_at)) <= ? THEN 'online' ELSE 'offline' END";
@@ -43,6 +44,10 @@ pub enum DeviceError {
     NotFound(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
+    #[error("Installer revoked: {0}")]
+    InstallerRevoked(String),
+    #[error("Installer expired: {0}")]
+    InstallerExpired(String),
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
     #[error("Rate limit exceeded: {0}")]
@@ -59,6 +64,12 @@ impl IntoResponse for DeviceError {
             }
             DeviceError::NotFound(msg) => (StatusCode::NOT_FOUND, "device_not_found", msg.clone()),
             DeviceError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
+            DeviceError::InstallerRevoked(msg) => {
+                (StatusCode::FORBIDDEN, "installer_revoked", msg.clone())
+            }
+            DeviceError::InstallerExpired(msg) => {
+                (StatusCode::FORBIDDEN, "installer_expired", msg.clone())
+            }
             DeviceError::Unauthorized(msg) => {
                 (StatusCode::UNAUTHORIZED, "unauthorized", msg.clone())
             }
@@ -92,7 +103,7 @@ impl IntoResponse for DeviceError {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct HeartbeatRequest {
     pub id: String,
     #[serde(default)]
@@ -105,6 +116,10 @@ pub struct HeartbeatRequest {
     pub version: Option<String>,
     #[serde(default)]
     pub ip: Option<String>,
+    #[serde(default)]
+    pub installer_id: Option<String>,
+    #[serde(default)]
+    pub profile_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -118,6 +133,10 @@ pub struct DeviceResponse {
     pub status: String,
     pub last_seen_at: Option<String>,
     pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installer_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -260,6 +279,215 @@ pub async fn heartbeat_handler(
         }
     }
 
+    // Resolver installer_id y profile_id de payload o cabeceras
+    let incoming_installer_id = payload
+        .installer_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| {
+            headers
+                .get("x-installer-id")
+                .and_then(|h| h.to_str().ok())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(ToString::to_string)
+        });
+
+    let incoming_profile_id = payload
+        .profile_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| {
+            headers
+                .get("x-profile-id")
+                .and_then(|h| h.to_str().ok())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(ToString::to_string)
+        });
+
+    // Consultar si el dispositivo ya tenía un instalador asociado en base de datos
+    let existing_device_row =
+        sqlx::query("SELECT installer_id, profile_id FROM devices WHERE id = ?")
+            .bind(&trimmed_id)
+            .fetch_optional(&state.db)
+            .await?;
+
+    let (existing_installer_id, existing_profile_id): (Option<String>, Option<String>) =
+        match existing_device_row {
+            Some(ref r) => (r.get("installer_id"), r.get("profile_id")),
+            None => (None, None),
+        };
+
+    let resolved_installer_id = incoming_installer_id.or(existing_installer_id);
+    let resolved_profile_id = incoming_profile_id.or(existing_profile_id);
+
+    // Validación de revocación y caducidad del instalador
+    if let Some(ref inst_id) = resolved_installer_id {
+        match state.revocation_checker.check_installer(inst_id).await {
+            Ok(RevocationStatus::InstallerRevoked {
+                role,
+                revoked_at,
+                reason,
+                ..
+            }) => {
+                let trace_id = extract_trace_id(&headers);
+                let reason_str = reason
+                    .unwrap_or_else(|| "Instalador revocado por el administrador".to_string());
+                let actor = Actor::with_details(
+                    &trimmed_id,
+                    "device",
+                    provided_name.clone(),
+                    Some(client_ip.clone()),
+                );
+                let subject = Subject::with_details(inst_id, "installer", Some(role.clone()));
+
+                let audit_event = EventInput::new(
+                    trace_id,
+                    Source::Api,
+                    Category::Build,
+                    "build.registration_rejected",
+                    actor,
+                    Outcome::Denied,
+                    json!({
+                        "device_id": trimmed_id,
+                        "installer_id": inst_id,
+                        "role": role,
+                        "reason": reason_str,
+                        "revoked_at": revoked_at,
+                        "rejection_type": "installer_revoked"
+                    }),
+                )
+                .with_subject(subject);
+
+                let _ = state.audit.append(audit_event).await;
+
+                return Err(DeviceError::InstallerRevoked(format!(
+                    "Instalador '{}' revocado en {}: {}",
+                    inst_id, revoked_at, reason_str
+                )));
+            }
+            Ok(RevocationStatus::RoleRevoked {
+                role,
+                revoked_at,
+                reason,
+                ..
+            }) => {
+                let trace_id = extract_trace_id(&headers);
+                let reason_str =
+                    reason.unwrap_or_else(|| format!("Rol '{}' revocado globalmente", role));
+                let actor = Actor::with_details(
+                    &trimmed_id,
+                    "device",
+                    provided_name.clone(),
+                    Some(client_ip.clone()),
+                );
+                let subject = Subject::with_details(inst_id, "installer", Some(role.clone()));
+
+                let audit_event = EventInput::new(
+                    trace_id,
+                    Source::Api,
+                    Category::Build,
+                    "build.registration_rejected",
+                    actor,
+                    Outcome::Denied,
+                    json!({
+                        "device_id": trimmed_id,
+                        "installer_id": inst_id,
+                        "role": role,
+                        "reason": reason_str,
+                        "revoked_at": revoked_at,
+                        "rejection_type": "role_revoked"
+                    }),
+                )
+                .with_subject(subject);
+
+                let _ = state.audit.append(audit_event).await;
+
+                return Err(DeviceError::InstallerRevoked(format!(
+                    "El rol '{}' del instalador '{}' ha sido revocado en {}: {}",
+                    role, inst_id, revoked_at, reason_str
+                )));
+            }
+            Ok(RevocationStatus::InstallerExpired {
+                role, expires_at, ..
+            }) => {
+                let trace_id = extract_trace_id(&headers);
+                let actor = Actor::with_details(
+                    &trimmed_id,
+                    "device",
+                    provided_name.clone(),
+                    Some(client_ip.clone()),
+                );
+                let subject = Subject::with_details(inst_id, "installer", Some(role.clone()));
+
+                let audit_event = EventInput::new(
+                    trace_id,
+                    Source::Api,
+                    Category::Build,
+                    "build.registration_rejected",
+                    actor,
+                    Outcome::Denied,
+                    json!({
+                        "device_id": trimmed_id,
+                        "installer_id": inst_id,
+                        "role": role,
+                        "expires_at": expires_at,
+                        "rejection_type": "installer_expired"
+                    }),
+                )
+                .with_subject(subject);
+
+                let _ = state.audit.append(audit_event).await;
+
+                return Err(DeviceError::InstallerExpired(format!(
+                    "El instalador '{}' ha caducado en {}",
+                    inst_id, expires_at
+                )));
+            }
+            Err(e) => {
+                let trace_id = extract_trace_id(&headers);
+                let actor = Actor::with_details(
+                    &trimmed_id,
+                    "device",
+                    provided_name.clone(),
+                    Some(client_ip.clone()),
+                );
+                let subject = Subject::with_details(inst_id, "installer", None);
+
+                let audit_event = EventInput::new(
+                    trace_id,
+                    Source::Api,
+                    Category::Build,
+                    "build.registration_rejected",
+                    actor,
+                    Outcome::Denied,
+                    json!({
+                        "device_id": trimmed_id,
+                        "installer_id": inst_id,
+                        "error": e,
+                        "rejection_type": "revocation_check_failed"
+                    }),
+                )
+                .with_subject(subject);
+
+                let _ = state.audit.append(audit_event).await;
+
+                return Err(DeviceError::Forbidden(format!(
+                    "revocation_check_failed: {}",
+                    e
+                )));
+            }
+            Ok(RevocationStatus::Valid { .. }) | Ok(RevocationStatus::NotFound) => {
+                // Instalador válido o no registrado en API (e.g. standalone/legacy)
+            }
+        }
+    }
+
     // Check if device is registering for the first time
     let is_new_device = sqlx::query("SELECT 1 FROM devices WHERE id = ?")
         .bind(&trimmed_id)
@@ -271,8 +499,8 @@ pub async fn heartbeat_handler(
     // On UPDATE (conflict), preserve devices.name if provided_name is NULL or empty.
     sqlx::query(
         r#"
-        INSERT INTO devices (id, name, hostname, os, version, ip_address, status, last_seen_at)
-        VALUES (?1, COALESCE(?2, ?3, ?1), ?3, ?4, ?5, ?6, 'online', datetime('now'))
+        INSERT INTO devices (id, name, hostname, os, version, ip_address, status, last_seen_at, installer_id, profile_id)
+        VALUES (?1, COALESCE(?2, ?3, ?1), ?3, ?4, ?5, ?6, 'online', datetime('now'), ?7, ?8)
         ON CONFLICT(id) DO UPDATE SET
             name = CASE WHEN ?2 IS NOT NULL AND ?2 != '' THEN ?2 ELSE devices.name END,
             hostname = COALESCE(?3, devices.hostname),
@@ -280,7 +508,9 @@ pub async fn heartbeat_handler(
             version = COALESCE(?5, devices.version),
             ip_address = ?6,
             status = 'online',
-            last_seen_at = datetime('now');
+            last_seen_at = datetime('now'),
+            installer_id = COALESCE(?7, devices.installer_id),
+            profile_id = COALESCE(?8, devices.profile_id);
         "#,
     )
     .bind(&trimmed_id)
@@ -289,12 +519,14 @@ pub async fn heartbeat_handler(
     .bind(&resolved_os)
     .bind(&resolved_version)
     .bind(&client_ip)
+    .bind(&resolved_installer_id)
+    .bind(&resolved_profile_id)
     .execute(&state.db)
     .await?;
 
     let row = sqlx::query(
         r#"
-        SELECT id, name, hostname, os, version, ip_address, status, last_seen_at, created_at
+        SELECT id, name, hostname, os, version, ip_address, status, last_seen_at, created_at, installer_id, profile_id
         FROM devices
         WHERE id = ?
         "#,
@@ -313,6 +545,8 @@ pub async fn heartbeat_handler(
         status: row.get("status"),
         last_seen_at: row.get("last_seen_at"),
         created_at: row.get("created_at"),
+        installer_id: row.get("installer_id"),
+        profile_id: row.get("profile_id"),
     };
 
     if is_new_device {
@@ -369,7 +603,9 @@ pub async fn list_devices_handler(
             ip_address,
             {} AS status,
             last_seen_at,
-            created_at
+            created_at,
+            installer_id,
+            profile_id
         FROM devices
         ORDER BY created_at DESC
         "#,
@@ -393,6 +629,8 @@ pub async fn list_devices_handler(
             status: row.get("status"),
             last_seen_at: row.get("last_seen_at"),
             created_at: row.get("created_at"),
+            installer_id: row.get("installer_id"),
+            profile_id: row.get("profile_id"),
         })
         .collect();
 
@@ -420,7 +658,9 @@ pub async fn get_device_handler(
             ip_address,
             {} AS status,
             last_seen_at,
-            created_at
+            created_at,
+            installer_id,
+            profile_id
         FROM devices
         WHERE id = ?
         "#,
@@ -444,6 +684,8 @@ pub async fn get_device_handler(
             status: row.get("status"),
             last_seen_at: row.get("last_seen_at"),
             created_at: row.get("created_at"),
+            installer_id: row.get("installer_id"),
+            profile_id: row.get("profile_id"),
         })),
         None => Err(DeviceError::NotFound(format!(
             "Dispositivo con ID '{}' no encontrado",
@@ -546,6 +788,8 @@ mod tests {
             os: Some("Windows 11".to_string()),
             version: Some("0.1.0".to_string()),
             ip: Some("192.168.1.50".to_string()),
+            installer_id: None,
+            profile_id: None,
         };
         assert!(validate_heartbeat_input(&req).is_ok());
     }
@@ -559,6 +803,8 @@ mod tests {
             os: None,
             version: None,
             ip: None,
+            installer_id: None,
+            profile_id: None,
         };
         assert!(validate_heartbeat_input(&req).is_err());
     }
@@ -572,6 +818,8 @@ mod tests {
             os: None,
             version: None,
             ip: None,
+            installer_id: None,
+            profile_id: None,
         };
         assert!(validate_heartbeat_input(&req).is_err());
     }
@@ -585,6 +833,8 @@ mod tests {
             os: None,
             version: None,
             ip: None,
+            installer_id: None,
+            profile_id: None,
         };
         assert!(validate_heartbeat_input(&req).is_err());
 
