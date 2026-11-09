@@ -83,4 +83,74 @@ export interface CustomClientProfile {
   allow_terminal: boolean;
 }
 
-export type ActiveTab = 'dashboard' | 'devices' | 'builder' | 'security' | 'network';
+export type ChatStatus = 'waiting' | 'assigned' | 'active' | 'closed';
+export type ChatSenderType = 'client' | 'technician' | 'system';
+
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  mime: string;
+  size_bytes: number;
+  sha256: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  sender_type: ChatSenderType;
+  sender_id?: string | null;
+  sender_name?: string | null;
+  body: string;
+  attachment?: ChatAttachment | null;
+  created_at: string;
+}
+
+export interface ChatConversation {
+  id: string;
+  device_id: string;
+  device_name: string | null;
+  device_hostname?: string | null;
+  device_os?: string | null;
+  status: ChatStatus;
+  assigned_user_id?: string | null;
+  assigned_username?: string | null;
+  contact_first_name?: string | null;
+  contact_last_name?: string | null;
+  created_at: string;
+  updated_at: string;
+  last_message_at?: string | null;
+  last_message_preview?: string | null;
+  unread_count: number;
+}
+
+export interface ChatConversationDetail extends ChatConversation {
+  closed_at?: string | null;
+  closed_by?: string | null;
+  messages: ChatMessage[];
+  next_before?: string | null;
+  other_last_read_at?: string | null;
+}
+
+export interface ChatBranding {
+  organization_name?: string | null;
+  support_name: string;
+  logo_url?: string | null;
+  accent_color: string;
+  welcome_text?: string | null;
+  info_text?: string | null;
+  privacy_text?: string | null;
+}
+
+export interface ChatAgent {
+  id: string;
+  username: string;
+}
+
+export interface ChatSummary {
+  waiting: number;
+  assigned_to_me: number;
+  active: number;
+  unread: number;
+}
+
+export type ActiveTab = 'dashboard' | 'devices' | 'chat' | 'builder' | 'security' | 'network';

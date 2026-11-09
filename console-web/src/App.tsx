@@ -8,14 +8,16 @@ import { TabBar } from './components/layout/TabBar';
 import { LoginView } from './components/views/LoginView';
 import { DashboardView } from './components/views/DashboardView';
 import { DevicesView } from './components/views/DevicesView';
+import { ChatView } from './components/views/ChatView';
 import { BuilderView } from './components/views/BuilderView';
 import { SecurityView } from './components/views/SecurityView';
 import { NetworkView } from './components/views/NetworkView';
 import { ActiveTab } from './types';
 import { apiClient } from './api/client';
+import { chatApi } from './api/chat';
 
 export const App: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return document.documentElement.classList.contains('dark');
@@ -23,6 +25,7 @@ export const App: React.FC = () => {
   const [isRotateModalOpen, setIsRotateModalOpen] = useState(false);
   const [onlineCount, setOnlineCount] = useState<number>(0);
   const [totalDevices, setTotalDevices] = useState<number>(0);
+  const [chatBadge, setChatBadge] = useState<number>(0);
 
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -57,6 +60,28 @@ export const App: React.FC = () => {
     }
   }, [isAuthenticated, activeTab]);
 
+  // Chat badge: waiting queue + unread messages
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let isMounted = true;
+    const loadChatBadge = () => {
+      chatApi
+        .getSummary()
+        .then((summary) => {
+          if (isMounted) setChatBadge(summary.waiting + summary.unread);
+        })
+        .catch(() => {
+          // The badge is best-effort; the chat view shows its own error.
+        });
+    };
+    loadChatBadge();
+    const interval = setInterval(loadChatBadge, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isAuthenticated, activeTab]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-apple-canvas dark:bg-apple-canvas-dark">
@@ -85,6 +110,7 @@ export const App: React.FC = () => {
         setActiveTab={handleTabChange}
         onlineCount={onlineCount}
         totalDevices={totalDevices}
+        chatBadge={chatBadge}
       />
 
       {/* Main Content View with symmetric layout */}
@@ -100,6 +126,13 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'devices' && <DevicesView />}
+
+        {activeTab === 'chat' && (
+          <ChatView
+            currentUserId={user?.id || 'me'}
+            canManageBranding={user?.role === 'admin'}
+          />
+        )}
 
         {activeTab === 'builder' && <BuilderView />}
 

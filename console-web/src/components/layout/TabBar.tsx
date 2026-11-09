@@ -2,7 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from 'react';
-import { LayoutDashboard, Monitor, Palette, KeyRound, Network } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Monitor,
+  MessageCircle,
+  Palette,
+  KeyRound,
+  Network,
+} from 'lucide-react';
 import { ActiveTab } from '../../types';
 
 interface TabBarProps {
@@ -10,12 +17,14 @@ interface TabBarProps {
   setActiveTab: (tab: ActiveTab) => void;
   onlineCount?: number;
   totalDevices?: number;
+  chatBadge?: number;
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
   activeTab,
   setActiveTab,
   onlineCount = 0,
+  chatBadge = 0,
 }) => {
   const tabs: { id: ActiveTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     {
@@ -28,6 +37,12 @@ export const TabBar: React.FC<TabBarProps> = ({
       label: 'Dispositivos',
       icon: <Monitor size={18} />,
       badge: onlineCount,
+    },
+    {
+      id: 'chat',
+      label: 'Conversaciones',
+      icon: <MessageCircle size={18} />,
+      badge: chatBadge,
     },
     {
       id: 'builder',
