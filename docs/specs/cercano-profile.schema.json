@@ -1,0 +1,268 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cercano.local/schemas/cercano-profile.schema.json",
+  "title": "CercanoProfile",
+  "description": "Esquema formal para perfiles de instalador preconfigurado en Cercano (Fase 3 - Generador de Instaladores).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "role",
+    "server",
+    "policy",
+    "installation"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Versión semántica del esquema del perfil (ej. 1.0.0)."
+    },
+    "profile_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "Identificador único universal del perfil (UUID)."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Marca de tiempo ISO 8601 UTC de generación del perfil."
+    },
+    "role": {
+      "type": "string",
+      "enum": ["soporte", "tecnico"],
+      "description": "Rol operativo del instalador generado: 'soporte' (asistencia recibida) o 'tecnico' (personal TI)."
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rendezvous_server",
+        "relay_server",
+        "api_server",
+        "server_public_key"
+      ],
+      "properties": {
+        "rendezvous_server": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[a-zA-Z0-9.-]+(:[0-9]{1,5})?$",
+          "description": "Host o IP con puerto opcional del servidor de señalización/ID (hbbs, ej. 'cercano.lan:21116')."
+        },
+        "relay_server": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[a-zA-Z0-9.-]+(:[0-9]{1,5})?$",
+          "description": "Host o IP con puerto opcional del servidor relay (hbbr, ej. 'relay.lan:21117')."
+        },
+        "api_server": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://[a-zA-Z0-9.-]+(:[0-9]{1,5})?(/.*)?$",
+          "description": "URL base de la API del plano de control (cercano-api, ej. 'https://cercano.lan:21114')."
+        },
+        "server_public_key": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 60,
+          "pattern": "^[A-Za-z0-9+/=_-]+$",
+          "description": "Clave pública Ed25519 del servidor codificada en Base64."
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "app_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Nombre de producto visible (ej. 'Cercano Soporte' o 'Cercano Técnico')."
+        },
+        "about_text": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Texto descriptivo en la ventana Acerca de (debe incluir mención y enlace a licencia AGPL-3.0)."
+        },
+        "icon": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "Ruta o nombre de recurso del icono (.ico)."
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_incoming",
+        "allow_outgoing",
+        "unattended_access",
+        "require_approval",
+        "hide_network_settings"
+      ],
+      "properties": {
+        "allow_incoming": {
+          "type": "boolean",
+          "description": "Permite recibir conexiones entrantes (obligatorio true en soporte)."
+        },
+        "allow_outgoing": {
+          "type": "boolean",
+          "description": "Permite iniciar conexiones salientes a otros equipos (prohibido en soporte, permitido en técnico)."
+        },
+        "unattended_access": {
+          "type": "boolean",
+          "description": "Permite configurar contraseña fija para acceso desatendido (solo soporte, prohibido en técnico)."
+        },
+        "require_approval": {
+          "type": "boolean",
+          "description": "Exige que la persona usuaria presione Aceptar ante cada conexión entrante."
+        },
+        "allow_file_transfer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Habilita la transferencia de archivos en la sesión."
+        },
+        "allow_clipboard": {
+          "type": "boolean",
+          "default": true,
+          "description": "Habilita la sincronización del portapapeles bidireccional."
+        },
+        "allow_audio": {
+          "type": "boolean",
+          "default": true,
+          "description": "Habilita la transmisión de audio del equipo controlado."
+        },
+        "allow_terminal": {
+          "type": "boolean",
+          "default": false,
+          "description": "Habilita la consola remota de línea de comandos."
+        },
+        "allow_port_forward": {
+          "type": "boolean",
+          "default": false,
+          "description": "Habilita reenvío de puertos TCP durante la sesión."
+        },
+        "hide_network_settings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Oculta y bloquea los ajustes de red (ID server, relay, API) para evitar manipulación local."
+        },
+        "enable_elevation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Habilita la función de elevación con credenciales administrativas."
+        },
+        "unattended_elevation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Permite elevación desatendida sin diálogo de confirmación (desactivada por defecto; requiere perfil soporte)."
+        }
+      }
+    },
+    "installation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "auto_start",
+        "create_desktop_shortcut",
+        "silent"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["installed", "portable"],
+          "description": "Modo de empaquetado: instalador con servicio residente ('installed') o binario portable ('portable')."
+        },
+        "install_path": {
+          "type": "string",
+          "maxLength": 260,
+          "description": "Ruta de instalación sugerida en Windows (ej. 'C:\\Program Files\\Cercano')."
+        },
+        "auto_start": {
+          "type": "boolean",
+          "description": "Configura el arranque automático del servicio o aplicación al iniciar el sistema operativo."
+        },
+        "create_desktop_shortcut": {
+          "type": "boolean",
+          "description": "Crea acceso directo en el escritorio para todos los usuarios."
+        },
+        "silent": {
+          "type": "boolean",
+          "description": "Ejecución por defecto en modo silencioso sin asistente gráfico para despliegues GPO/Intune."
+        }
+      }
+    },
+    "identification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "device_group": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Nombre del grupo o etiqueta de departamento asignada en cercano-api."
+        },
+        "default_owner": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Identificador o correo del técnico u operador responsable del equipo."
+        }
+      }
+    },
+    "expiration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Fecha y hora límite de validez del perfil en UTC (tras la cual el cliente rehúsa iniciar)."
+        },
+        "max_uses": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Número máximo de instalaciones permitidas antes de invalidar el perfil."
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "role": { "const": "soporte" } }
+      },
+      "then": {
+        "properties": {
+          "policy": {
+            "properties": {
+              "allow_incoming": { "const": true },
+              "allow_outgoing": { "const": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "role": { "const": "tecnico" } }
+      },
+      "then": {
+        "properties": {
+          "policy": {
+            "properties": {
+              "allow_outgoing": { "const": true },
+              "unattended_access": { "const": false },
+              "unattended_elevation": { "const": false }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

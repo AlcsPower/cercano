@@ -25,6 +25,7 @@ pub mod db;
 pub mod devices;
 pub mod health;
 pub mod middleware;
+pub mod profile;
 pub mod routes;
 pub mod server_keys;
 pub mod shutdown;

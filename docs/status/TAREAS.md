@@ -58,7 +58,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F3-01 | Esquema y versionado del perfil | F0-07 | Builder | Seguridad | Pendiente |
+| F3-01 | Esquema y versionado del perfil | F0-07 | Builder | Seguridad | En verificación |
 | F3-02 | Cliente: lectura y verificación de perfil firmado | F3-01 | Cliente | Seguridad | Pendiente |
 | F3-03 | Binario base reproducible y publicación de artefactos base | F0-05, F0-03 | Builder | QA | Pendiente |
 | F3-04 | CLI `cercano-build` | F3-01, F3-02, F3-03 | Builder | QA | Pendiente |

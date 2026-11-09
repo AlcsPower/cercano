@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "0192e300-4444-7444-8444-000000000004",
+  "created_at": "2026-11-09T10:00:00.000Z",
+  "role": "soporte",
+  "server": {
+    "rendezvous_server": "cercano.lan:21116",
+    "relay_server": "relay.lan:21117",
+    "api_server": "https://cercano.lan:21114",
+    "server_public_key": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+  },
+  "policy": {
+    "allow_incoming": true,
+    "allow_outgoing": false,
+    "unattended_access": false,
+    "require_approval": true,
+    "hide_network_settings": true
+  },
+  "installation": {
+    "mode": "installed",
+    "auto_start": true,
+    "create_desktop_shortcut": true,
+    "silent": false
+  },
+  "unknown_extra_property": "malicious_injection"
+}
