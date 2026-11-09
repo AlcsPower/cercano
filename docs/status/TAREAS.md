@@ -99,5 +99,5 @@ Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F
 | F4.5-12 | Escalado a sesión remota (`cercano://`) | F4.5-08/11, F3-05 | Cliente + Web | Seguridad | Pendiente |
 | F4.5-13 | Perfil `policy.chat` y aplicación en servidor | F3-01/02/13, F4.5-04 | ControlPlane + Cliente | Seguridad | Pendiente |
 | F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador | Pendiente |
-| F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | Pendiente |
+| F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | En curso |
 | F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA | En curso |
