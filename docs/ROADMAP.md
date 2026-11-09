@@ -115,4 +115,5 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 - **Licencia:** el repositorio se distribuye bajo **AGPL-3.0** (verificado con `tools/check-license.sh`). Bloqueo B-001 resuelto.
 - **Marca:** logo, iconos y guía de uso en `branding/`.
 - **Cercano Chat (F4.5):** diseño, contrato y planificación en `PLAN-F4.5-CHAT.md`, `specs/chat.md` y `adr/010-cercano-chat.md`; la implementación queda encolada después de cerrar F4.
-- **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-F4.5-CHAT.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.
+- **F4:** plan detallado en `PLAN-F4-CONSOLA.md`; RBAC y 2FA pueden ir en paralelo con F3; solo el generador (F4-07) espera F3-07.
+- **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-F4-CONSOLA.md`, `PLAN-F4.5-CHAT.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.

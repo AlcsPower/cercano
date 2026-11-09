@@ -77,7 +77,24 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-17 | Auditoría `elev.*` y alarmas de elevación | F3-16, F2-02, F2-07 | ControlPlane | QA | Hecho |
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador | Hecho |
 
-_Total: 53 tareas (F0–F3) + 16 de F4.5. F4–F7 se detallan al cerrar la fase anterior._
+## F4 — Consola web, RBAC y 2FA
+
+Fuente: `docs/PLAN-F4-CONSOLA.md`. F4 puede ir en paralelo con F3; solo F4-07 (generador) espera F3-07.
+
+| ID | Tarea | Dep. | Rol | Verifica | Estado |
+|---|---|---|---|---|---|
+| F4-01 | Especificar matriz RBAC, flujo 2FA y eventos `auth.2fa_*` | F1-04, F2-08 | Coordinador + Seguridad | Seguridad | Pendiente |
+| F4-02 | Migración 005: campos 2FA y `mfa_challenges` | F4-01 | ControlPlane | QA | Pendiente |
+| F4-03 | API de usuarios, roles y ajustes con permisos | F4-02 | ControlPlane | QA | Pendiente |
+| F4-04 | 2FA TOTP: enrolar, login en dos pasos, recovery, revocación | F4-02, F4-03 | ControlPlane | Seguridad | Pendiente |
+| F4-05 | Middleware RBAC y permisos `chat:*` | F4-03 | ControlPlane | QA | Pendiente |
+| F4-06 | Consola: usuarios, roles, auditoría, ajustes y 2FA; login 2FA | F4-03, F4-04, F4-05 | Web | QA | Pendiente |
+| F4-07 | Integración del generador en la consola (depende F3-07) | F3-07, F4-05, F4-06 | Web | QA | Pendiente |
+| F4-08 | Pruebas de permisos, IDOR, 2FA y sesiones | F4-03…07 | QA | Coordinador | Pendiente |
+| F4-09 | E2E y gate F4 | F4-08 | QA | Coordinador | Pendiente |
+| F4-10 | Cierre de F4, documentación e informe | F4-09 | Coordinador | Dueño | Pendiente |
+
+_Total: 53 tareas (F0–F3) + 10 de F4 + 16 de F4.5. F5–F7 se detallan al cerrar la fase anterior._
 
 ## F4.5 — Cercano Chat (complemento, después de F4)
 
