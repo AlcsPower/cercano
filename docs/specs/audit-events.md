@@ -311,6 +311,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 - **Categoría (`category`):** `file`.
 - **Condición:** Envío o descarga completada de un archivo durante la sesión (modo dedicado o copiar/pegar).
 - **Campos esperados en `details`:** `direction` (`upload`, `download`), `remote_path`, `file_name`, `bytes_transferred`, `sha256` (hash SHA-256 del fichero transferido), `transfer_mode` (`dedicated_session`, `clipboard_copy_paste`).
+- **Compatibilidad con el cliente heredado (`POST /api/audit/file`):** el cliente envía `type` (0 = `upload`, 1 = `download`), `path`, `bytes`, `sha256` y un `info` con la lista de archivos. La API mapea `path` a `remote_path`, toma `file_name` de la lista o del nombre del fichero, y usa `info.files[].size` como volumen cuando `bytes` no viene. Si `path` está vacío, `transfer_mode` es `clipboard_copy_paste`. Un `sha256` con formato distinto de 64 hexadecimales se rechaza con HTTP 400. El parche del cliente calcula el hash solo cuando el evento cubre un único fichero con ruta local resoluble; los lotes multiarchivo llevan volumen pero no hash.
 
 #### Vector de Prueba: Evento 4
 
