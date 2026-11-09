@@ -150,6 +150,7 @@ pub struct WindowsPackagingOptions {
     pub base_binary_path: Option<PathBuf>,
     pub signed_profile_path: PathBuf,
     pub out_dir: PathBuf,
+    pub signer: Option<std::sync::Arc<dyn crate::signing::CodeSigner>>,
 }
 
 /// Resultado de generar los paquetes de Windows.
@@ -301,6 +302,12 @@ pub fn generate_windows_packages(
         &signed_profile_bytes,
         base_bin_bytes.as_deref(),
     )?;
+
+    // F3-06: Firma Authenticode y verificación obligatoria de los paquetes Windows
+    if let Some(ref signer) = options.signer {
+        signer.sign_and_verify(&exe_path)?;
+        signer.sign_and_verify(&msi_path)?;
+    }
 
     // 3. Generar definición WiX Toolset .wxs
     let wxs_path = options.out_dir.join(&wxs_file_name);

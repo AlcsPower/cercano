@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+pub mod signing;
 pub mod windows;
 
 /// Clave privada de desarrollo por defecto (32 bytes deterministas).
@@ -63,6 +64,9 @@ pub enum BuildError {
 
     #[error("El archivo de perfil especificado no existe: '{0}'")]
     ProfileNotFound(PathBuf),
+
+    #[error("Error en la firma o verificación Authenticode: {0}")]
+    Signing(#[from] crate::signing::SigningError),
 }
 
 /// Opciones de compilación y empaquetado para el CLI cercano-build.
@@ -76,6 +80,31 @@ pub struct BuildOptions {
     pub dry_run: bool,
     pub package_windows: bool,
     pub upgrade_code: Option<String>,
+    pub authenticode_enabled: bool,
+    pub signing_driver: Option<String>,
+    pub timestamp_url: Option<String>,
+    pub cert_path: Option<PathBuf>,
+    pub cert_pass: Option<String>,
+}
+
+impl BuildOptions {
+    pub fn new(profile_path: PathBuf, out_dir: PathBuf) -> Self {
+        Self {
+            profile_path,
+            out_dir,
+            signing_key_path: None,
+            key_id: None,
+            base_binary_path: None,
+            dry_run: false,
+            package_windows: false,
+            upgrade_code: None,
+            authenticode_enabled: false,
+            signing_driver: None,
+            timestamp_url: None,
+            cert_path: None,
+            cert_pass: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -90,6 +119,13 @@ pub struct BaseBinaryInfo {
     pub file_name: String,
     pub sha256: String,
     pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuthenticodeSignatureMetadata {
+    pub driver: String,
+    pub timestamp_url: String,
+    pub verified: bool,
 }
 
 /// Manifiesto de compilación y procedencia `build-manifest.json`.
@@ -110,6 +146,8 @@ pub struct BuildManifest {
     pub base_binary: Option<BaseBinaryInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub windows_metadata: Option<windows::WindowsInstallerMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authenticode: Option<AuthenticodeSignatureMetadata>,
     pub artifacts: Vec<BuildArtifact>,
 }
 
@@ -241,6 +279,20 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
     // 1. Cargar y validar el perfil y sus invariantes
     let (profile, existing_signed) = load_and_validate_profile(&options.profile_path)?;
 
+    // F3-06: Si la firma Authenticode está habilitada, resolver el firmante inmediatamente.
+    // Esto valida la presencia obligatoria del timestamp RFC 3161 y credenciales antes de proceder.
+    let code_signer: Option<std::sync::Arc<dyn signing::CodeSigner>> =
+        if options.authenticode_enabled {
+            Some(signing::resolve_signer_from_options(
+                options.signing_driver.as_deref(),
+                options.timestamp_url.as_deref(),
+                options.cert_path.as_deref(),
+                options.cert_pass.as_deref(),
+            )?)
+        } else {
+            None
+        };
+
     // Si es dry-run, terminar tras validar con éxito
     if options.dry_run {
         return Ok(None);
@@ -283,6 +335,27 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         source,
     })?;
 
+    // RAII guard: si cualquier paso subsiguiente (empaquetado, firma, verificación o manifiesto)
+    // falla, target_dir se elimina por completo para garantizar que NINGÚN artefacto inválido
+    // sea publicado o permanezca en el directorio de salida.
+    struct CleanupGuard {
+        target_dir: PathBuf,
+        disarmed: bool,
+    }
+
+    impl Drop for CleanupGuard {
+        fn drop(&mut self) {
+            if !self.disarmed && self.target_dir.exists() {
+                let _ = fs::remove_dir_all(&self.target_dir);
+            }
+        }
+    }
+
+    let mut cleanup_guard = CleanupGuard {
+        target_dir: target_dir.clone(),
+        disarmed: false,
+    };
+
     // 5. Copiar binario base si existe
     let mut base_binary_info = None;
     let mut packaged_base_path = None;
@@ -298,6 +371,14 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
             path: dest_path.clone(),
             source,
         })?;
+
+        // Si la firma Authenticode está habilitada y no se generará paquete Windows,
+        // firmar y verificar el binario base directamente.
+        if let Some(ref signer) = code_signer {
+            if !options.package_windows {
+                signer.sign_and_verify(&dest_path)?;
+            }
+        }
 
         let (base_hash, base_len) = compute_file_sha256(&dest_path)?;
         base_binary_info = Some(BaseBinaryInfo {
@@ -350,6 +431,7 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
             base_binary_path: packaged_base_path.clone(),
             signed_profile_path: signed_profile_path.clone(),
             out_dir: target_dir.clone(),
+            signer: code_signer.clone(),
         };
 
         let win_res = windows::generate_windows_packages(&win_opts)?;
@@ -364,6 +446,12 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
     // 8. Generar `build-manifest.json`
     let build_id = uuid::Uuid::new_v4().to_string();
     let app_name = profile.identity.as_ref().and_then(|id| id.app_name.clone());
+    let authenticode = code_signer.as_ref().map(|s| AuthenticodeSignatureMetadata {
+        driver: s.driver().as_str().to_string(),
+        timestamp_url: s.timestamp_url().to_string(),
+        verified: true,
+    });
+
     let manifest = BuildManifest {
         schema_version: "1.0.0".to_string(),
         build_id,
@@ -376,6 +464,7 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         signing_key_id: signed_profile.key_id.clone(),
         base_binary: base_binary_info,
         windows_metadata,
+        authenticode,
         artifacts,
     };
 
@@ -421,6 +510,9 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
     })?;
 
     let elapsed_ms = start_time.elapsed().as_millis();
+
+    // Desarmar el guard de limpieza al haber completado con éxito todo el empaquetado y verificación
+    cleanup_guard.disarmed = true;
 
     Ok(Some(BuildResult {
         target_dir,

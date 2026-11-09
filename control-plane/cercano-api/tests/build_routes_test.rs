@@ -667,3 +667,376 @@ async fn test_tc_f3_077_invalid_profile_rejected() {
         .unwrap()
         .contains("allow_outgoing debe ser falso"));
 }
+
+#[tokio::test]
+async fn test_tc_f3_080_full_build_audit_lifecycle() {
+    let env = setup_test_env().await;
+
+    // 1. Solicitar build como admin
+    let req = Request::builder()
+        .uri("/api/builds")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", env.admin_token))
+        .body(Body::from(
+            serde_json::to_vec(&json!({ "profile": valid_tecnico_profile_json() })).unwrap(),
+        ))
+        .unwrap();
+
+    let res = env.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    let job_id = body["id"].as_str().unwrap().to_string();
+
+    // 2. Esperar a que el worker complete la compilación
+    let mut completed = false;
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let status_req = Request::builder()
+            .uri(format!("/api/builds/{}", job_id))
+            .method("GET")
+            .header("authorization", format!("Bearer {}", env.admin_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let s_res = env.app.clone().oneshot(status_req).await.unwrap();
+        if s_res.status() == StatusCode::OK {
+            let s_bytes = s_res.into_body().collect().await.unwrap().to_bytes();
+            let s_body: Value = serde_json::from_slice(&s_bytes).unwrap();
+            if s_body["status"] == "completed" {
+                completed = true;
+                break;
+            }
+        }
+    }
+    assert!(
+        completed,
+        "El trabajo de compilación no completó en el tiempo esperado"
+    );
+
+    // 3. Descargar el artefacto
+    let dl_req = Request::builder()
+        .uri(format!("/api/builds/{}/download", job_id))
+        .method("GET")
+        .header("authorization", format!("Bearer {}", env.admin_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let dl_res = env.app.clone().oneshot(dl_req).await.unwrap();
+    assert_eq!(dl_res.status(), StatusCode::OK);
+    let zip_bytes = dl_res.into_body().collect().await.unwrap().to_bytes();
+    assert!(!zip_bytes.is_empty());
+    let downloaded_sha256 = cercano_api::builder::compute_sha256(&zip_bytes);
+
+    // 4. Revocar el instalador
+    let revoke_req = Request::builder()
+        .uri(format!("/api/builds/{}/revoke", job_id))
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", env.admin_token))
+        .body(Body::from(
+            serde_json::to_vec(&json!({ "reason": "Revocado por política de seguridad F3" }))
+                .unwrap(),
+        ))
+        .unwrap();
+
+    let rev_res = env.app.clone().oneshot(revoke_req).await.unwrap();
+    assert_eq!(rev_res.status(), StatusCode::OK);
+    let rev_bytes = rev_res.into_body().collect().await.unwrap().to_bytes();
+    let rev_body: Value = serde_json::from_slice(&rev_bytes).unwrap();
+    assert_eq!(rev_body["status"], "revoked");
+
+    // 5. Intentar descargar nuevamente: debe ser rechazado (410 GONE)
+    let dl_again_req = Request::builder()
+        .uri(format!("/api/builds/{}/download", job_id))
+        .method("GET")
+        .header("authorization", format!("Bearer {}", env.admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let dl_again_res = env.app.clone().oneshot(dl_again_req).await.unwrap();
+    assert_eq!(dl_again_res.status(), StatusCode::GONE);
+
+    // 6. Intentar revocar otra vez: debe retornar 409 CONFLICT
+    let revoke_again_req = Request::builder()
+        .uri(format!("/api/builds/{}/revoke", job_id))
+        .method("POST")
+        .header("authorization", format!("Bearer {}", env.admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let rev_again_res = env.app.clone().oneshot(revoke_again_req).await.unwrap();
+    assert_eq!(rev_again_res.status(), StatusCode::CONFLICT);
+
+    // 7. Verificar auditoría: eventos encadenados, hashes e integridad criptográfica
+    let filter = audit_core::EventFilter {
+        category: Some(Category::Build),
+        limit: Some(100),
+        ..Default::default()
+    };
+    let events = env.state.audit.query_events(filter).await.unwrap();
+    let job_events: Vec<_> = events
+        .into_iter()
+        .filter(|e| e.details.get("job_id").and_then(|v| v.as_str()) == Some(&job_id))
+        .collect();
+
+    let actions: Vec<&str> = job_events.iter().map(|e| e.action.as_str()).collect();
+    assert_eq!(
+        actions,
+        vec![
+            "build.requested",
+            "build.started",
+            "build.completed",
+            "build.downloaded",
+            "build.revoked"
+        ]
+    );
+
+    // Verificar fuentes taxonómicas
+    assert_eq!(job_events[0].source.as_str(), "api"); // requested
+    assert_eq!(job_events[1].source.as_str(), "builder"); // started
+    assert_eq!(job_events[2].source.as_str(), "builder"); // completed
+    assert_eq!(job_events[3].source.as_str(), "api"); // downloaded
+    assert_eq!(job_events[4].source.as_str(), "api"); // revoked
+
+    // Verificar subject
+    for ev in &job_events {
+        let subj = ev.subject.as_ref().expect("Subject obligatorio");
+        assert_eq!(subj.id, job_id);
+        assert_eq!(subj.subject_type, "build_job");
+        assert_eq!(subj.name.as_deref(), Some("tecnico"));
+    }
+
+    // Verificar details de build.completed
+    let completed_ev = &job_events[2];
+    assert_eq!(completed_ev.outcome, Outcome::Success);
+    assert_eq!(completed_ev.details["sha256"], downloaded_sha256);
+    assert!(completed_ev.details["size_bytes"].as_u64().unwrap() > 0);
+    assert!(completed_ev.details["duration_ms"].as_u64().is_some());
+    assert_eq!(completed_ev.details["role"], "tecnico");
+    assert!(completed_ev.details["sanitized_profile"].is_object());
+
+    // Verificar details de build.downloaded
+    let dl_ev = &job_events[3];
+    assert_eq!(dl_ev.details["sha256"], downloaded_sha256);
+    assert_eq!(dl_ev.details["role"], "tecnico");
+
+    // Verificar details de build.revoked
+    let rev_ev = &job_events[4];
+    assert_eq!(
+        rev_ev.details["reason"],
+        "Revocado por política de seguridad F3"
+    );
+    assert!(rev_ev.details["revoked_at"].is_string());
+
+    // 8. Verificación de la cadena criptográfica
+    let verification = env.state.audit.verify_chain(None, None).await.unwrap();
+    assert!(
+        verification.is_valid,
+        "La cadena de auditoría debe ser criptográficamente válida: {:?}",
+        verification.error
+    );
+    assert!(verification.total_verified >= 5);
+}
+
+#[tokio::test]
+async fn test_tc_f3_081_build_failed_audit_event() {
+    let builds_dir = tempdir().expect("Failed to create tempdir for builds");
+    let db = init_db("sqlite::memory:")
+        .await
+        .expect("Failed to init in-memory db");
+    let audit = Arc::new(
+        audit_core::AuditStore::new(db.clone())
+            .await
+            .expect("Failed to init audit store"),
+    );
+
+    // Clave inexistente/corrupta para forzar fallo
+    let non_existent_key_path = builds_dir.path().join("non_existent_key.bin");
+
+    let config = Config {
+        builds_dir: builds_dir.path().to_str().unwrap().to_string(),
+        build_signing_key_path: Some(non_existent_key_path.to_str().unwrap().to_string()),
+        build_concurrency: 1,
+        build_retention_secs: 3600,
+        internal_token: "test_internal_token".to_string(),
+        client_ingest_token: "test_client_token".to_string(),
+        ..Default::default()
+    };
+
+    let state = AppState::new(config, db.clone(), audit.clone());
+    let app = create_app(state.clone());
+
+    let admin_id = Uuid::now_v7().to_string();
+    let admin_token = format!("tok_admin_fail_{}", Uuid::now_v7());
+    sqlx::query(
+        "INSERT INTO users (id, username, password_hash, role, is_active) VALUES (?, 'admin_fail', 'hash', 'admin', 1)",
+    )
+    .bind(&admin_id)
+    .execute(&db)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', '+1 hour'))",
+    )
+    .bind(&admin_token)
+    .bind(&admin_id)
+    .execute(&db)
+    .await
+    .unwrap();
+
+    let req = Request::builder()
+        .uri("/api/builds")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", admin_token))
+        .body(Body::from(
+            serde_json::to_vec(&json!({ "profile": valid_tecnico_profile_json() })).unwrap(),
+        ))
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    let job_id = body["id"].as_str().unwrap().to_string();
+
+    // Esperar a que el worker falle
+    let mut failed = false;
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let status_req = Request::builder()
+            .uri(format!("/api/builds/{}", job_id))
+            .method("GET")
+            .header("authorization", format!("Bearer {}", admin_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let s_res = app.clone().oneshot(status_req).await.unwrap();
+        if s_res.status() == StatusCode::OK {
+            let s_bytes = s_res.into_body().collect().await.unwrap().to_bytes();
+            let s_body: Value = serde_json::from_slice(&s_bytes).unwrap();
+            if s_body["status"] == "failed" {
+                failed = true;
+                break;
+            }
+        }
+    }
+    assert!(
+        failed,
+        "El trabajo de compilación no falló como se esperaba"
+    );
+
+    // Verificar evento build.failed en auditoría
+    let filter = audit_core::EventFilter {
+        category: Some(Category::Build),
+        action: Some("build.failed".to_string()),
+        ..Default::default()
+    };
+    let events = audit.query_events(filter).await.unwrap();
+    let failed_event = events
+        .iter()
+        .find(|e| e.details.get("job_id").and_then(|v| v.as_str()) == Some(&job_id))
+        .expect("Evento build.failed debe existir");
+
+    assert_eq!(failed_event.outcome, Outcome::Failure);
+    assert_eq!(failed_event.source.as_str(), "builder");
+    assert!(failed_event.details["error"].is_string());
+    assert!(failed_event.details["duration_ms"].as_u64().is_some());
+    assert_eq!(failed_event.details["role"], "tecnico");
+
+    // Verificar cadena criptográfica
+    let verification = audit.verify_chain(None, None).await.unwrap();
+    assert!(verification.is_valid, "Cadena válida tras build.failed");
+}
+
+#[tokio::test]
+async fn test_tc_f3_082_audit_events_no_secret_leak() {
+    let env = setup_test_env().await;
+
+    // Ejecutar un build completo
+    let req = Request::builder()
+        .uri("/api/builds")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", env.admin_token))
+        .body(Body::from(
+            serde_json::to_vec(&json!({ "profile": valid_tecnico_profile_json() })).unwrap(),
+        ))
+        .unwrap();
+
+    let res = env.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    let job_id = body["id"].as_str().unwrap().to_string();
+
+    // Esperar completion
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let status_req = Request::builder()
+            .uri(format!("/api/builds/{}", job_id))
+            .method("GET")
+            .header("authorization", format!("Bearer {}", env.admin_token))
+            .body(Body::empty())
+            .unwrap();
+        let s_res = env.app.clone().oneshot(status_req).await.unwrap();
+        if s_res.status() == StatusCode::OK {
+            let s_bytes = s_res.into_body().collect().await.unwrap().to_bytes();
+            let s_body: Value = serde_json::from_slice(&s_bytes).unwrap();
+            if s_body["status"] == "completed" {
+                break;
+            }
+        }
+    }
+
+    // Consultar todos los eventos emitidos de categoría build
+    let filter = audit_core::EventFilter {
+        category: Some(Category::Build),
+        limit: Some(100),
+        ..Default::default()
+    };
+    let events = env.state.audit.query_events(filter).await.unwrap();
+    assert!(!events.is_empty());
+
+    let forbidden_keys = ["password", "secret", "private_key", "auth_token"];
+
+    fn assert_no_forbidden_keys(val: &Value, forbidden: &[&str]) {
+        match val {
+            Value::Object(map) => {
+                for (k, v) in map {
+                    let k_lower = k.to_lowercase();
+                    for f in forbidden {
+                        assert!(
+                            !k_lower.contains(f),
+                            "Fuga de seguridad: clave sospechosa '{}' encontrada en evento de auditoría",
+                            k
+                        );
+                    }
+                    assert_no_forbidden_keys(v, forbidden);
+                }
+            }
+            Value::Array(arr) => {
+                for elem in arr {
+                    assert_no_forbidden_keys(elem, forbidden);
+                }
+            }
+            Value::String(s) => {
+                assert!(
+                    !s.contains("BEGIN PRIVATE KEY"),
+                    "Fuga de seguridad: clave privada detectada en string de evento de auditoría"
+                );
+            }
+            _ => {}
+        }
+    }
+
+    for ev in events {
+        assert_no_forbidden_keys(&ev.details, &forbidden_keys);
+        if let Some(ref subj) = ev.subject {
+            if let Some(ref name) = subj.name {
+                assert!(!name.contains("password") && !name.contains("secret"));
+            }
+        }
+    }
+}

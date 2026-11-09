@@ -50,7 +50,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(config: Config, db: SqlitePool, audit: Arc<audit_core::AuditStore>) -> Self {
         let alarms = Arc::new(alarms::AlarmEngine::new(config.clone(), audit.clone()));
-        let build_queue = Arc::new(builder::BuildQueue::new(&config, db.clone()));
+        let build_queue = Arc::new(builder::BuildQueue::new(&config, db.clone(), audit.clone()));
         Self {
             config,
             db,
@@ -144,6 +144,10 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/builds/:id/download",
             get(routes::builds::download_build_handler),
+        )
+        .route(
+            "/api/builds/:id/revoke",
+            post(routes::builds::revoke_build_handler),
         )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))

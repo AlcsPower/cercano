@@ -32,9 +32,9 @@ use serde_json::json;
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
-use crate::auth::AuthenticatedUser;
+use crate::auth::{extract_client_ip, extract_trace_id, AuthenticatedUser};
 use crate::builder::{BuildJobRecord, BuildTask};
-use crate::profile::{CercanoProfile, ProfileRole, SignedCercanoProfile};
+use crate::profile::{sanitize_profile, CercanoProfile, ProfileRole, SignedCercanoProfile};
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -133,10 +133,13 @@ pub async fn check_build_download_permission(
 /// Encola un nuevo trabajo de generación con un payload de perfil (`profile`).
 /// Valida esquema y roles. Retorna HTTP 202 Accepted con `id` de job.
 pub async fn enqueue_build_handler(
+    headers: HeaderMap,
     user: AuthenticatedUser,
     State(state): State<AppState>,
     Json(payload): Json<BuildPayloadInput>,
 ) -> Response {
+    let client_ip = extract_client_ip(&headers, None, &state.config.trusted_proxies);
+    let trace_id = extract_trace_id(&headers);
     let (profile, existing_signed) = payload.extract();
 
     // 1. Validar perfil y esquema
@@ -174,8 +177,12 @@ pub async fn enqueue_build_handler(
 
     if !has_perm {
         // Registrar rechazo en auditoría
-        let trace_id = Uuid::now_v7().to_string();
-        let actor = Actor::with_details(&user.id, &user.role, Some(user.username.clone()), None);
+        let actor = Actor::with_details(
+            &user.id,
+            "user",
+            Some(user.username.clone()),
+            Some(client_ip),
+        );
         let subject = Subject::with_details(
             format!("build:{}", role_str),
             "build_job",
@@ -257,10 +264,44 @@ pub async fn enqueue_build_handler(
             .into_response();
     }
 
-    // 4. Encolar tarea asíncrona
+    // 4. Emitir evento auditado build.requested
+    let actor = Actor::with_details(
+        &user.id,
+        "user",
+        Some(user.username.clone()),
+        Some(client_ip.clone()),
+    );
+    let subject = Subject::with_details(&job_id, "build_job", Some(role_str.to_string()));
+
+    let req_input = EventInput::new(
+        trace_id.clone(),
+        Source::Api,
+        Category::Build,
+        "build.requested",
+        actor,
+        Outcome::Success,
+        json!({
+            "job_id": job_id,
+            "installer_id": job_id,
+            "role": role_str,
+            "profile_id": profile.profile_id,
+            "sanitized_profile": sanitize_profile(&profile),
+        }),
+    )
+    .with_subject(subject);
+
+    if let Err(e) = state.audit.append(req_input).await {
+        tracing::error!("Error emitiendo evento build.requested: {:?}", e);
+    }
+
+    // 5. Encolar tarea asíncrona
     let task = BuildTask {
         job_id: job_id.clone(),
+        trace_id,
         user_id: user.id.clone(),
+        username: user.username.clone(),
+        user_role: user.role.clone(),
+        client_ip: Some(client_ip),
         profile: profile.clone(),
         existing_signed,
         base_binary_path: None,
@@ -457,6 +498,7 @@ pub async fn get_build_handler(
 
 /// Descarga segura del paquete generado con control de caducidad y cabeceras adecuadas.
 pub async fn download_build_handler(
+    headers: HeaderMap,
     user: AuthenticatedUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -531,6 +573,17 @@ pub async fn download_build_handler(
     }
 
     // 2. Comprobar estado
+    if status == "revoked" {
+        return (
+            StatusCode::GONE,
+            Json(json!({
+                "error": "artifact_revoked",
+                "message": "El instalador ha sido revocado y no puede ser descargado"
+            })),
+        )
+            .into_response();
+    }
+
     if status != "completed" {
         return (
             StatusCode::CONFLICT,
@@ -609,27 +662,236 @@ pub async fn download_build_handler(
         .map(|s| s.to_string())
         .unwrap_or_else(|| format!("cercano-{}-{}.zip", role, profile_id));
 
-    let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/zip"));
-    headers.insert(
+    let sha256 = crate::builder::compute_sha256(&file_bytes);
+    let size_bytes = file_bytes.len() as u64;
+
+    // 5. Emitir evento build.downloaded
+    let client_ip = extract_client_ip(&headers, None, &state.config.trusted_proxies);
+    let trace_id = extract_trace_id(&headers);
+    let actor = Actor::with_details(
+        &user.id,
+        "user",
+        Some(user.username.clone()),
+        Some(client_ip),
+    );
+    let subject = Subject::with_details(&id, "build_job", Some(role.clone()));
+
+    let download_input = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Build,
+        "build.downloaded",
+        actor,
+        Outcome::Success,
+        json!({
+            "job_id": id,
+            "installer_id": id,
+            "role": role,
+            "profile_id": profile_id,
+            "sha256": sha256,
+            "size_bytes": size_bytes,
+            "file_name": filename,
+        }),
+    )
+    .with_subject(subject);
+
+    if let Err(e) = state.audit.append(download_input).await {
+        tracing::error!("Error emitiendo evento build.downloaded: {:?}", e);
+    }
+
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/zip"));
+    response_headers.insert(
         CACHE_CONTROL,
         HeaderValue::from_static("no-cache, no-store, must-revalidate"),
     );
-    headers.insert(
+    response_headers.insert(
         "x-content-type-options",
         HeaderValue::from_static("nosniff"),
     );
 
     let disposition = format!("attachment; filename=\"{}\"", filename);
     if let Ok(val) = HeaderValue::from_str(&disposition) {
-        headers.insert(CONTENT_DISPOSITION, val);
+        response_headers.insert(CONTENT_DISPOSITION, val);
     }
 
-    headers.insert(
+    response_headers.insert(
         CONTENT_LENGTH,
         HeaderValue::from_str(&file_bytes.len().to_string())
             .unwrap_or_else(|_| HeaderValue::from_static("0")),
     );
 
-    (StatusCode::OK, headers, file_bytes).into_response()
+    (StatusCode::OK, response_headers, file_bytes).into_response()
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct RevokeBuildPayload {
+    pub reason: Option<String>,
+}
+
+/// Revoca un trabajo o artefacto de compilación e instalador.
+/// Actualiza el estado a 'revoked' y emite el evento auditado `build.revoked`.
+pub async fn revoke_build_handler(
+    headers: HeaderMap,
+    user: AuthenticatedUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    body: axum::body::Bytes,
+) -> Response {
+    let row = sqlx::query(
+        r#"
+        SELECT id, user_id, role, profile_id, status
+        FROM build_jobs
+        WHERE id = ?
+        "#,
+    )
+    .bind(&id)
+    .fetch_optional(&state.db)
+    .await;
+
+    let row = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "error": "not_found",
+                    "message": format!("Trabajo de build '{}' no encontrado", id)
+                })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            tracing::error!(
+                "Error consultando build job {} para revocación: {:?}",
+                id,
+                e
+            );
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "database_error",
+                    "message": "Error consultando base de datos"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let job_user_id: String = row.get("user_id");
+    let role: String = row.get("role");
+    let profile_id: String = row.get("profile_id");
+    let status: String = row.get("status");
+
+    // 1. Control de acceso: admin, creador o permiso builder:revoke
+    let is_owner = user.id == job_user_id;
+    let is_admin = user.role == "admin";
+    let has_revoke_perm = if !is_owner && !is_admin {
+        let perm_row = sqlx::query(
+            "SELECT 1 FROM user_permissions WHERE user_id = ? AND permission = 'builder:revoke'",
+        )
+        .bind(&user.id)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or(None);
+        perm_row.is_some()
+    } else {
+        true
+    };
+
+    if !has_revoke_perm {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "forbidden",
+                "message": "No tiene permisos para revocar este instalador"
+            })),
+        )
+            .into_response();
+    }
+
+    // 2. Si ya está revocado
+    if status == "revoked" {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "error": "already_revoked",
+                "message": "El instalador ya se encuentra revocado"
+            })),
+        )
+            .into_response();
+    }
+
+    let payload: Option<RevokeBuildPayload> = if !body.is_empty() {
+        serde_json::from_slice(&body).ok()
+    } else {
+        None
+    };
+
+    let reason_str = payload
+        .and_then(|p| p.reason)
+        .unwrap_or_else(|| "Instalador revocado por el usuario".to_string());
+
+    // 3. Actualizar estado a 'revoked'
+    if let Err(e) = sqlx::query("UPDATE build_jobs SET status = 'revoked' WHERE id = ?")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+    {
+        tracing::error!("Error actualizando estado a revoked para {}: {:?}", id, e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "database_error",
+                "message": "Error al actualizar estado en base de datos"
+            })),
+        )
+            .into_response();
+    }
+
+    let revoked_at = Utc::now().to_rfc3339();
+    let client_ip = extract_client_ip(&headers, None, &state.config.trusted_proxies);
+    let trace_id = extract_trace_id(&headers);
+
+    let actor = Actor::with_details(
+        &user.id,
+        "user",
+        Some(user.username.clone()),
+        Some(client_ip),
+    );
+    let subject = Subject::with_details(&id, "build_job", Some(role.clone()));
+
+    let revoke_input = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Build,
+        "build.revoked",
+        actor,
+        Outcome::Success,
+        json!({
+            "job_id": id,
+            "installer_id": id,
+            "role": role,
+            "profile_id": profile_id,
+            "reason": reason_str,
+            "revoked_at": revoked_at
+        }),
+    )
+    .with_subject(subject);
+
+    if let Err(e) = state.audit.append(revoke_input).await {
+        tracing::error!("Error emitiendo evento build.revoked: {:?}", e);
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "id": id,
+            "status": "revoked",
+            "role": role,
+            "profile_id": profile_id,
+            "revoked_at": revoked_at
+        })),
+    )
+        .into_response()
 }

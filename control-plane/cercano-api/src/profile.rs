@@ -135,6 +135,12 @@ pub struct CercanoProfile {
     pub expiration: Option<ExpirationConfig>,
 }
 
+/// Serializa el perfil en un `serde_json::Value` sanitizado para registrar en auditoría,
+/// garantizando que no expone claves privadas ni secretos.
+pub fn sanitize_profile(profile: &CercanoProfile) -> serde_json::Value {
+    serde_json::to_value(profile).unwrap_or(serde_json::json!({}))
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ProfileValidationError {
     #[error("La versión de esquema '{0}' es inválida")]

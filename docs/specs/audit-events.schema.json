@@ -155,6 +155,7 @@
             "group",
             "session",
             "installer",
+            "build_job",
             "setting",
             "conversation",
             "system"

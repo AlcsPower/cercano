@@ -32,8 +32,10 @@ use thiserror::Error;
 use tokio::sync::{mpsc, Semaphore};
 use tracing::{error, info};
 
+use audit_core::{Actor, Category, EventInput, Outcome, Source, Subject};
+
 use crate::config::Config;
-use crate::profile::{CercanoProfile, ProfileRole, SignedCercanoProfile};
+use crate::profile::{sanitize_profile, CercanoProfile, ProfileRole, SignedCercanoProfile};
 
 pub const DEFAULT_DEV_SIGNING_KEY_BYTES: [u8; 32] = [42u8; 32];
 pub const DEFAULT_DEV_KEY_ID: &str = "cercano-dev-key";
@@ -110,7 +112,11 @@ pub struct BuildJobRecord {
 
 pub struct BuildTask {
     pub job_id: String,
+    pub trace_id: String,
     pub user_id: String,
+    pub username: String,
+    pub user_role: String,
+    pub client_ip: Option<String>,
     pub profile: CercanoProfile,
     pub existing_signed: Option<SignedCercanoProfile>,
     pub base_binary_path: Option<PathBuf>,
@@ -120,10 +126,11 @@ pub struct BuildQueue {
     sender: mpsc::Sender<BuildTask>,
     concurrency_semaphore: Arc<Semaphore>,
     builds_dir: PathBuf,
+    audit: Arc<audit_core::AuditStore>,
 }
 
 impl BuildQueue {
-    pub fn new(config: &Config, db: SqlitePool) -> Self {
+    pub fn new(config: &Config, db: SqlitePool, audit: Arc<audit_core::AuditStore>) -> Self {
         let concurrency = config.build_concurrency.max(1);
         let semaphore = Arc::new(Semaphore::new(concurrency));
         let (sender, mut receiver) = mpsc::channel::<BuildTask>(100);
@@ -133,6 +140,7 @@ impl BuildQueue {
 
         let sem_clone = semaphore.clone();
         let builds_dir_clone = builds_dir.clone();
+        let audit_worker = audit.clone();
 
         tokio::spawn(async move {
             info!(
@@ -153,10 +161,11 @@ impl BuildQueue {
                 let db = db.clone();
                 let builds_dir = builds_dir_clone.clone();
                 let signing_key_path = signing_key_path.clone();
+                let audit_worker = audit_worker.clone();
 
                 tokio::spawn(async move {
                     let _permit = sem_permit;
-                    process_build_task(task, db, builds_dir, signing_key_path).await;
+                    process_build_task(task, db, audit_worker, builds_dir, signing_key_path).await;
                 });
             }
         });
@@ -165,6 +174,7 @@ impl BuildQueue {
             sender,
             concurrency_semaphore: semaphore,
             builds_dir,
+            audit,
         }
     }
 
@@ -177,6 +187,10 @@ impl BuildQueue {
 
     pub fn builds_dir(&self) -> &Path {
         &self.builds_dir
+    }
+
+    pub fn audit(&self) -> &Arc<audit_core::AuditStore> {
+        &self.audit
     }
 
     pub fn available_permits(&self) -> usize {
@@ -422,16 +436,54 @@ pub fn execute_build_bundle(
 async fn process_build_task(
     task: BuildTask,
     db: SqlitePool,
+    audit: Arc<audit_core::AuditStore>,
     builds_dir: PathBuf,
     signing_key_path: Option<String>,
 ) {
+    let start_instant = Instant::now();
     let now = Utc::now().to_rfc3339();
+
+    let role_str = match task.profile.role {
+        ProfileRole::Soporte => "soporte",
+        ProfileRole::Tecnico => "tecnico",
+    };
+
+    let actor = Actor::with_details(
+        &task.user_id,
+        "user",
+        Some(task.username.clone()),
+        task.client_ip.clone(),
+    );
+    let subject = Subject::with_details(&task.job_id, "build_job", Some(role_str.to_string()));
+
     // Marcar job como running
     let _ = sqlx::query("UPDATE build_jobs SET status = 'running', started_at = ? WHERE id = ?")
         .bind(&now)
         .bind(&task.job_id)
         .execute(&db)
         .await;
+
+    // Emitir build.started
+    let started_input = EventInput::new(
+        task.trace_id.clone(),
+        Source::Builder,
+        Category::Build,
+        "build.started",
+        actor.clone(),
+        Outcome::Success,
+        serde_json::json!({
+            "job_id": task.job_id,
+            "installer_id": task.job_id,
+            "role": role_str,
+            "profile_id": task.profile.profile_id,
+            "sanitized_profile": sanitize_profile(&task.profile),
+        }),
+    )
+    .with_subject(subject.clone());
+
+    if let Err(e) = audit.append(started_input).await {
+        error!(job_id = %task.job_id, error = ?e, "Error al registrar evento build.started en auditoría");
+    }
 
     let res = execute_build_bundle(
         &task.job_id,
@@ -442,11 +494,17 @@ async fn process_build_task(
         &builds_dir,
     );
 
+    let duration_ms = start_instant.elapsed().as_millis() as u64;
     let completed_at = Utc::now().to_rfc3339();
 
     match res {
         Ok((artifact_path, logs)) => {
             let path_str = artifact_path.to_string_lossy().to_string();
+            let (sha256, size_bytes) = match fs::read(&artifact_path) {
+                Ok(b) => (compute_sha256(&b), b.len() as u64),
+                Err(_) => (String::new(), 0u64),
+            };
+
             let _ = sqlx::query(
                 r#"
                 UPDATE build_jobs 
@@ -460,6 +518,33 @@ async fn process_build_task(
             .bind(&task.job_id)
             .execute(&db)
             .await;
+
+            // Emitir build.completed
+            let completed_input = EventInput::new(
+                task.trace_id.clone(),
+                Source::Builder,
+                Category::Build,
+                "build.completed",
+                actor,
+                Outcome::Success,
+                serde_json::json!({
+                    "job_id": task.job_id,
+                    "installer_id": task.job_id,
+                    "role": role_str,
+                    "profile_id": task.profile.profile_id,
+                    "sha256": sha256,
+                    "size_bytes": size_bytes,
+                    "duration_ms": duration_ms,
+                    "sanitized_profile": sanitize_profile(&task.profile),
+                    "artifact_path": path_str,
+                }),
+            )
+            .with_subject(subject);
+
+            if let Err(e) = audit.append(completed_input).await {
+                error!(job_id = %task.job_id, error = ?e, "Error al registrar evento build.completed en auditoría");
+            }
+
             info!(job_id = %task.job_id, "Trabajo de compilación completado con éxito");
         }
         Err(err) => {
@@ -477,6 +562,31 @@ async fn process_build_task(
             .bind(&task.job_id)
             .execute(&db)
             .await;
+
+            // Emitir build.failed
+            let failed_input = EventInput::new(
+                task.trace_id.clone(),
+                Source::Builder,
+                Category::Build,
+                "build.failed",
+                actor,
+                Outcome::Failure,
+                serde_json::json!({
+                    "job_id": task.job_id,
+                    "installer_id": task.job_id,
+                    "role": role_str,
+                    "profile_id": task.profile.profile_id,
+                    "error": err_msg,
+                    "duration_ms": duration_ms,
+                    "sanitized_profile": sanitize_profile(&task.profile),
+                }),
+            )
+            .with_subject(subject);
+
+            if let Err(e) = audit.append(failed_input).await {
+                error!(job_id = %task.job_id, error = ?e, "Error al registrar evento build.failed en auditoría");
+            }
+
             error!(job_id = %task.job_id, error = %err_msg, "Trabajo de compilación falló");
         }
     }

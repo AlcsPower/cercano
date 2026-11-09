@@ -63,6 +63,26 @@ struct Args {
     /// UpgradeCode GUID personalizado para el instalador MSI de Windows (opcional)
     #[arg(long = "upgrade-code")]
     upgrade_code: Option<String>,
+
+    /// Habilita la firma digital Authenticode de artefactos de Windows (.exe y .msi) (F3-06)
+    #[arg(long = "sign-authenticode")]
+    sign_authenticode: bool,
+
+    /// Driver de firma: "mock", "signtool", o "osslsigncode" (opcional)
+    #[arg(long = "signing-driver")]
+    signing_driver: Option<String>,
+
+    /// URL del servidor de sellado de tiempo RFC 3161 (obligatorio si la firma está habilitada)
+    #[arg(long = "timestamp-url")]
+    timestamp_url: Option<String>,
+
+    /// Ruta al certificado / archivo PKCS#12 (.pfx/.p12) (o usar CERCANO_SIGNING_CERT_PATH)
+    #[arg(long = "cert-path")]
+    cert_path: Option<PathBuf>,
+
+    /// Contraseña del certificado PKCS#12 (o usar CERCANO_SIGNING_CERT_PASS)
+    #[arg(long = "cert-pass")]
+    cert_pass: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -77,6 +97,11 @@ fn main() -> ExitCode {
         dry_run: args.dry_run,
         package_windows: args.package_windows,
         upgrade_code: args.upgrade_code,
+        authenticode_enabled: args.sign_authenticode,
+        signing_driver: args.signing_driver,
+        timestamp_url: args.timestamp_url,
+        cert_path: args.cert_path,
+        cert_pass: args.cert_pass,
     };
 
     match execute_build(&options) {
@@ -106,6 +131,9 @@ fn main() -> ExitCode {
             }
             if let Some(ref msi) = result.windows_msi_path {
                 println!("  - Instalador MSI: {}", msi.display());
+            }
+            if options.authenticode_enabled {
+                println!("  - Authenticode:   Firmado y verificado con sello RFC 3161");
             }
             ExitCode::SUCCESS
         }
