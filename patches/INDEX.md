@@ -20,7 +20,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `001-server-rebranding.patch` | F1-01 | `vendor/server` | Rebranding mínimo de `hbbs`, `hbbr` y `cercano-server-util` (versión, banners de bienvenida, CLI) preservando protocolo de red y Ed25519 | `src/common.rs`, `src/hbbr.rs`, `src/main.rs`, `src/relay_server.rs`, `src/rendezvous_server.rs`, `src/utils.rs` | 2026-11-05 | Agente-Servidor |
 | `002-client-rebranding.patch` | F1-07 | `vendor/client` | Rebranding del cliente desktop y Flutter: nombre visible "Cercano", bundle ID `com.cercano.client`, rutas de config aisladas (`.config/cercano`, `AppData/Roaming/Cercano`), textos de interfaz, pantalla Acerca de con licencia AGPL-3.0 y enlace a repositorio | `Cargo.toml`, `res/*`, `src/*`, `flutter/*`, `vendor/server/libs/hbb_common/*` | 2026-11-05 | Agente-Cliente |
 | `003-client-default-endpoints.patch` | F1-08 | `vendor/client` | Configuración por defecto de red apuntando a ID Server `127.0.0.1:21116`, Relay `127.0.0.1:21117`, API Server `http://127.0.0.1:21114`, y latido de telemetría hacia `POST /api/devices/heartbeat` | `src/common.rs`, `src/rendezvous_mediator.rs`, `src/client.rs`, `src/hbbs_http/sync.rs`, `vendor/server/libs/hbb_common/src/config.rs` | 2026-11-05 | Agente-Cliente |
-| `004-client-audit-hooks.patch` | F2-05 | `vendor/client` | Propaga `trace_id`, tipa `conn.end`, añade volumen y SHA-256 a transferencias de un fichero y autentica la emisión con el token de ingesta aprovisionado | `src/server/connection.rs` | 2026-11-09 | Agente-Cliente |
+| `004-client-audit-hooks.patch` | F2-05 | `vendor/client` | Propaga `trace_id`, par autenticado y tipo en `conn.end`, añade volumen y SHA-256 (tope 512 MiB al emitir) y autentica emisión con `X-Cercano-Client-Token` solo sobre HTTPS | `src/server/connection.rs` | 2026-11-09 | Agente-Cliente |
 
 ---
 
@@ -103,7 +103,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Tarea:** `F2-05`
 - **Fecha:** `2026-11-09`
 - **Autor/Rol:** `Agente-Cliente`
-- **Motivo / Justificación:** El cliente ya dispone de la ruta de auditoría y de `conn_audit_ref`; el parche propaga ese identificador como `trace_id`, tipa el fin de sesión con el tipo de conexión, añade volumen y SHA-256 a las transferencias de un único fichero y envía el token de ingesta aprovisionado (`api-token`) como `X-Cercano-Internal-Token`. No inventa endpoints ni secretos por dispositivo.
+- **Motivo / Justificación:** El cliente ya dispone de la ruta de auditoría y de `conn_audit_ref`; el parche propaga ese identificador como `trace_id`, propaga el par remoto autenticado y el tipo de conexión en el fin de sesión (`conn.end`), añade volumen y SHA-256 (tope de 512 MiB calculado sobre el archivo local al emitir, no sobre los bytes en tránsito) a las transferencias de un único fichero, y envía el token dedicado de cliente (`api-token`) en la cabecera `X-Cercano-Client-Token` exclusivamente cuando la URL usa HTTPS (descartándolo con advertencia en HTTP plano para prevenir fugas de secretos).
 - **Archivos modificados:**
   - `src/server/connection.rs`
 - **Estrategia de actualización (upstream sync):** Reaplicar sobre `post_conn_audit`, `post_file_audit`, `post_audit_async` y el cierre de conexión; si upstream cambia sus DTOs de auditoría, conservar `trace_id`, `bytes`, `sha256` y el `type` del cierre, y validar contra el endpoint de ingestión vigente.

@@ -42,6 +42,10 @@ pub struct Config {
     /// Shared secret for server-side audit ingestion. Empty means "not configured" and ingestion
     /// through this channel is refused; the API refuses to start without it (see main).
     pub internal_token: String,
+    /// Dedicated shared secret for client-side audit ingestion (/api/audit/conn, /api/audit/file,
+    /// /api/audit/alarm). Rejection from generic ingestion endpoints prevents clients from forging
+    /// admin or server events.
+    pub client_ingest_token: String,
     /// Proxies whose X-Forwarded-For header is trusted (CIDR or exact IP).
     #[serde(default)]
     pub trusted_proxies: Vec<String>,
@@ -61,6 +65,7 @@ impl Default for Config {
             device_grace_period_secs: DEFAULT_DEVICE_GRACE_PERIOD_SECS,
             server_key_path: DEFAULT_SERVER_KEY_PATH.to_string(),
             internal_token: String::new(),
+            client_ingest_token: String::new(),
             trusted_proxies: vec!["127.0.0.1/32".to_string(), "::1/128".to_string()],
             ip_whitelist: Vec::new(),
             audit_key_path: DEFAULT_AUDIT_KEY_PATH.to_string(),
@@ -79,6 +84,7 @@ struct FileConfig {
     device_grace_period_secs: Option<u64>,
     server_key_path: Option<String>,
     internal_token: Option<String>,
+    client_ingest_token: Option<String>,
     trusted_proxies: Option<Vec<String>>,
     ip_whitelist: Option<Vec<String>>,
     audit_key_path: Option<String>,
@@ -144,6 +150,9 @@ impl Config {
         }
         if let Some(token) = file_cfg.internal_token {
             self.internal_token = token;
+        }
+        if let Some(token) = file_cfg.client_ingest_token {
+            self.client_ingest_token = token;
         }
         if let Some(whitelist) = file_cfg.ip_whitelist {
             self.ip_whitelist = whitelist;
@@ -211,6 +220,12 @@ impl Config {
         if let Ok(token) = env::var("CERCANO_INTERNAL_TOKEN") {
             if !token.trim().is_empty() {
                 self.internal_token = token.trim().to_string();
+            }
+        }
+
+        if let Ok(token) = env::var("CERCANO_CLIENT_INGEST_TOKEN") {
+            if !token.trim().is_empty() {
+                self.client_ingest_token = token.trim().to_string();
             }
         }
 
@@ -369,6 +384,7 @@ database_url = "sqlite:///custom/path.db"
         env::set_var("CERCANO_LOG_LEVEL", "warn");
         env::set_var("CERCANO_DEVICE_GRACE_PERIOD_SECS", "45");
         env::set_var("CERCANO_SERVER_KEY_PATH", "/env/path/id_ed25519.pub");
+        env::set_var("CERCANO_CLIENT_INGEST_TOKEN", "client_token_test_123");
 
         let mut cfg = Config::default();
         cfg.merge_env().unwrap();
@@ -379,6 +395,7 @@ database_url = "sqlite:///custom/path.db"
         assert_eq!(cfg.log_level, "warn");
         assert_eq!(cfg.device_grace_period_secs, 45);
         assert_eq!(cfg.server_key_path, "/env/path/id_ed25519.pub");
+        assert_eq!(cfg.client_ingest_token, "client_token_test_123");
 
         env::remove_var("CERCANO_HOST");
         env::remove_var("CERCANO_PORT");
@@ -386,6 +403,7 @@ database_url = "sqlite:///custom/path.db"
         env::remove_var("CERCANO_LOG_LEVEL");
         env::remove_var("CERCANO_DEVICE_GRACE_PERIOD_SECS");
         env::remove_var("CERCANO_SERVER_KEY_PATH");
+        env::remove_var("CERCANO_CLIENT_INGEST_TOKEN");
     }
 
     #[test]

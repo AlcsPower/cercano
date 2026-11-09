@@ -120,10 +120,24 @@ pub async fn assemble_session_trace(
 
     // 2. Identify session participants and time window from direct events
     let conn_start = direct_events.iter().find(|e| e.action == "conn.start");
+    let conn_auth = direct_events.iter().find(|e| e.action == "conn.auth");
     let conn_end = direct_events.iter().find(|e| e.action == "conn.end");
 
-    let controller_id = conn_start
+    let controller_id = conn_auth
         .map(|e| e.actor.id.clone())
+        .or_else(|| conn_end.map(|e| e.actor.id.clone()))
+        .or_else(|| {
+            conn_start
+                .filter(|e| e.actor.id != "unknown")
+                .map(|e| e.actor.id.clone())
+        })
+        .or_else(|| {
+            direct_events
+                .iter()
+                .find(|e| e.actor.id != "unknown")
+                .map(|e| e.actor.id.clone())
+        })
+        .or_else(|| conn_start.map(|e| e.actor.id.clone()))
         .or_else(|| direct_events.first().map(|e| e.actor.id.clone()));
 
     let controlled_id = conn_start
@@ -347,8 +361,21 @@ pub async fn assemble_session_trace(
         "active".to_string()
     };
 
-    let controller = conn_start
+    let controller = conn_auth
         .map(|e| e.actor.clone())
+        .or_else(|| conn_end.map(|e| e.actor.clone()))
+        .or_else(|| {
+            conn_start
+                .filter(|e| e.actor.id != "unknown")
+                .map(|e| e.actor.clone())
+        })
+        .or_else(|| {
+            timeline
+                .iter()
+                .find(|e| e.actor.id != "unknown")
+                .map(|e| e.actor.clone())
+        })
+        .or_else(|| conn_start.map(|e| e.actor.clone()))
         .or_else(|| timeline.first().map(|e| e.actor.clone()));
     let controlled = conn_start
         .and_then(|e| e.subject.clone())

@@ -34,15 +34,18 @@ struct TestContext {
     admin_token: String,
     device_id: String,
     internal_token: String,
+    client_ingest_token: String,
 }
 
 async fn setup_test_context() -> TestContext {
     let db = init_db("sqlite::memory:").await.unwrap();
     let audit = Arc::new(audit_core::AuditStore::new(db.clone()).await.unwrap());
     let internal_token = "cercano_internal_token_secret".to_string();
+    let client_ingest_token = "cercano_client_ingest_token_secret".to_string();
 
     let config = Config {
         internal_token: internal_token.clone(),
+        client_ingest_token: client_ingest_token.clone(),
         ..Default::default()
     };
 
@@ -84,6 +87,7 @@ async fn setup_test_context() -> TestContext {
         admin_token,
         device_id,
         internal_token,
+        client_ingest_token,
     }
 }
 
@@ -674,6 +678,35 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         StatusCode::UNAUTHORIZED
     );
 
+    // Client ingest token must NOT be accepted on generic/admin audit endpoints (H46 / Blocker 1)
+    let forged_admin_req = Request::builder()
+        .uri("/api/audit/events")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("X-Cercano-Client-Token", &ctx.client_ingest_token)
+        .body(Body::from(
+            serde_json::to_vec(&json!({
+                "trace_id": "forged-trace-1",
+                "source": "client",
+                "category": "auth",
+                "action": "auth.login",
+                "actor": { "id": "admin", "type": "user" },
+                "outcome": "success",
+                "details": {}
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+    assert_eq!(
+        ctx.app
+            .clone()
+            .oneshot(forged_admin_req)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+
     let conn_id = 9991i64;
     let expected_trace_id = format!(
         "conn-dev-client-legacy-1-{}-{}",
@@ -681,7 +714,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         chrono::Utc::now().format("%Y%m%d")
     );
 
-    // 1. Relay/server forwards conn open (`action: "new"`) with internal token
+    // 1. Client emits conn open (`action: "new"`) authenticated via dedicated client token
     let open_payload = json!({
         "id": "dev-client-legacy-1",
         "action": "new",
@@ -694,7 +727,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/conn")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Cercano-Internal-Token", &ctx.internal_token)
+        .header("X-Cercano-Client-Token", &ctx.client_ingest_token)
         .body(Body::from(serde_json::to_vec(&open_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
@@ -705,7 +738,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         "client expects empty response body on success"
     );
 
-    // 2. Relay/server forwards conn auth details (`peer`, `type`, `primary_auth`, without `action`) (H44)
+    // 2. Client emits conn auth details (`peer`, `type`, `primary_auth`, without `action`) (H44)
     let auth_payload = json!({
         "id": "dev-client-legacy-1",
         "peer": ["remote-endpoint-2", "RemotePC"],
@@ -719,13 +752,13 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/conn")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Cercano-Internal-Token", &ctx.internal_token)
+        .header("X-Cercano-Client-Token", &ctx.client_ingest_token)
         .body(Body::from(serde_json::to_vec(&auth_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 3. Relay/server forwards file transfer audit without trace_id (correlates via dev+conn_id+date) (H45)
+    // 3. Client emits file transfer audit without trace_id (correlates via dev+conn_id+date) (H45)
     let file_payload = json!({
         "id": "dev-client-legacy-1",
         "peer_id": "remote-endpoint-2",
@@ -742,16 +775,17 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/file")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Cercano-Internal-Token", &ctx.internal_token)
+        .header("X-Cercano-Client-Token", &ctx.client_ingest_token)
         .body(Body::from(serde_json::to_vec(&file_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 4. Relay/server forwards conn close (`action: "close"`) with the session type
+    // 4. Client emits conn close (`action: "close"`) with the session type and authenticated peer
     let close_payload = json!({
         "id": "dev-client-legacy-1",
         "action": "close",
+        "peer": ["remote-endpoint-2", "RemotePC"],
         "conn_id": conn_id,
         "type": "remote",
         "nonce": "nonce-conn-close-001"
@@ -760,7 +794,7 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
         .uri("/api/audit/conn")
         .method("POST")
         .header("content-type", "application/json")
-        .header("X-Cercano-Internal-Token", &ctx.internal_token)
+        .header("X-Cercano-Client-Token", &ctx.client_ingest_token)
         .body(Body::from(serde_json::to_vec(&close_payload).unwrap()))
         .unwrap();
     let res = ctx.app.clone().oneshot(req).await.unwrap();
@@ -780,9 +814,10 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
     let events = timeline["timeline"].as_array().unwrap();
     assert_eq!(events.len(), 4, "expected 4 events unified in trace");
 
-    // Event 0: conn.start (H44/H45: Actor is connecting client IP, Subject is accessed host)
+    // Event 0: conn.start (Actor id is unknown until auth identifies peer; initiator IP in actor.ip)
     assert_eq!(events[0]["action"], "conn.start");
-    assert_eq!(events[0]["actor"]["id"], "192.168.1.55");
+    assert_eq!(events[0]["actor"]["id"], "unknown");
+    assert_eq!(events[0]["actor"]["ip"], "192.168.1.55");
     assert_eq!(events[0]["subject"]["id"], "dev-client-legacy-1");
 
     // Event 1: conn.auth (H44: Actor is authenticated remote peer, Subject is accessed host, conn_type normalized)
@@ -807,10 +842,16 @@ async fn test_client_legacy_audit_endpoints_ingest_and_chain() {
     );
     assert_eq!(events[2]["details"]["transfer_mode"], "dedicated_session");
 
-    // Event 3: conn.end carries the session type so the end event is typed (F2-05)
+    // Event 3: conn.end carries the session type and authenticated peer
     assert_eq!(events[3]["action"], "conn.end");
+    assert_eq!(events[3]["actor"]["id"], "remote-endpoint-2");
+    assert_eq!(events[3]["actor"]["name"], "RemotePC");
     assert_eq!(events[3]["details"]["conn_type"], "remote");
     assert_eq!(events[3]["subject"]["id"], "dev-client-legacy-1");
+
+    // Controller and Controlled unified in trace
+    assert_eq!(timeline["controller"]["id"], "remote-endpoint-2");
+    assert_eq!(timeline["controlled"]["id"], "dev-client-legacy-1");
 
     // 6. Verify chain integrity passes across all ingested events
     let req = Request::builder()

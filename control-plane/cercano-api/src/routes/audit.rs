@@ -193,6 +193,29 @@ pub async fn authenticate_ingestion_caller(
     ))
 }
 
+/// Authenticates ingestion callers for client/relay endpoints (/api/audit/conn, /api/audit/file, /api/audit/alarm):
+/// accepts either a dedicated client token (`X-Cercano-Client-Token`), the server internal token (`X-Cercano-Internal-Token`),
+/// or an admin session token.
+pub async fn authenticate_client_or_internal_caller(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<(), AuditRouteError> {
+    // 1. Check dedicated client token header (compared in constant time)
+    if let Some(client_header) = headers
+        .get("X-Cercano-Client-Token")
+        .or_else(|| headers.get("x-cercano-client-token"))
+        .and_then(|h| h.to_str().ok())
+    {
+        let configured = state.config.client_ingest_token.as_bytes();
+        if !configured.is_empty() && constant_time_eq(client_header.as_bytes(), configured) {
+            return Ok(());
+        }
+    }
+
+    // 2. Fall back to internal token or admin session
+    authenticate_ingestion_caller(headers, state).await
+}
+
 // Devices are bounded; no pruning needed.
 static INGEST: LazyLock<Mutex<HashMap<String, (Instant, u32)>>> = LazyLock::new(Default::default);
 
@@ -777,7 +800,7 @@ pub async fn alarm_handler(
     headers: HeaderMap,
     Json(payload): Json<AlarmRequest>,
 ) -> Result<(StatusCode, Json<AuditEvent>), AuditRouteError> {
-    authenticate_ingestion_caller(&headers, &state).await?;
+    authenticate_client_or_internal_caller(&headers, &state).await?;
 
     if let Some(ref eid) = payload.event_id {
         if let Some(existing) = state.audit.get_event_by_id(eid).await? {
@@ -1094,7 +1117,7 @@ pub async fn legacy_conn_audit_handler(
     headers: HeaderMap,
     Json(payload): Json<LegacyConnAuditRequest>,
 ) -> Result<(StatusCode, &'static str), AuditRouteError> {
-    authenticate_ingestion_caller(&headers, &state).await?;
+    authenticate_client_or_internal_caller(&headers, &state).await?;
 
     if !allow_ingest(payload.id.as_deref().unwrap_or("anon")) {
         return Err(AuditRouteError::RateLimited("Ingesta excedida".into()));
@@ -1148,10 +1171,8 @@ pub async fn legacy_conn_audit_handler(
             .map(|id| Subject::with_details(id, "device", None));
         (actor, subject)
     } else {
-        let actor_id = payload
-            .ip
-            .clone()
-            .unwrap_or_else(|| "remote-client".to_string());
+        // conn.start (or event without peer): Actor id is unknown until auth identifies the peer. Never use an IP as actor id.
+        let actor_id = "unknown".to_string();
         let actor_ip = payload.ip.clone().or_else(|| Some(socket_ip.clone()));
         let actor = Actor::with_details(actor_id, "device", None, actor_ip);
         let subject = payload
@@ -1219,7 +1240,7 @@ pub async fn legacy_file_audit_handler(
     headers: HeaderMap,
     Json(payload): Json<LegacyFileAuditRequest>,
 ) -> Result<(StatusCode, &'static str), AuditRouteError> {
-    authenticate_ingestion_caller(&headers, &state).await?;
+    authenticate_client_or_internal_caller(&headers, &state).await?;
 
     if !allow_ingest(payload.id.as_deref().unwrap_or("anon")) {
         return Err(AuditRouteError::RateLimited("Ingesta excedida".into()));

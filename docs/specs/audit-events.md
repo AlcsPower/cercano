@@ -150,7 +150,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 - **Campos esperados en `details`:** `session_type` (`desktop`, `file_transfer`, `port_forward`, `camera`, `terminal`), `auth_method` (`manual_confirm`, `password_preset`, `temporary_password`, `side_switch`), `two_factor_verified` (`boolean`), `client_version`, `rendezvous_server`, `relay_server` (opcional), `is_direct_lan` (`boolean`).
 
 > [!NOTE]
-> **Compatibilidad cliente heredado:** Los campos heredados (`auth_method`, `session_type`, `client_version`) son opcionales cuando el evento proviene de la ingestión del cliente legado vía `/api/audit/conn` (`action: "new"`).
+> **Compatibilidad cliente heredado:** En la ingestión vía `/api/audit/conn` (`action: "new"`), `conn.start` se emite en la apertura del socket antes de autenticar al par remoto. Su `actor.id` se establece como `"unknown"` y la dirección IP de origen se asigna a `actor.ip` (nunca se utiliza una dirección IP como identificador de actor). La identidad del controlador remoto se resuelve formalmente con `conn.auth` y se propaga en `conn.end`. Los campos heredados (`auth_method`, `session_type`, `client_version`) son opcionales en esta fase previa.
 
 #### Vector de Prueba: Evento Génesis (Índice 1)
 
@@ -311,7 +311,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 - **Categoría (`category`):** `file`.
 - **Condición:** Envío o descarga completada de un archivo durante la sesión (modo dedicado o copiar/pegar).
 - **Campos esperados en `details`:** `direction` (`upload`, `download`), `remote_path`, `file_name`, `bytes_transferred`, `sha256` (hash SHA-256 del fichero transferido), `transfer_mode` (`dedicated_session`, `clipboard_copy_paste`).
-- **Compatibilidad con el cliente heredado (`POST /api/audit/file`):** el cliente envía `type` (0 = `upload`, 1 = `download`), `path`, `bytes`, `sha256` y un `info` con la lista de archivos. La API mapea `path` a `remote_path`, toma `file_name` de la lista o del nombre del fichero, y usa `info.files[].size` como volumen cuando `bytes` no viene. Si `path` está vacío, `transfer_mode` es `clipboard_copy_paste`. Un `sha256` con formato distinto de 64 hexadecimales se rechaza con HTTP 400. El parche del cliente calcula el hash solo cuando el evento cubre un único fichero con ruta local resoluble; los lotes multiarchivo llevan volumen pero no hash.
+- **Compatibilidad con el cliente heredado (`POST /api/audit/file`):** el cliente envía `type` (0 = `upload`, 1 = `download`), `path`, `bytes`, `sha256` y un `info` con la lista de archivos. La API mapea `path` a `remote_path`, toma `file_name` de la lista o del nombre del fichero, y usa `info.files[].size` como volumen cuando `bytes` no viene. Si `path` está vacío, `transfer_mode` es `clipboard_copy_paste`. Un `sha256` con formato distinto de 64 hexadecimales se rechaza con HTTP 400. El parche del cliente calcula el hash sobre el archivo local al emitir el evento (no sobre los bytes en tránsito), aplicando un tope de 512 MiB para no demorar la emisión asíncrona; transferencias de mayor tamaño o lotes multiarchivo llevan volumen pero omiten el hash. Autentica mediante cabecera `X-Cercano-Client-Token` únicamente cuando la conexión emplea HTTPS.
 
 #### Vector de Prueba: Evento 4
 

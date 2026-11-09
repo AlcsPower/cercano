@@ -22,11 +22,16 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-/// Refuses to run audit ingestion with no shared secret (an empty token would accept anyone).
-fn require_internal_token(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+/// Refuses to run audit ingestion with no shared secrets (an empty token would accept anyone).
+fn require_tokens(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     if config.internal_token.trim().len() < 32 {
         return Err(
             "CERCANO_INTERNAL_TOKEN must be set to a random value of at least 32 bytes".into(),
+        );
+    }
+    if config.client_ingest_token.trim().len() < 32 {
+        return Err(
+            "CERCANO_CLIENT_INGEST_TOKEN must be set to a random value of at least 32 bytes".into(),
         );
     }
     Ok(())
@@ -36,7 +41,7 @@ fn require_internal_token(config: &Config) -> Result<(), Box<dyn std::error::Err
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::load().map_err(|e| format!("Configuration error: {}", e))?;
 
-    require_internal_token(&config)?;
+    require_tokens(&config)?;
 
     init_logging(&config.log_level);
 
@@ -131,14 +136,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn internal_token_is_required_and_long_enough() {
+    fn tokens_are_required_and_long_enough() {
         let mut config = Config::default();
-        assert!(require_internal_token(&config).is_err());
+        assert!(require_tokens(&config).is_err());
 
         config.internal_token = "short".to_string();
-        assert!(require_internal_token(&config).is_err());
+        assert!(require_tokens(&config).is_err());
 
         config.internal_token = "a".repeat(32);
-        assert!(require_internal_token(&config).is_ok());
+        assert!(require_tokens(&config).is_err());
+
+        config.client_ingest_token = "short".to_string();
+        assert!(require_tokens(&config).is_err());
+
+        config.client_ingest_token = "b".repeat(32);
+        assert!(require_tokens(&config).is_ok());
     }
 }
