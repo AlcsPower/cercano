@@ -92,7 +92,7 @@ Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad | Pendiente |
 | F4.5-06 | SSE, `ChatHub`, lecturas y resumen | F4.5-04 | ControlPlane | QA | Pendiente |
 | F4.5-07 | Auditoría, límites y retención | F4.5-02…06, F2-02 | ControlPlane | Seguridad | Pendiente |
-| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4 cerrado | Web | QA | Pendiente |
+| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4 cerrado | Web | QA | En curso |
 | F4.5-09 | Consola: badge, notificaciones, reconexión, accesibilidad | F4.5-08 | Web | QA | Pendiente |
 | F4.5-10 | Cliente: módulo Rust y parche 006 | F4.5-03/04/06, F3-02 | Cliente | Seguridad | Pendiente |
 | F4.5-11 | Cliente: UI Flutter, nombre del contacto, adjuntos, i18n | F4.5-10, F4.5-13 | Cliente | QA | Pendiente |
@@ -100,4 +100,4 @@ Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F
 | F4.5-13 | Perfil `policy.chat` y aplicación en servidor | F3-01/02/13, F4.5-04 | ControlPlane + Cliente | Seguridad | Pendiente |
 | F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador | Pendiente |
 | F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | Pendiente |
-| F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA | Pendiente |
+| F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA | En curso |
