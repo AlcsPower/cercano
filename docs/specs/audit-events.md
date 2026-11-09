@@ -718,6 +718,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 | `chat.rate_limited` | Rechazo por límite de tasa (mensajes, conversaciones, adjuntos o SSE). |
 | `chat.denied` | Rechazo por permiso, conversación ajena o chat desactivado. |
 | `chat.retention.purged` | Purga de conversaciones cerradas y sus adjuntos. |
+| `chat.branding.updated` | Cambio de marca del chat desde la consola (`chat:manage`). `details.fields`: lista de campos modificados (sin secretos). |
 
 > [!NOTE]
 > Los vectores de prueba con JSON canónico y hash de esta familia se incorporan en F4.5-07, siguiendo exactamente el procedimiento de §4 y §6. Hasta entonces, esta sección define el contrato de `action` y `details`; el esquema JSON ya acepta `chat` y `subject_type: conversation`.

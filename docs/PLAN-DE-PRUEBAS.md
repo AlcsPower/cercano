@@ -191,7 +191,7 @@ Los casos detallados viven en `tests/cases/TC-F4.5-*.md` durante la implementaci
 | TC-F4.5-085 | Perfil con `chat.enabled=false` | El cliente no muestra el chat y el servidor rechaza |
 | TC-F4.5-086 | Escalar a sesión remota | Abre `cercano://`; consentimiento normal; `trace_id` compartido |
 | TC-F4.5-087 | Cambio de idioma del cliente | Claves nuevas presentes; textos en español/inglés |
-| TC-F4.5-088 | Ventana y diseño contra el mockup | Cabecera con marca del perfil, estado del servicio, aviso, hilo, composer y pie; sin ACME hardcodeado; sin typing/presencia |
+| TC-F4.5-088 | Ventana y diseño con marca configurada | Cabecera/logo/acento/textos desde la configuración admin; sin marca fija; sin typing/presencia |
 | TC-F4.5-089 | Doble check de leído | Un check al enviar; doble cuando `other_last_read_at` cubre el mensaje |
 | TC-F4.5-090 | E2E completo: chat → adjunto → respuesta → cierre → escalado | Todo correcto y `cercano-audit verify` en verde |
 | TC-F4.5-091 | Corte de red entre cliente/API y API/consola | Sin pérdida; reconexión |
@@ -199,6 +199,9 @@ Los casos detallados viven en `tests/cases/TC-F4.5-*.md` durante la implementaci
 | TC-F4.5-093 | Técnico sin 2FA intenta atender | Rechazado en producción (F4) |
 | TC-F4.5-094 | Buscar secretos y cuerpos en logs del cliente, API y consola | Ninguno encontrado |
 | TC-F4.5-095 | Notificación con cuerpo/nombre | No aparece ninguno de los dos |
+| TC-F4.5-096 | GET /api/chat/branding devuelve defaults/config | Sin auth devuelve objeto con defaults o config guardada; estructura correcta |
+| TC-F4.5-097 | PUT /api/chat/branding con `chat:manage` | 200 y objeto actualizado; 403 sin permiso; validación color `#RRGGBB`, URL https, longitudes |
+| TC-F4.5-098 | Cliente refleja cambio de marca y fallback | Al reabrir/refrescar la ventana usa la nueva marca; si la API falla usa fallback (perfil/built-in) |
 
 ## 7. Pruebas de seguridad por fase
 

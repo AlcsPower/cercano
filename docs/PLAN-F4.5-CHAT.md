@@ -14,7 +14,7 @@ Una persona usuaria con **Cercano Soporte** instalado abre una conversación des
 
 | Tema | Decisión |
 |---|---|
-| Cliente | Chat embebido en el cliente Cercano existente, en una **ventana dedicada** del mismo cliente (pestaña como fallback si el multi-window no es viable); el requisito «aplicación de chat instalada» se cumple con Cercano Soporte. El diseño sigue el mockup del dueño (`docs/specs/chat-ui-reference.png`). |
+| Cliente | Chat embebido en el cliente Cercano existente, en una **ventana dedicada** del mismo cliente (pestaña como fallback si el multi-window no es viable); el requisito «aplicación de chat instalada» se cumple con Cercano Soporte. La marca es configurable desde el panel admin y no hay una marca fija en el cliente. |
 | Gestión | Pestaña «Conversaciones» en `console-web`. |
 | v1 | Texto + historial + cola/asignación/cierre + adjuntos (imágenes y PDF) + notificaciones + escalado remoto. |
 | Identidad | Dispositivo sin cuenta: Ed25519 del cliente, clave fijada por el servidor y reto firmado. |
@@ -51,7 +51,7 @@ La arquitectura, el modelo de datos, la API, la autenticación, la SSE, los adju
 | ID | Tarea | Dep. | Rol | Verifica |
 |---|---|---|---|---|
 | F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA |
-| F4.5-02 | Migración 004 y modelos | F4.5-01, F4 cerrado | ControlPlane | QA |
+| F4.5-02 | Migración 004 y modelos | F4.5-01 | ControlPlane | QA |
 | F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad |
 | F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4 | ControlPlane | QA |
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad |
@@ -65,6 +65,7 @@ La arquitectura, el modelo de datos, la API, la autenticación, la SSE, los adju
 | F4.5-13 | Perfil `policy.chat` y aplicación en servidor | F3-01/02/13, F4.5-04 | ControlPlane + Cliente | Seguridad |
 | F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador |
 | F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA |
+| F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA |
 
 ### Detalle y criterios de aceptación
 
@@ -73,7 +74,7 @@ Crear `docs/specs/chat.md`, `docs/adr/010-cercano-chat.md` y este plan; actualiz
 *CA:* documentos coherentes; esquema de auditoría válido en JSON; tareas y `TC-F4.5-*` registrados; `git diff` solo de documentación; F4.5-01 `En verificación`.
 
 **F4.5-02 Migración 004 y modelos.**
-Añadir a `control-plane/cercano-api/src/db.rs` la migración `004_chat_schema` con las tablas e índices de `docs/specs/chat.md` §5, incluidos `contact_first_name` y `contact_last_name` en `chat_conversations`. Crear `src/chat/mod.rs` con los structs/servicios base y la actualización de `schema_migrations` esperada (4 filas). Actualizar las pruebas de `db.rs`.
+Añadir a `control-plane/cercano-api/src/db.rs` la migración `004_chat_schema` con las tablas e índices de `docs/specs/chat.md` §5, incluidos `contact_first_name` y `contact_last_name` en `chat_conversations` **y la tabla `chat_branding`**. Crear `src/chat/mod.rs` con los structs/servicios base y la actualización de `schema_migrations` esperada (4 filas). Actualizar las pruebas de `db.rs`.
 *CA:* migración sobre BD vacía y sobre BD con 001–003 aplicadas; sin pérdida de datos; índices presentes; `cargo test -p cercano-api` en verde; prueba de idempotencia de migraciones.
 
 **F4.5-03 Autenticación de dispositivo.**
@@ -97,7 +98,7 @@ Añadir `Category::Chat` en `control-plane/audit-core/src/model.rs` y la políti
 *CA:* cadena `chat.*` verificable con eventos antiguos; búsqueda automática no encuentra cuerpos, nombres de archivo, tokens ni claves en la base de auditoría; retención borra cerradas y conserva abiertas; 429 auditado; `cercano-audit verify` en verde.
 
 **F4.5-08 Consola: vista Conversaciones.**
-Añadir `'chat'` a `ActiveTab`, la pestaña en `TabBar.tsx` con badge, el render en `App.tsx` y `ChatView.tsx` con lista/filtros/búsqueda, conversación, mensajes, adjuntos, composer y acciones. Mostrar **nombre y apellido como etiqueta principal** y el equipo/hostname como secundario; incluir ambos en la búsqueda. Añadir tipos y métodos de API (o `api/chat.ts`) y un hook de estado. En modo demostración, mensaje claro de no disponibilidad (sin datos falsos).
+Añadir `'chat'` a `ActiveTab`, la pestaña en `TabBar.tsx` con badge, el render en `App.tsx` y `ChatView.tsx` con lista/filtros/búsqueda, conversación, mensajes, adjuntos, composer y acciones. Mostrar **nombre y apellido como etiqueta principal** y el equipo/hostname como secundario; incluir ambos en la búsqueda. Añadir tipos y métodos de API (o `api/chat.ts`) y un hook de estado. En modo demostración, mensaje claro de no disponibilidad (sin datos falsos). **Incluye el acceso al formulario de marca del chat (tarea F4.5-16).**
 *CA:* nombre natural + equipo visibles; búsqueda por nombre y equipo; cola/filtros; reclamar/liberar/cerrar/reabrir/asignar; enviar/adjuntar; estados vacío/cargando/error; `npm run build` y `npm run lint:design` en verde; QA manual con dos técnicos y dos dispositivos; sin regresiones en las vistas existentes.
 
 **F4.5-09 Consola: badge, notificaciones, reconexión y accesibilidad.**
@@ -109,8 +110,8 @@ Crear `vendor/client/src/cercano_chat.rs` (registro, firma, REST, SSE con `reqwe
 *CA:* registro/auth/firma; rechazo de HTTP; token nunca en disco/logs; SSE y reconexión; toast sin contenido; pruebas unitarias de firma/parseo; el parche aplica limpio sobre el upstream base y no cambia rutas existentes.
 
 **F4.5-11 Cliente: UI Flutter, entrada, adjuntos e i18n.**
-Crear `vendor/client/flutter/lib/cercano_chat/` (modelo, página, widgets), el botón «Chat de soporte» en el panel izquierdo del cliente Soporte y la **ventana dedicada** (multi-window; pestaña como fallback) con el diseño de `docs/specs/chat.md` §14 y el mockup `docs/specs/chat-ui-reference.png`: cabecera con icono/nombre del perfil, estado del servicio («En línea»/«Reconectando»/«Atendido por …»), aviso informativo, hilo de burbujas con avatares genéricos/iniciales, horas, doble check de leído, adjuntos (imagen/PDF), composer, pie de privacidad y estados (bienvenida, en cola, activa, cerrada, sin conexión). **Primera vez:** formulario obligatorio de **Nombre y Apellido** antes de crear la conversación; se guarda solo en la configuración local (`chat-contact-first-name`, `chat-contact-last-name`), se precarga en las siguientes y se puede editar para conversaciones nuevas. Sin presencia por técnico ni indicador de escritura en v1; el punto verde significa «servicio en línea». Añadir claves a `template.rs` y a todos los `src/lang/*.rs` (vacías donde corresponda; español en `es.rs`). Wrappers Dart a mano.
-*CA:* la ventana se abre desde el cliente y respeta el mockup (cabecera, aviso, hilo, composer, pie); la marca sale del perfil y no hay ACME hardcodeado; primera vez pide nombre y apellido y no deja continuar sin ambos; conversaciones posteriores los reutilizan; edición aplica solo a nuevas; el nombre no aparece en logs/telemetría/notificaciones; doble check según `other_last_read_at`; sin typing/presencia; iniciar/enviar/recibir; imagen en línea y PDF descargable; toast al minimizar; reconexión; perfil desactiva el chat; i18n sin claves faltantes; `flutter test` del modelo en verde; QA manual en Windows 10/11; sin regresiones en la UI existente.
+Crear `vendor/client/flutter/lib/cercano_chat/` (modelo, página, widgets), el botón «Chat de soporte» en el panel izquierdo del cliente Soporte y la **ventana dedicada** (multi-window; pestaña como fallback) con el diseño de `docs/specs/chat.md` §14: cabecera con `support_name`, `organization_name`, `logo_url`, `accent_color` y textos de la API de marca; aviso informativo, hilo de burbujas con avatares genéricos/iniciales, horas, doble check de leído, adjuntos (imagen/PDF), composer, pie de privacidad y estados (bienvenida, en cola, activa, cerrada, sin conexión). **Primera vez:** formulario obligatorio de **Nombre y Apellido** antes de crear la conversación; se guarda solo en la configuración local (`chat-contact-first-name`, `chat-contact-last-name`), se precarga en las siguientes y se puede editar para conversaciones nuevas. Sin presencia por técnico ni indicador de escritura en v1; el punto verde significa «servicio en línea». **La marca sale de la configuración admin (`GET /api/chat/branding`), con fallback al perfil/built-in; el icono de la barra de tareas/exe sigue siendo el del perfil F3.** Añadir claves a `template.rs` y a todos los `src/lang/*.rs` (vacías donde corresponda; español en `es.rs`). Wrappers Dart a mano.
+*CA:* la ventana se abre desde el cliente; la marca sale de la configuración admin, con fallback al perfil/built-in; primera vez pide nombre y apellido y no deja continuar sin ambos; conversaciones posteriores los reutilizan; edición aplica solo a nuevas; el nombre no aparece en logs/telemetría/notificaciones; doble check según `other_last_read_at`; sin typing/presencia; iniciar/enviar/recibir; imagen en línea y PDF descargable; toast al minimizar; reconexión; perfil desactiva el chat; i18n sin claves faltantes; `flutter test` del modelo en verde; QA manual en Windows 10/11; sin regresiones en la UI existente.
 
 **F4.5-12 Escalado a sesión remota.**
 Añadir el manejo de `cercano://connect?device=&trace=` en el cliente (alias del manejador actual) y el registro del esquema en el empaquetado Windows (F3-05); botón y respaldo «Copiar ID» en la consola; evento `chat.escalated`; propagar `trace` a `conn_audit_ref`.
@@ -127,6 +128,10 @@ Ejecutar los `TC-F4.5-*` en el laboratorio con Windows 10/11, consola y API; pru
 **F4.5-15 Guía de despliegue y operación.**
 Actualizar `deploy/README.md` y crear `docs/guias/chat.md`: TLS/CA de confianza, nginx (SSE y subida), variables, respaldos, retención, cómo desactivar el chat, reset de identidad, solución de problemas y aviso de privacidad.
 *CA:* otra persona sigue la guía desde cero y pone el chat en el laboratorio; incluye cómo revocar y cómo verificar la auditoría.
+
+**F4.5-16 Marca del chat configurable desde la consola.**
+Tabla `chat_branding`, endpoints `GET/PUT /api/chat/branding`, formulario en la consola con nombre de organización/soporte, logo URL, color de acento, textos de bienvenida/aviso/privacidad, vista previa y guardado; el cliente lee la marca al abrir el chat; fallback a Cercano/perfil; `chat:manage`; auditoría `chat.branding.updated`.
+*CA:* el admin cambia la marca y la ventana la refleja sin reinstalar; sin permisos 403; sin config se usan defaults; sin marca fija hardcodeada; validación de color/URL/textos.
 
 ## 6. Reglas de seguridad no negociables
 
@@ -153,18 +158,20 @@ El catálogo completo está en [`docs/PLAN-DE-PRUEBAS.md`](PLAN-DE-PRUEBAS.md) �
 - **Auditoría/retención:** cadena, sin contenido, purga de cerradas, abiertas intactas.
 - **SSE:** audiencia, reconexión/refetch, `resync`, token revocado.
 - **Consola:** filtros/badge, notificación oculta, acciones, accesibilidad, claro/oscuro, modo demostración.
-- **Cliente:** entrada, ventana y cabecera con marca del perfil, aviso, hilo, composer, pie, doble check de leído, sin typing/presencia, enviar/recibir, imagen/PDF, toast, reconexión, perfil desactivado, escalado, i18n.
+- **Cliente:** entrada, ventana y cabecera con marca configurable (admin/perfil/built-in), aviso, hilo, composer, pie, doble check de leído, sin typing/presencia, enviar/recibir, imagen/PDF, toast, reconexión, perfil desactivado, escalado, i18n.
+- **Marca:** GET/PUT branding, permisos, reflejo en la ventana, fallback, sin hardcode.
 - **E2E/seguridad:** flujo completo + `cercano-audit verify`, corte de red, HTTP rechazado, 2FA, sin secretos, sin contenido en notificaciones.
 
 ## 8. Gate F4.5
 
-- 100 % de tareas `Hecho` o diferidas con justificación.
+- 100 % de tareas `Hecho` o diferidas con justificación (**16 tareas**).
 - Suite de la fase en verde en CI y laboratorio; flujo completo para ambos roles.
 - Sin hallazgos críticos o altos abiertos; medios/bajos con plan.
 - `cercano-audit verify` sobre una cadena con eventos de chat, remoto y administración.
 - Sin cuerpos, **nombres de contacto**, tokens, claves ni nombres de archivo en auditoría/logs; búsqueda automática documentada.
 - `npm run build` y `npm run lint:design` de la consola; `cargo fmt`, `cargo clippy -D warnings`, `cargo test` y `cargo deny check` del backend; parche 006 aplicable; `flutter test` del modelo.
 - Guía de operación publicada y recapacitación de QA/Coordinador.
+- **La marca se configura desde la consola y no hay marca fija.**
 
 ## 9. Fuera de alcance
 
@@ -187,9 +194,9 @@ Aplicación separada, PWA, E2E, edición/borrado, búsqueda full-text, respuesta
 
 | Subsistema | Archivos |
 |---|---|
-| API | `control-plane/cercano-api/src/chat/{mod,auth,conversations,attachments,events,retention}.rs`, `src/routes/chat.rs`, `src/lib.rs`, `src/db.rs`, `src/config.rs`, `Cargo.toml`, `tests/chat_*.rs` |
+| API | `control-plane/cercano-api/src/chat/{mod,auth,conversations,attachments,events,retention,branding}.rs`, `src/routes/chat.rs`, `src/lib.rs`, `src/db.rs`, `src/config.rs`, `Cargo.toml`, `tests/chat_*.rs` |
 | Auditoría | `control-plane/audit-core/src/model.rs`, `src/retention.rs`, `docs/specs/audit-events.md`, `docs/specs/audit-events.schema.json` |
-| Consola | `console-web/src/components/views/ChatView.tsx`, `src/components/chat/*`, `src/types/index.ts`, `src/api/{client,chat}.ts`, `src/App.tsx`, `src/components/layout/TabBar.tsx` |
+| Consola | `console-web/src/components/views/ChatView.tsx`, `src/components/chat/*`, `src/components/chat/ChatBrandingForm.tsx`, `src/types/index.ts`, `src/api/{client,chat}.ts`, `src/App.tsx`, `src/components/layout/TabBar.tsx` |
 | Cliente | `vendor/client/src/cercano_chat.rs`, `src/lib.rs`, `src/flutter_ffi.rs`, `flutter/lib/cercano_chat/*`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/lib/desktop/pages/desktop_tab_page.dart`, `flutter/lib/consts.dart`, `src/lang/template.rs` y `src/lang/*.rs`, `Cargo.toml`, `patches/006-client-support-chat.patch`, `patches/INDEX.md` |
 | Despliegue | `deploy/nginx.conf`, `deploy/README.md`, `docs/guias/chat.md` |
 | Pruebas | `tests/cases/TC-F4.5-*.md`, `tests/e2e/chat.{ps1,sh}`, `control-plane/cercano-api/tests/chat_*.rs` |

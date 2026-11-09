@@ -19,7 +19,7 @@ El dueño del producto decidió que el chat:
 
 ## 2. Decisión
 
-1. **Cliente:** el chat se embebe en el cliente Cercano existente (Flutter + Rust) como módulo nuevo y **ventana dedicada** del mismo cliente (pestaña como fallback si el multi-window no es viable), con el diseño de `docs/specs/chat.md` §14 y el mockup `docs/specs/chat-ui-reference.png`. Se distribuye como el parche `006-client-support-chat.patch`; no se edita `vendor/` directamente. Por defecto está habilitado para el instalador `soporte` y deshabilitado para `tecnico`, configurable en el perfil firmado.
+1. **Cliente:** el chat se embebe en el cliente Cercano existente (Flutter + Rust) como módulo nuevo y **ventana dedicada** del mismo cliente (pestaña como fallback si el multi-window no es viable), con el diseño de `docs/specs/chat.md` §14. La marca visible (nombre, logo, color, textos) se configura en el panel de administración (`console-web`); no hay una marca fija hardcodeada. Se distribuye como el parche `006-client-support-chat.patch`; no se edita `vendor/` directamente. Por defecto está habilitado para el instalador `soporte` y deshabilitado para `tecnico`, configurable en el perfil firmado.
 2. **Gestión:** `console-web` incorpora la pestaña «Conversaciones» con cola, filtros, reclamación, asignación, cierre, reapertura y escalado. Los técnicos usan sus cuentas y permisos de F4 (`chat:attend`, `chat:manage`, `chat:read`).
 3. **Persistencia:** las conversaciones, mensajes y metadatos de adjuntos viven en `cercano-api` (SQLite). Los adjuntos viven en disco, bajo un directorio configurable, y se sirven solo por endpoint autenticado. El cliente no guarda el historial como fuente de verdad.
 4. **Tiempo real:** REST para escritura/lectura y **SSE** para «pokes» sin contenido (el receptor vuelve a consultar por REST). No se usa WebSocket en v1 porque SSE no requiere `Upgrade`, funciona con cabecera `Authorization` desde `fetch` y notifica con la pestaña en segundo plano; WebSocket queda como mejora si se añaden indicadores de escritura o presencia.
@@ -29,6 +29,12 @@ El dueño del producto decidió que el chat:
 8. **Auditoría:** categoría nueva `chat` en `audit-core`. Se audita quién abre, escribe, adjunta, asigna, cierra, reabre y escala; **nunca** el cuerpo del mensaje, el nombre del contacto, el nombre original del adjunto ni tokens. `trace_id` = `conversation_id`.
 9. **Escalado:** el botón de la consola abre `cercano://connect?device=<id>&trace=<conversation_id>` en el equipo del técnico; la sesión remota conserva el consentimiento normal de la persona usuaria y comparte `trace_id` con la conversación.
 10. **Fase:** F4.5, después de F4; depende además de F3-13 (rol de instalador), F3-02 (perfil) y F3-05 (empaquetado) para la identidad y el esquema de URL.
+
+### Decisión 11 — Marca del chat configurable en la consola
+
+**Decisión:** `console-web` es la fuente de la marca del chat. Tabla `chat_branding` (singleton) + endpoints `GET /api/chat/branding` (público) y `PUT /api/chat/branding` (`chat:manage`). El cliente no hardcodea ninguna marca; al abrir la ventana lee `GET /api/chat/branding` y usa `support_name`, `organization_name`, `logo_url`, `accent_color`, `welcome_text`, `info_text`, `privacy_text`. Fallback: si la API falla o no hay config, usa `Cercano Soporte` / `#3B5BFF` / textos built-in; como último recurso, la identidad del perfil del instalador (`identity.app_name`, `identity.icon`).
+
+**Consecuencia:** cambiar la marca no exige reinstalar el cliente ni regenerar el instalador. La identidad del instalador (ejecutable `.exe`, icono de la barra de tareas) **sigue en el perfil F3** porque se fija al instalar; si se quiere cambiar el icono de la barra de tareas o el nombre del ejecutable, hay que regenerar el instalador con un nuevo perfil firmado.
 
 ## 3. Consecuencias
 

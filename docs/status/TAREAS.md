@@ -77,7 +77,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-17 | Auditoría `elev.*` y alarmas de elevación | F3-16, F2-02, F2-07 | ControlPlane | QA | Hecho |
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador | Hecho |
 
-_Total: 53 tareas (F0–F3) + 15 de F4.5. F4–F7 se detallan al cerrar la fase anterior._
+_Total: 53 tareas (F0–F3) + 16 de F4.5. F4–F7 se detallan al cerrar la fase anterior._
 
 ## F4.5 — Cercano Chat (complemento, después de F4)
 
@@ -86,7 +86,7 @@ Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
 | F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA | En verificación |
-| F4.5-02 | Migración 004 y modelos | F4.5-01, F4 cerrado | ControlPlane | QA | Pendiente |
+| F4.5-02 | Migración 004 y modelos | F4.5-01 | ControlPlane | QA | En verificación |
 | F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad | Pendiente |
 | F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4 cerrado | ControlPlane | QA | Pendiente |
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad | Pendiente |
@@ -100,3 +100,4 @@ Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F
 | F4.5-13 | Perfil `policy.chat` y aplicación en servidor | F3-01/02/13, F4.5-04 | ControlPlane + Cliente | Seguridad | Pendiente |
 | F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador | Pendiente |
 | F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | Pendiente |
+| F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA | Pendiente |

@@ -684,6 +684,12 @@ Prohibido en `details`: cuerpo del mensaje, **nombre o apellido del contacto**, 
 - El servidor aplica el rol de instalador (F3-13); el flag es política de UX y se registra en el instalador cuando F3-07 lo guarde. Un `tecnico` no puede abrir conversaciones aunque edite su configuración local.
 - El cliente exige `api_server` HTTPS para habilitar el chat; un perfil con `chat.enabled=true` y API HTTP se rechaza con un aviso claro.
 
+### 12.1 Marca del chat configurable
+
+La fuente de la marca visible (nombre de la organización, nombre de soporte, logo, color de acento y textos de bienvenida/aviso/privacidad) es la tabla `chat_branding` y los endpoints `GET/PUT /api/chat/branding`. El cliente lee la marca al abrir la ventana del chat y la usa para la cabecera, el aviso, el pie y el color de acento. Si la API no está disponible o no hay configuración, hace fallback a los valores por defecto (`Cercano Soporte`, `#3B5BFF`, textos built-in) y, como último recurso, a la identidad del perfil del instalador (`identity.app_name`, `identity.icon`).
+
+**Importante:** la identidad del instalador (ejecutable `.exe` e icono de la barra de tareas) **sigue siendo la del perfil firmado F3** porque se fija al instalar. Cambiar la marca del chat desde la consola no cambia el icono de la barra de tareas ni el nombre del ejecutable; eso requeriría regenerar el instalador con un nuevo perfil.
+
 ---
 
 ## 13. Compatibilidad y versionado
@@ -698,38 +704,30 @@ Prohibido en `details`: cuerpo del mensaje, **nombre o apellido del contacto**, 
 
 ## 14. Diseño de la ventana del cliente (referencia)
 
-El dueño aportó este mockup como referencia visual. Es ilustrativo: la marca, el avatar y el estado «En línea» son de ejemplo; la implementación usa la identidad del perfil (F3) y la paleta de Cercano, sin hardcodear ACME.
+La ventana de chat es una **ventana dedicada** del mismo cliente Cercano (multi-window; pestaña como fallback si la plataforma no lo soporta), abierta desde el botón «Chat de soporte» del panel izquierdo o la bandeja. Tamaño inicial ~560×700 px, redimensionable, mínimo 380×520. Tema claro y oscuro del cliente; tipografía y espaciado existentes; sin animaciones que distraigan (respetar `prefers-reduced-motion` / reducción de movimiento de Flutter). Título: «Soporte <nombre de soporte>» y los controles de minimizar/cerrar de la ventana. El icono de la barra de tareas es el del perfil (F3); el icono por defecto es el de Cercano.
 
-![Referencia visual de la ventana de chat: cabecera «Soporte ACME» con estado «En línea», aviso de conversación, burbujas de cliente y técnico con horas, indicador de escritura, composer con adjunto y botón de enviar, y pie «Su consulta es confidencial».](chat-ui-reference.png)
-
-### 14.1 Ventana
-
-- **Ventana dedicada del mismo cliente Cercano** (no una segunda app), abierta desde el botón «Chat de soporte» del panel izquierdo o la bandeja. Se usa el multi-window existente del cliente; si en la plataforma no es viable, la misma página se muestra como pestaña (fallback documentado). Tamaño inicial ~560×700 px, redimensionable, mínimo 380×520.
-- Título: «Soporte <nombre del perfil>» y los controles de minimizar/cerrar de la ventana. El icono de la barra de tareas es el del perfil (F3); el icono por defecto es el de Cercano.
-- Tema claro y oscuro del cliente; tipografía y espaciado existentes; sin animaciones que distraigan (respetar `prefers-reduced-motion` / reducción de movimiento de Flutter).
-
-### 14.2 Anatomía y correspondencia con v1
+### 14.1 Anatomía y correspondencia con v1
 
 | Zona | Comportamiento v1 |
 |---|---|
-| **Cabecera** | Icono/nombre del perfil (`identity.app_name`/`identity.icon`), título «Soporte <organización>», estado del servicio: «En línea» (API alcanzable y chat habilitado), «Reconectando» (SSE/REST caídos) o «Atendido por <técnico>» cuando está asignada. El punto verde va acompañado de texto, nunca solo color. |
-| **Aviso** | Tarjeta informativa: «Está conversando con un técnico de soporte de <organización>.» Se muestra al inicio de la conversación y se puede colapsar; no ocupa espacio si ya hay historial. |
-| **Hilo** | Burbujas del cliente a la derecha (azul Cercano, texto blanco) y del técnico a la izquierda (superficie neutra). Avatar del cliente con icono/iniciales; del técnico, icono genérico de soporte o iniciales (sin foto). Hora local en cada mensaje. Separadores de fecha. Adjuntos como miniatura (imagen) o tarjeta con nombre/tamaño (PDF). Mensajes de sistema centrados. |
+| **Cabecera** | Usa `support_name`/`organization_name`/`logo_url`/`accent_color` de la configuración admin (`GET /api/chat/branding`). Muestra logo (si hay `logo_url`) o icono del perfil; título «Soporte <support_name>»; subtítulo con `organization_name` si está definido. Estado del servicio: «En línea» (API alcanzable y chat habilitado), «Reconectando» (SSE/REST caídos) o «Atendido por <técnico>» cuando está asignada. El punto verde va acompañado de texto, nunca solo color. |
+| **Aviso** | Tarjeta informativa con `info_text` de la configuración; si no hay, «Está conversando con un técnico de soporte de <organization_name o support_name>.» Se muestra al inicio de la conversación y se puede colapsar; no ocupa espacio si ya hay historial. |
+| **Hilo** | Burbujas del cliente a la derecha (color `accent_color`, texto blanco) y del técnico a la izquierda (superficie neutra). Avatar del cliente con icono/iniciales; del técnico, icono genérico de soporte o iniciales (sin foto). Hora local en cada mensaje. Separadores de fecha. Adjuntos como miniatura (imagen) o tarjeta con nombre/tamaño (PDF). Mensajes de sistema centrados. |
 | **Leído** | Un check = enviado; doble check = el otro participante marcó leído (`other_last_read_at >= created_at`). No se muestra el doble check en mensajes propios de sistema. |
-| **Composer** | Campo multilínea «Escriba su mensaje…», botón de adjuntar (imagen/PDF), botón de enviar. `Enter` envía, `Shift+Enter` salta línea; enviar deshabilitado si está vacío o sin conexión; estado de subida y error visibles. |
-| **Pie** | Escudo y texto «Su consulta es confidencial», con enlace/tooltip a la política: acceso restringido al equipo de soporte y retención configurable. Si la política no respalda «confidencial», se usa «Conversación privada · se guarda para seguimiento». |
+| **Composer** | Campo multilínea con `welcome_text` como placeholder si la conversación está vacía; botón de adjuntar (imagen/PDF), botón de enviar. `Enter` envía, `Shift+Enter` salta línea; enviar deshabilitado si está vacío o sin conexión; estado de subida y error visibles. |
+| **Pie** | Texto `privacy_text` de la configuración; si no hay, «Su consulta es confidencial», con enlace/tooltip a la política: acceso restringido al equipo de soporte y retención configurable. Si la política no respalda «confidencial», se usa «Conversación privada · se guarda para seguimiento». |
 | **Estados** | Sin conversación: bienvenida + formulario de Nombre/Apellido (primera vez) y «Iniciar conversación». En cola: «En espera de un técnico». Asignada/activa: nombre del técnico y composer. Cerrada: solo lectura + «Nueva conversación». Sin conexión: banner de reconexión y composer deshabilitado. |
 
-### 14.3 Elementos del mockup que no son v1
+### 14.2 Elementos que no son v1
 
 - **Presencia por técnico y punto verde junto al avatar:** en v1 el verde significa «servicio en línea», no que una persona esté conectada. No hay presencia por técnico.
 - **Indicador de escritura («…»):** fuera de v1 (requiere eventos efímeros de typing). Se reserva el espacio y se evalúa como mejora.
 - **Foto del técnico:** se sustituye por icono genérico o iniciales; no se almacenan fotos.
-- **Marca ACME:** es un ejemplo de despliegue. El nombre, el icono y el acento salen del perfil; el valor por defecto es Cercano.
+- **Marca fija:** no hay marca fija. Todo (nombre, logo, color, textos) sale de la configuración admin (`GET /api/chat/branding`), con fallback a `Cercano Soporte` / `#3B5BFF` / textos built-in y, como último recurso, a la identidad del perfil del instalador.
 
-### 14.4 Accesibilidad
+### 14.3 Accesibilidad
 
-- Contraste suficiente en ambos temas (el texto sobre azul usa blanco; el punto verde se acompaña de texto).
+- Contraste suficiente en ambos temas (el texto sobre el color de acento usa blanco; el punto verde se acompaña de texto).
 - Navegación completa por teclado, foco visible, etiquetas semánticas y `aria`/Semantics en Flutter.
 - Los mensajes nuevos se anuncian sin robar el foco; los adjuntos tienen nombre accesible y texto alternativo.
 - No se depende solo del color para estado, leído o error.
