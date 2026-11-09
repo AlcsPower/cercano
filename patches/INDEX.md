@@ -21,6 +21,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `002-client-rebranding.patch` | F1-07 | `vendor/client` | Rebranding del cliente desktop y Flutter: nombre visible "Cercano", bundle ID `com.cercano.client`, rutas de config aisladas (`.config/cercano`, `AppData/Roaming/Cercano`), textos de interfaz, pantalla Acerca de con licencia AGPL-3.0 y enlace a repositorio | `Cargo.toml`, `res/*`, `src/*`, `flutter/*`, `vendor/server/libs/hbb_common/*` | 2026-11-05 | Agente-Cliente |
 | `003-client-default-endpoints.patch` | F1-08 | `vendor/client` | Configuración por defecto de red apuntando a ID Server `127.0.0.1:21116`, Relay `127.0.0.1:21117`, API Server `http://127.0.0.1:21114`, y latido de telemetría hacia `POST /api/devices/heartbeat` | `src/common.rs`, `src/rendezvous_mediator.rs`, `src/client.rs`, `src/hbbs_http/sync.rs`, `vendor/server/libs/hbb_common/src/config.rs` | 2026-11-05 | Agente-Cliente |
 | `004-client-audit-hooks.patch` | F2-05 | `vendor/client` | Propaga `trace_id`, par autenticado y tipo en `conn.end`, añade volumen y SHA-256 (tope 512 MiB al emitir) y autentica emisión con `X-Cercano-Client-Token` solo sobre HTTPS | `src/server/connection.rs` | 2026-11-09 | Agente-Cliente |
+| `005-client-signed-profile.patch` | F3-02 | `vendor/client` | Localización, verificación de firma Ed25519 y aplicación de perfil de cliente firmado (`cercano-profile.signed.json`), comprobación de caducidad y restricciones de rol | `src/cercano_profile.rs`, `src/common.rs`, `src/lib.rs` | 2026-11-09 | Agente-Cliente |
 
 ---
 
@@ -107,6 +108,24 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Archivos modificados:**
   - `src/server/connection.rs`
 - **Estrategia de actualización (upstream sync):** Reaplicar sobre `post_conn_audit`, `post_file_audit`, `post_audit_async` y el cierre de conexión; si upstream cambia sus DTOs de auditoría, conservar `trace_id`, `bytes`, `sha256` y el `type` del cierre, y validar contra el endpoint de ingestión vigente.
+
+---
+
+### [005-client-signed-profile.patch] Tarea F3-02: Lectura y verificación de perfil firmado en el cliente
+
+- **Archivo:** `patches/005-client-signed-profile.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-02`
+- **Fecha:** `2026-11-09`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** Implementa el módulo `cercano_profile` en el cliente para cargar y verificar criptográficamente el perfil firmado (`cercano-profile.signed.json` o ruta `CERCANO_PROFILE_PATH`) antes de iniciar. Utiliza Ed25519 sobre JSON canónico, valida la caducidad (`expires_at`), aplica los invariantes de rol (`soporte` sin conexiones salientes, `tecnico` sin acceso desatendido), y aplica la configuración en `config::OVERWRITE_SETTINGS` y `config::APP_NAME`. Si la firma es inválida, falta la firma, el rol fue alterado o el perfil ha caducado, la carga es rechazada de inmediato.
+- **Archivos modificados:**
+  - `src/cercano_profile.rs`
+  - `src/common.rs`
+  - `src/lib.rs`
+- **Estrategia de actualización (upstream sync):** El módulo `cercano_profile` es puramente aditivo; se engancha en `load_custom_client()` en `src/common.rs`. Al actualizar upstream, verificar que `config::OVERWRITE_SETTINGS` y `config::APP_NAME` continúen existiendo en `hbb_common`.
+
+---
 
 ### Plantilla de registro para nuevos parches
 

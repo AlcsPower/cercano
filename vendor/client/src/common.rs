@@ -2498,6 +2498,10 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    // Cercano signed profile loader (F3-02)
+    if crate::cercano_profile::load_and_apply_profile() {
+        return;
+    }
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
