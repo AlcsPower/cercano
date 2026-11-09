@@ -55,6 +55,14 @@ struct Args {
     /// Valida el perfil y sus invariantes de rol (soporte vs tecnico) sin generar artefactos
     #[arg(long = "dry-run")]
     dry_run: bool,
+
+    /// Genera paquetes de instalación de Windows (.exe y .msi) para el rol del perfil (F3-05)
+    #[arg(long = "package-windows", alias = "windows", short = 'w')]
+    package_windows: bool,
+
+    /// UpgradeCode GUID personalizado para el instalador MSI de Windows (opcional)
+    #[arg(long = "upgrade-code")]
+    upgrade_code: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -67,6 +75,8 @@ fn main() -> ExitCode {
         key_id: args.key_id,
         base_binary_path: args.base_binary,
         dry_run: args.dry_run,
+        package_windows: args.package_windows,
+        upgrade_code: args.upgrade_code,
     };
 
     match execute_build(&options) {
@@ -90,6 +100,12 @@ fn main() -> ExitCode {
             println!("  - Checksums:      {}", result.checksums_path.display());
             if let Some(ref bin) = result.base_binary_path {
                 println!("  - Binario base:   {}", bin.display());
+            }
+            if let Some(ref exe) = result.windows_exe_path {
+                println!("  - Instalador EXE: {}", exe.display());
+            }
+            if let Some(ref msi) = result.windows_msi_path {
+                println!("  - Instalador MSI: {}", msi.display());
             }
             ExitCode::SUCCESS
         }

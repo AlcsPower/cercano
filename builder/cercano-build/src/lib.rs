@@ -28,6 +28,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+pub mod windows;
+
 /// Clave privada de desarrollo por defecto (32 bytes deterministas).
 pub const DEFAULT_DEV_SIGNING_KEY_BYTES: [u8; 32] = [42u8; 32];
 pub const DEFAULT_DEV_KEY_ID: &str = "cercano-dev-key";
@@ -72,6 +74,8 @@ pub struct BuildOptions {
     pub key_id: Option<String>,
     pub base_binary_path: Option<PathBuf>,
     pub dry_run: bool,
+    pub package_windows: bool,
+    pub upgrade_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -104,6 +108,8 @@ pub struct BuildManifest {
     pub signing_key_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_binary: Option<BaseBinaryInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub windows_metadata: Option<windows::WindowsInstallerMetadata>,
     pub artifacts: Vec<BuildArtifact>,
 }
 
@@ -118,6 +124,8 @@ pub struct BuildResult {
     pub manifest_path: PathBuf,
     pub checksums_path: PathBuf,
     pub base_binary_path: Option<PathBuf>,
+    pub windows_exe_path: Option<PathBuf>,
+    pub windows_msi_path: Option<PathBuf>,
     pub elapsed_ms: u128,
 }
 
@@ -320,7 +328,40 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         size_bytes: profile_len,
     });
 
-    // 7. Generar `build-manifest.json`
+    // 7. Empaquetado Windows (.exe y .msi) si fue solicitado (F3-05)
+    let mut windows_exe_path = None;
+    let mut windows_msi_path = None;
+    let mut windows_metadata = None;
+
+    if options.package_windows {
+        let win_role = match profile.role {
+            ProfileRole::Soporte => windows::WindowsRole::Soporte,
+            ProfileRole::Tecnico => windows::WindowsRole::Tecnico,
+        };
+
+        let app_name_override = profile.identity.as_ref().and_then(|id| id.app_name.clone());
+
+        let win_opts = windows::WindowsPackagingOptions {
+            role: win_role,
+            version: version_str.clone(),
+            upgrade_code: options.upgrade_code.clone(),
+            product_code: None,
+            app_name: app_name_override,
+            base_binary_path: packaged_base_path.clone(),
+            signed_profile_path: signed_profile_path.clone(),
+            out_dir: target_dir.clone(),
+        };
+
+        let win_res = windows::generate_windows_packages(&win_opts)?;
+        for art in win_res.artifacts {
+            artifacts.push(art);
+        }
+        windows_exe_path = Some(win_res.exe_path);
+        windows_msi_path = Some(win_res.msi_path);
+        windows_metadata = Some(win_res.metadata);
+    }
+
+    // 8. Generar `build-manifest.json`
     let build_id = uuid::Uuid::new_v4().to_string();
     let app_name = profile.identity.as_ref().and_then(|id| id.app_name.clone());
     let manifest = BuildManifest {
@@ -334,6 +375,7 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         created_at: chrono::Utc::now().to_rfc3339(),
         signing_key_id: signed_profile.key_id.clone(),
         base_binary: base_binary_info,
+        windows_metadata,
         artifacts,
     };
 
@@ -344,7 +386,7 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         source,
     })?;
 
-    // 8. Generar `SHA256SUMS` para todos los archivos generados (ordenados alfabéticamente)
+    // 9. Generar `SHA256SUMS` para todos los archivos generados (ordenados alfabéticamente)
     let checksums_path = target_dir.join(DEFAULT_CHECKSUMS_NAME);
     let mut file_entries = Vec::new();
 
@@ -389,6 +431,8 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         manifest_path,
         checksums_path,
         base_binary_path: packaged_base_path,
+        windows_exe_path,
+        windows_msi_path,
         elapsed_ms,
     }))
 }

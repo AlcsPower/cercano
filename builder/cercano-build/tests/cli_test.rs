@@ -470,3 +470,212 @@ fn test_build_with_already_signed_profile_preserves_signature() {
     assert_eq!(orig_env.signature, final_env.signature);
     assert_eq!(orig_env.key_id, final_env.key_id);
 }
+
+#[test]
+fn test_windows_packaging_soporte() {
+    let bin = get_bin_path();
+    let dir = tempdir().expect("create tempdir");
+    let out_dir = dir.path().join("dist/builds");
+    let profile = "../../docs/specs/examples/profile-soporte-valido.json";
+
+    let start = Instant::now();
+    let output = Command::new(&bin)
+        .args([
+            "-p",
+            profile,
+            "-o",
+            out_dir.to_str().unwrap(),
+            "--package-windows",
+        ])
+        .output()
+        .expect("failed to execute cercano-build");
+    let elapsed = start.elapsed();
+
+    assert!(elapsed.as_secs() < 30, "Took {:?}, must be < 30s", elapsed);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "stderr: {}, stdout: {}",
+        stderr,
+        stdout
+    );
+
+    let bundle_dir = out_dir.join("cercano-soporte-1.0.0");
+    assert!(bundle_dir.is_dir());
+
+    // 1. Validar presencia de artefactos requeridos
+    let exe_file = bundle_dir.join("cercano-soporte-1.0.0.exe");
+    let msi_file = bundle_dir.join("cercano-soporte-1.0.0.msi");
+    let wxs_file = bundle_dir.join("cercano-soporte-1.0.0.wxs");
+    let meta_file = bundle_dir.join("installer-metadata.json");
+    let signed_profile_file = bundle_dir.join("cercano-profile.signed.json");
+    let manifest_file = bundle_dir.join("build-manifest.json");
+    let checksums_file = bundle_dir.join("SHA256SUMS");
+
+    assert!(exe_file.is_file(), "EXE installer missing");
+    assert!(msi_file.is_file(), "MSI installer missing");
+    assert!(wxs_file.is_file(), "WiX source missing");
+    assert!(meta_file.is_file(), "Metadata file missing");
+    assert!(signed_profile_file.is_file(), "Signed profile missing");
+    assert!(manifest_file.is_file(), "Manifest file missing");
+    assert!(checksums_file.is_file(), "SHA256SUMS missing");
+
+    // 2. Validar estructura del ejecutable .exe (PE Header + Carga util)
+    let exe_bytes = fs::read(&exe_file).unwrap();
+    assert!(exe_bytes.len() > 512);
+    assert_eq!(&exe_bytes[0..2], b"MZ", "EXE must have PE MZ magic header");
+
+    // 3. Validar estructura del instalador .msi (OLE Compound File Binary Format)
+    let msi_bytes = fs::read(&msi_file).unwrap();
+    assert!(msi_bytes.len() > 512);
+    // Magic de OLE CFBF: D0 CF 11 E0 A1 B1 1A E1
+    assert_eq!(
+        &msi_bytes[0..8],
+        &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1],
+        "MSI must be a valid OLE Compound Document (CFBF)"
+    );
+
+    // 4. Validar contenido de build-manifest.json
+    let manifest_str = fs::read_to_string(&manifest_file).unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&manifest_str).unwrap();
+
+    assert_eq!(manifest["role"], "soporte");
+    assert_eq!(manifest["version"], "1.0.0");
+    let win_meta = &manifest["windows_metadata"];
+    assert!(!win_meta.is_null());
+    assert_eq!(win_meta["role"], "soporte");
+    assert_eq!(win_meta["display_name"], "Cercano Soporte");
+    assert_eq!(
+        win_meta["upgrade_code"],
+        "C38CA110-5090-4100-B001-000000509001"
+    );
+    assert_eq!(win_meta["role_isolation"]["opposite_role"], "tecnico");
+    assert_eq!(
+        win_meta["role_isolation"]["opposite_upgrade_code"],
+        "C38CA110-7EC1-4200-B002-0000007EC102"
+    );
+
+    // 5. Validar SHA256SUMS cubriendo todos los artefactos generados
+    let checksums_str = fs::read_to_string(&checksums_file).unwrap();
+    let lines: Vec<&str> = checksums_str.lines().collect();
+    assert_eq!(
+        lines.len(),
+        6,
+        "Expected 6 files in bundle (profile, exe, msi, wxs, metadata, manifest)"
+    );
+
+    for line in lines {
+        let parts: Vec<&str> = line.split("  ").collect();
+        assert_eq!(parts.len(), 2);
+        let hash = parts[0];
+        let file_name = parts[1];
+        let fpath = bundle_dir.join(file_name);
+        assert!(
+            fpath.is_file(),
+            "File {} in SHA256SUMS must exist",
+            file_name
+        );
+        let actual_hash = compute_sha256(&fs::read(fpath).unwrap());
+        assert_eq!(hash, actual_hash, "Hash mismatch for {}", file_name);
+    }
+}
+
+#[test]
+fn test_windows_packaging_tecnico_with_base_binary() {
+    let bin = get_bin_path();
+    let dir = tempdir().expect("create tempdir");
+    let out_dir = dir.path().join("dist/builds");
+    let profile = "../../docs/specs/examples/profile-tecnico-valido.json";
+
+    // Crear binario base simulado
+    let base_bin_path = dir.path().join("cercano.exe");
+    let base_bin_content = b"MZ\x90\x00_MOCK_BASE_BINARY_PE_TECNICO_";
+    fs::write(&base_bin_path, base_bin_content).unwrap();
+
+    let output = Command::new(&bin)
+        .args([
+            "-p",
+            profile,
+            "-o",
+            out_dir.to_str().unwrap(),
+            "-b",
+            base_bin_path.to_str().unwrap(),
+            "--package-windows",
+        ])
+        .output()
+        .expect("failed to execute cercano-build");
+
+    assert!(output.status.success());
+
+    let bundle_dir = out_dir.join("cercano-tecnico-1.0.0");
+    assert!(bundle_dir.is_dir());
+
+    let exe_file = bundle_dir.join("cercano-tecnico-1.0.0.exe");
+    let msi_file = bundle_dir.join("cercano-tecnico-1.0.0.msi");
+    assert!(exe_file.is_file());
+    assert!(msi_file.is_file());
+
+    // Validar aislamiento de roles
+    let meta_file = bundle_dir.join("installer-metadata.json");
+    let meta: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&meta_file).unwrap()).unwrap();
+
+    assert_eq!(meta["role"], "tecnico");
+    assert_eq!(meta["display_name"], "Cercano Técnico");
+    assert_eq!(meta["upgrade_code"], "C38CA110-7EC1-4200-B002-0000007EC102");
+    assert_eq!(meta["role_isolation"]["opposite_role"], "soporte");
+    assert_eq!(
+        meta["role_isolation"]["opposite_upgrade_code"],
+        "C38CA110-5090-4100-B001-000000509001"
+    );
+    assert!(meta["role_isolation"]["warning_message"]
+        .as_str()
+        .unwrap()
+        .contains("ADVERTENCIA"));
+
+    // Validar parámetros silenciosos documentados
+    let silent_exe = meta["silent_exe_flags"].as_array().unwrap();
+    assert!(silent_exe.iter().any(|f| f == "/S"));
+    assert!(silent_exe.iter().any(|f| f == "--silent-install"));
+
+    let silent_msi = meta["silent_msi_flags"].as_array().unwrap();
+    assert!(silent_msi.iter().any(|f| f == "/quiet"));
+    assert!(silent_msi.iter().any(|f| f == "/norestart"));
+
+    // Validar ciclo de vida
+    assert_eq!(meta["lifecycle"]["clean_install_supported"], true);
+    assert_eq!(meta["lifecycle"]["upgrade_supported"], true);
+    assert_eq!(meta["lifecycle"]["clean_uninstall_supported"], true);
+}
+
+#[test]
+fn test_windows_packaging_custom_upgrade_code() {
+    let bin = get_bin_path();
+    let dir = tempdir().expect("create tempdir");
+    let out_dir = dir.path().join("dist/builds");
+    let profile = "../../docs/specs/examples/profile-soporte-valido.json";
+    let custom_code = "A1B2C3D4-E5F6-7890-ABCD-EF0123456789";
+
+    let output = Command::new(&bin)
+        .args([
+            "-p",
+            profile,
+            "-o",
+            out_dir.to_str().unwrap(),
+            "--package-windows",
+            "--upgrade-code",
+            custom_code,
+        ])
+        .output()
+        .expect("failed to execute cercano-build");
+
+    assert!(output.status.success());
+
+    let bundle_dir = out_dir.join("cercano-soporte-1.0.0");
+    let meta_file = bundle_dir.join("installer-metadata.json");
+    let meta: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&meta_file).unwrap()).unwrap();
+
+    assert_eq!(meta["upgrade_code"], custom_code);
+}
