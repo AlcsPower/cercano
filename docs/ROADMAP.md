@@ -1,6 +1,6 @@
 # Cercano — Roadmap
 
-**Versión:** 0.3 · **Fecha:** 2026-11-06 · **Coordinador:** Claude · **Dueño del producto:** AlcsPower
+**Versión:** 0.4 · **Fecha:** 2026-11-09 · **Coordinador:** Claude · **Dueño del producto:** AlcsPower
 **Repositorio:** `AlcsPower/cercano` · **Licencia prevista:** AGPL-3.0 (heredada de upstream; ver §8 sobre el archivo `LICENSE`)
 
 ---
@@ -46,8 +46,9 @@ Referencia: documentación pública y página de precios de RustDesk (nov. 2026)
 | Múltiples relays, selección del más cercano | Nuevo / extensión de hbbr | F6 |
 | Soporte WebSocket | Evaluar | F6 |
 | Cliente web integrado | **Fuera de alcance v1** | — |
+| **Cercano Chat** (chat de soporte con el técnico) | Nuevo: `cercano-api` + cliente + `console-web` | F4.5 |
 
-**Extras sobre Pro (diferenciadores):** cadena de hashes con checkpoints firmados, verificador offline (`cercano-audit verify`), `trace_id` extremo a extremo, exportación a SIEM (syslog/CEF/JSONL/webhook), auditoría de la propia generación de instaladores, revocación de instaladores, **dos tipos de instalador (soporte y técnico) con el rol aplicado también en el servidor** y **elevación con credenciales de administrador de Windows**, con consentimiento de la persona usuaria y auditoría completa (su activación en producción queda condicionada a la 2FA de F4).
+**Extras sobre Pro (diferenciadores):** cadena de hashes con checkpoints firmados, verificador offline (`cercano-audit verify`), `trace_id` extremo a extremo, exportación a SIEM (syslog/CEF/JSONL/webhook), auditoría de la propia generación de instaladores, revocación de instaladores, **dos tipos de instalador (soporte y técnico) con el rol aplicado también en el servidor**, **elevación con credenciales de administrador de Windows**, con consentimiento de la persona usuaria y auditoría completa (su activación en producción queda condicionada a la 2FA de F4), y **Cercano Chat** para resolver problemas pequeños sin sesión remota, con nombre natural del contacto, adjuntos, notificaciones y escalado auditado a la sesión remota.
 
 ## 4. Fases e hitos
 
@@ -60,11 +61,12 @@ Duraciones orientativas, a ajustar tras F0 (suponen 3–5 agentes en paralelo).
 | **F2** | Auditoría y traza | 3–4 sem | **M1:** toda sesión genera eventos encadenados, consultables y verificables por API y CLI |
 | **F3** | Generador de instaladores | 4–5 sem | **M2:** desde un perfil JSON se obtiene un instalador Windows firmado, preconfigurado y revocable, en dos tipos: soporte (solo recibe) y técnico (funciones avanzadas, con elevación con credenciales desactivada por defecto) |
 | **F4** | Consola web, RBAC y 2FA | 4 sem | **M3:** administración completa (usuarios, dispositivos, auditoría, generador) desde navegador |
+| **F4.5** | Cercano Chat (complemento) | 2–3 sem | **M3.5:** una persona con Cercano Soporte resuelve un problema pequeño por chat con un técnico, con adjuntos, notificaciones y escalado auditado |
 | **F5** | Identidad y control de acceso | 4–5 sem | Libreta, estrategias, OIDC/LDAP, acceso entre grupos |
 | **F6** | Optimización LAN y relays | 3 sem | Descubrimiento LAN, multi-relay, pruebas con pérdida/latencia |
 | **F7** | Endurecimiento y release | 3 sem | **M4:** beta pública: pentest interno, SBOM, firma, documentación, guía de migración |
 
-Total estimado: 25–32 semanas (F3 pasa de 3 a 4–5 por los roles de instalador y la elevación con credenciales).
+Total estimado: 27–35 semanas (F3 pasa de 3 a 4–5 por los roles de instalador y la elevación con credenciales; F4.5 añade 2–3).
 
 ## 5. Criterios de salida (gates)
 
@@ -88,6 +90,7 @@ Una fase cierra solo si se cumple todo:
 | R6 | Compilación del cliente (Flutter + vcpkg) lenta y frágil | Alta | Medio | Spike S2, caché de CI, runners dedicados |
 | R7 | Alcance excesivo | Media | Medio | Paridad por fases; cliente web fuera de v1 |
 | R8 | La elevación con credenciales de administrador amplía el daño de un técnico o un instalador `tecnico` comprometido | Media | Alto | Consentimiento por solicitud, sin persistencia, un solo uso, auditoría `elev.*`, desactivada por defecto hasta tener 2FA (F4), revisión F3-18 |
+| R9 | Cercano Chat expone conversaciones o adjuntos, o se usa para abuso | Media | Alto | TLS obligatorio, identidad por dispositivo con clave fijada, permisos, límites de tasa, retención, auditoría sin contenido y antivirus como extensión (F4.5) |
 
 ## 7. Decisiones pendientes del dueño
 
@@ -103,6 +106,7 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 | D6 | Versión base de upstream | Última etiqueta estable de ambos repos en la fecha de F0-02 |
 | D7 | Texto de licencia | **Resuelto** el 2026-11-05: `LICENSE` contiene el texto oficial de AGPL-3.0 |
 | D8 | Origen de las credenciales de administrador para la elevación (ver `PLAN-F3-GENERADOR.md` §3) | Tecleo manual del técnico en cada solicitud, sin almacenar nada; Windows LAPS en F5; bóveda propia descartada |
+| D9 | Alcance y ubicación de Cercano Chat | **Resuelto 2026-11-09:** chat embebido en el cliente Cercano, gestión en `console-web`, adjuntos (imágenes/PDF), notificaciones y escalado remoto; fase F4.5 después de F4. Nombre y Apellido del contacto se piden la primera vez, se guardan localmente y como snapshot en la conversación. |
 
 ## 8. Estado actual
 
@@ -110,4 +114,5 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 - **Por reconciliar (2026-11-06):** F0-05 a F0-08 y F0-10 figuran como `Hecho`, pero no hay informe en `status/informes/` ni documento en `docs/spikes/` (solo existe S1), y `docs/adr/` está vacío. F3 depende del veredicto de S4 (H4); hasta verlo, el diseño de F3 sigue siendo una propuesta.
 - **Licencia:** el repositorio se distribuye bajo **AGPL-3.0** (verificado con `tools/check-license.sh`). Bloqueo B-001 resuelto.
 - **Marca:** logo, iconos y guía de uso en `branding/`.
-- **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.
+- **Cercano Chat (F4.5):** diseño, contrato y planificación en `PLAN-F4.5-CHAT.md`, `specs/chat.md` y `adr/010-cercano-chat.md`; la implementación queda encolada después de cerrar F4.
+- **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-F4.5-CHAT.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.

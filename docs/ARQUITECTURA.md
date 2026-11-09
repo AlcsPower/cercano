@@ -1,6 +1,6 @@
 # Cercano — Arquitectura y decisiones
 
-**Versión:** 0.3 · **Fecha:** 2026-11-06
+**Versión:** 0.4 · **Fecha:** 2026-11-09
 
 ## 1. Componentes
 
@@ -15,10 +15,11 @@
                     │   ├─ usuarios, dispositivos, roles
                     │   ├─ ingestión de auditoría ─► audit-core (append-only + hash chain)
                     │   ├─ jobs de build ─────────► cercano-builder ─► artefactos firmados
-                    │   └─ exportadores (syslog/CEF/JSONL/webhook)
+                    │   ├─ Cercano Chat: conversaciones, mensajes, adjuntos, SSE
+                     │   └─ exportadores (syslog/CEF/JSONL/webhook)
                     └──► BD (SQLite por defecto / PostgreSQL)
 
- console-web (SPA) ── HTTPS ──► cercano-api
+ console-web (SPA) ── HTTPS ──► cercano-api   (consola y chat)
 ```
 
 Se conservan los puertos por defecto de upstream (TCP 21114–21119, UDP 21116) para facilitar compatibilidad y documentación.
@@ -27,13 +28,15 @@ Se conservan los puertos por defecto de upstream (TCP 21114–21119, UDP 21116) 
 |---|---|---|---|
 | `client/` | Fork de `rustdesk/rustdesk` | Rust + Flutter | Parches mínimos; interfaz principal Flutter (Sciter está obsoleto) |
 | `server/` (hbbs, hbbr, utils) | Fork de `rustdesk/rustdesk-server` | Rust | Parches mínimos |
-| `control-plane/` (`cercano-api`) | Nuevo | Rust (axum, sqlx) | Equivale funcionalmente al API de Server Pro, implementado clean-room |
+| `control-plane/` (`cercano-api`) | Nuevo | Rust (axum, sqlx) | Equivale funcionalmente al API de Server Pro, implementado clean-room. Incluye Cercano Chat (F4.5): conversaciones, mensajes, adjuntos, SSE y auditoría `chat.*`. |
 | `audit-core/` | Nuevo | Rust (crate) | Núcleo reutilizable: esquema, cadena de hashes, verificación |
 | `builder/` (`cercano-builder`) | Nuevo | Rust + scripts CI | Generador de instaladores |
-| `console-web/` | Nuevo | TypeScript (SPA) | F4 |
+| `console-web/` | Nuevo | TypeScript (SPA) | F4; en F4.5 añade la pestaña «Conversaciones» |
 | `deploy/` | Nuevo | Docker, systemd | Compose y unidades |
 | `tests/` | Nuevo | Rust/Python/Bash | e2e y laboratorio LAN |
 | `branding/` | Nuevo | SVG, PNG, ICO | Logo, iconos y guía de marca (ver `branding/README.md`) |
+
+**Cercano Chat (F4.5).** Complemento de soporte: la persona usuaria con Cercano Soporte abre una conversación desde el cliente (módulo dentro de `vendor/client`, parche 006) y un técnico la atiende desde `console-web`. Las conversaciones, mensajes y metadatos de adjuntos viven en `cercano-api`; los adjuntos, en disco y solo por endpoint autenticado. La identidad del cliente es el par Ed25519 del dispositivo con reto firmado; el técnico usa su cuenta y los permisos de F4. El tiempo real usa SSE con pokes sin contenido, y el escalado abre una sesión remota con `trace_id` compartido. Contrato completo en [`docs/specs/chat.md`](specs/chat.md); decisión en [ADR-010](adr/010-cercano-chat.md).
 
 ## 2. Estructura del repositorio
 
@@ -61,6 +64,7 @@ cercano/
 | 007 | Todo el código nuevo bajo AGPL-3.0; clean-room para funciones Pro | Cumplimiento de licencia | Firme |
 | 008 | Dos roles de instalador (`soporte` y `tecnico`) dentro del perfil firmado; el rol se registra con el `installer_id` y el servidor lo aplica en cada operación de técnico | El instalador por sí solo no es una barrera: un cliente modificado no debe poder actuar como técnico | Propuesto, depende de S4 |
 | 009 | Elevación con credenciales: consentimiento por solicitud, canal cifrado de la sesión, un solo uso, sin persistencia y sin pasar por `cercano-api`; desactivada por defecto hasta tener 2FA | Reducir el impacto de manejar credenciales de administrador | Propuesto, depende de S6 |
+| 010 | Cercano Chat: chat embebido en el cliente, gestión en `console-web`, mensajes persistidos en `cercano-api`, SSE para avisos, adjuntos en disco y sin E2E en v1; identidad de dispositivo por Ed25519 y nombre natural del contacto como snapshot | Resolver problemas pequeños sin sesión remota y con trazabilidad, reutilizando el cliente y la consola | Aceptado, F4.5 |
 
 Los ADR se formalizan en `docs/adr/NNN-titulo.md` al ratificarse en F0-10.
 
@@ -74,7 +78,7 @@ Los ADR se formalizan en `docs/adr/NNN-titulo.md` al ratificarse en F0-10.
 | `trace_id` | Identificador de sesión/operación, común a todos los eventos relacionados |
 | `ts` | Marca de tiempo UTC con precisión de milisegundos o mejor |
 | `source` | `client`, `hbbs`, `hbbr`, `api`, `console`, `builder` |
-| `category` | `conn`, `file`, `alarm`, `console`, `auth`, `build`, `elev` |
+| `category` | `conn`, `file`, `alarm`, `console`, `auth`, `build`, `elev`, `chat` |
 | `action` | Acción específica, p. ej. `conn.start`, `conn.end`, `file.transfer`, `auth.fail` |
 | `actor` | Usuario o dispositivo que actúa (ID, nombre, IP) |
 | `subject` | Dispositivo/usuario/recurso afectado |
@@ -92,8 +96,9 @@ Los ADR se formalizan en `docs/adr/NNN-titulo.md` al ratificarse en F0-10.
 - Consola: gestión de grupos, usuarios, dispositivos, libreta, roles de admin y de control; login, desconexión de dispositivos, cambios de 2FA y restablecimiento de contraseñas.
 
 - Elevación (extra de Cercano): solicitud, consentimiento o rechazo, envío, aplicación, fallo y caducidad; técnico, equipo, persona usuaria, cuenta objetivo, motivo, ticket y alcance. Nunca la contraseña ni su hash.
+- Cercano Chat (extra de Cercano, F4.5): apertura, mensaje, adjunto, asignación, liberación, cierre, reapertura, escalado, fallos de autenticación, límites y purga. Nunca el cuerpo del mensaje, el nombre o apellido del contacto, el nombre original del adjunto ni tokens; solo IDs, longitudes, MIME, tamaños y SHA-256.
 
-**Extras Cercano:** eventos `build.*` (generación, firma y revocación de instaladores) y `elev.*`, retención configurable y exportación continua a SIEM.
+**Extras Cercano:** eventos `build.*` (generación, firma y revocación de instaladores), `elev.*` y `chat.*`, retención configurable y exportación continua a SIEM.
 
 ## 5. Hipótesis a validar en F0
 
@@ -112,6 +117,11 @@ Importante: S3–S5 se hacen observando el **código abierto** del cliente y su 
 | Amenaza | Ejemplo | Mitigación |
 |---|---|---|
 | Suplantación | Cliente falso se registra como dispositivo | Claves por dispositivo, tokens firmados, revocación |
+| Suplantación en Cercano Chat | Un cliente con el token de despliegue registra el `device_id` de otro antes que el real | Fijación Ed25519 (TOFU), registro solo HTTPS, límite de tasa, auditoría, reset administrativo; token por instalador cuando F3-07 lo emita |
+| Divulgación de conversaciones | Acceso a mensajes ajenos o lectura en el servidor | Autorización por dueño/asignación/permiso, pruebas de IDOR, TLS, retención; sin E2E en v1 (documentado) |
+| Adjunto malicioso | Un PDF o una imagen intenta ejecutar código o engañar al técnico | Solo imágenes/PDF, magic bytes, tamaño, sin ejecución, descarga autenticada con `nosniff`; antivirus como extensión |
+| Abuso del chat | Spam de mensajes, conversaciones o adjuntos | Límites de tasa por dispositivo/técnico, cierre y revocación, eventos `chat.rate_limited`/`chat.denied` |
+| Fuga por notificaciones o nombre del contacto | El cuerpo o el nombre aparecen en la pantalla de bloqueo o en logs | Notificaciones genéricas, nombre excluido de auditoría/logs/telemetría, borrado con la retención |
 | Manipulación | Alterar o borrar registros de auditoría | Append-only, hash chain, checkpoints firmados, copia a SIEM |
 | Repudio | Un técnico niega una sesión | Auditoría de origen servidor + cliente, `trace_id` |
 | Divulgación | Robo de instalador con claves embebidas | Perfiles con claves de menor privilegio, revocación, caducidad |

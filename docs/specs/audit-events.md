@@ -1,10 +1,8 @@
 # Especificación del Esquema de Eventos de Auditoría y Cadena de Integridad
 
-**Versión:** 1.0  
-**Fecha:** 2026-11-06  
-**Estado:** Aprobado / Especificación Oficial  
+**Versión:** 1.1 · **Fecha:** 2026-11-09 · **Estado:** Aprobado / Especificación Oficial
 **Módulos de referencia:** `audit-core`, `control-plane/cercano-api`, `server/hbbs`, `server/hbbr`, `client`  
-**Documentos relacionados:** `docs/ARQUITECTURA.md` §4, `docs/PLAN-F2-AUDITORIA.md`, `docs/specs/audit-events.schema.json`
+**Documentos relacionados:** `docs/ARQUITECTURA.md` §4, `docs/PLAN-F2-AUDITORIA.md`, `docs/specs/audit-events.schema.json`, [`docs/specs/chat.md`](chat.md), [`docs/PLAN-F4.5-CHAT.md`](../PLAN-F4.5-CHAT.md)
 
 ---
 
@@ -32,8 +30,8 @@ El archivo formal JSON Schema Draft-07 se encuentra publicado en:
 | `trace_id` | `string` | **Sí** | Identificador de correlación que asocia todos los eventos de una misma sesión o transacción de extremo a extremo. |
 | `ts` | `string` (ISO 8601) | **Sí** | Marca de tiempo UTC en formato RFC 3339 con milisegundos (`YYYY-MM-DDTHH:MM:SS.sssZ`). |
 | `source` | `string` (Enum) | **Sí** | Componente emisor: `client`, `hbbs`, `hbbr`, `api`, `console`, `builder`. |
-| `category` | `string` (Enum) | **Sí** | Categoría funcional: `conn`, `file`, `alarm`, `console`, `auth`, `build`. |
-| `action` | `string` (Pattern) | **Sí** | Acción auditada jerárquica: `^(conn\|file\|alarm\|console\|auth\|build)(\.[a-z0-9_]+)+$`. |
+| `category` | `string` (Enum) | **Sí** | Categoría funcional: `conn`, `file`, `alarm`, `console`, `auth`, `build`, `chat`. |
+| `action` | `string` (Pattern) | **Sí** | Acción auditada jerárquica: `^(conn\|file\|alarm\|console\|auth\|build\|chat)(\.[a-z0-9_]+)+$`. |
 | `actor` | `object` | **Sí** | Entidad que inicia o ejecuta la acción (usuario, dispositivo o sistema). |
 | `subject` | `object` | No | Entidad receptora, recurso o dispositivo sobre el que recae la acción. |
 | `outcome` | `string` (Enum) | **Sí** | Resultado: `success` (éxito), `failure` (fallo funcional/error), `denied` (denegado por política o falta de privilegios). |
@@ -55,7 +53,7 @@ El archivo formal JSON Schema Draft-07 se encuentra publicado en:
 | Propiedad | Tipo | Requerido | Descripción |
 |---|---|:---:|---|
 | `id` | `string` | **Sí** | Identificador único del recurso o entidad afectada. |
-| `subject_type` | `string` (Enum) | **Sí** | Clasificación del sujeto: `device`, `user`, `group`, `session`, `installer`, `setting`, `system`. |
+| `subject_type` | `string` (Enum) | **Sí** | Clasificación del sujeto: `device`, `user`, `group`, `session`, `installer`, `setting`, `conversation`, `system`. |
 | `name` | `string` | No | Nombre o denominación representativa del recurso afectado. |
 
 ---
@@ -127,13 +125,14 @@ Adicionalmente, cada $N$ eventos (por defecto $N=10\,000$) o cada $T$ minutos (p
 | **Tokens de Sesión y API** | Tokens JWT completos, *Bearer tokens*, *API keys* privadas, cookies de sesión completas. | Solo el identificador opaco o huella pública truncada (ej. `tok_998877665544332211`, `key_id`). |
 | **Criptografía y Claves** | Claves privadas (Ed25519, RSA, ECDSA), semillas criptográficas, claves de cifrado simétrico AES/ChaCha. | Solo claves públicas en Base64 o huellas digitales SHA-256 (ej. `SHA256:d41d8cd9...`). |
 | **Archivos y Portapapeles** | Contenido binario o texto en bruto de ficheros transferidos, contenido copiado al portapapeles. | Metadatos exclusivos: ruta remota (`remote_path`), nombre de archivo (`file_name`), tamaño en bytes (`bytes_transferred`), y hash SHA-256 del contenido (`sha256`). |
+| **Conversaciones de Cercano Chat** | Cuerpo de los mensajes de chat, nombre original de los adjuntos, contenido de los adjuntos. | Identificadores (`conversation_id`, `message_id`, `attachment_id`), remitente, longitud del texto, tipo MIME, tamaño en bytes y SHA-256 del adjunto. |
 | **Datos Personales Sensibles** | Números de tarjeta de crédito, números de identificación personal innecesarios, datos médicos. | Identificadores de usuario internos de la organización (`usr_...`). |
 
 ---
 
 ## 6. Catálogo de Acciones Estándar y Vectores de Prueba Oficiales
 
-A continuación se detalla la especificación de los 12 tipos de eventos fundamentales que conforman la cobertura mínima de Cercano (paridad con Server Pro y extensiones Cercano).
+A continuación se detalla la especificación de los 12 tipos de eventos fundamentales que conforman la cobertura mínima de Cercano (paridad con Server Pro y extensiones Cercano). La familia `chat.*` de Cercano Chat se incorpora en F4.5 y se documenta en §6.15; sus vectores de prueba matemáticos se añaden en F4.5-07 al implementarse.
 
 Para cada evento se incluye el vector de prueba matemático oficial:
 1. Objeto JSON original completo.
@@ -689,6 +688,38 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 }
 ```
 **`hash` calculado:** `56cb8604287e301cacd764bc2ea89f45cbf42a6fed993036faf380eecb01f621`
+
+---
+
+### 6.15 `chat.*` — Eventos de Cercano Chat
+
+- **Emisor (`source`):** `api` (el control plane registra la acción observada; `actor.actor_type` distingue `device`, `user` o `system`).
+- **Categoría (`category`):** `chat`.
+- **Condición:** cualquier apertura, mensaje, adjunto, asignación, cierre, reapertura, escalado, fallo de autenticación, límite o purga de Cercano Chat.
+- **`trace_id`:** igual a `conversation_id` en los eventos de una conversación; un UUIDv7 nuevo en los eventos de registro/autenticación de dispositivo.
+- **`subject_type`:** `conversation` en los eventos de conversación; `device` en los de identidad.
+- **Campos esperados en `details`:** los indicados en `docs/specs/chat.md` §10. Nunca el cuerpo del mensaje, el nombre original del adjunto, tokens ni claves.
+
+| `action` | Uso |
+|---|---|
+| `chat.device.registered` | Registro/fijación de la clave pública del dispositivo. |
+| `chat.device.key_mismatch` | Intento de registro con una clave distinta para el mismo `device_id`. |
+| `chat.device.revoked` | Reset administrativo de la identidad de chat. |
+| `chat.auth.failed` | Reto inválido, expirado, reusado, firma incorrecta o dispositivo revocado. |
+| `chat.opened` | Creación de una conversación. |
+| `chat.message.created` | Mensaje de texto o con adjunto. Metadatos: remitente, longitud y `has_attachment`. |
+| `chat.attachment.created` | Adjunto almacenado. Metadatos: MIME, tamaño y SHA-256. |
+| `chat.assigned` | Reclamación o asignación a un técnico. |
+| `chat.released` | Devolución a la cola. |
+| `chat.closed` | Cierre por el cliente o el técnico. |
+| `chat.reopened` | Reapertura administrativa. |
+| `chat.escalated` | Apertura de una sesión remota desde la conversación. |
+| `chat.rate_limited` | Rechazo por límite de tasa (mensajes, conversaciones, adjuntos o SSE). |
+| `chat.denied` | Rechazo por permiso, conversación ajena o chat desactivado. |
+| `chat.retention.purged` | Purga de conversaciones cerradas y sus adjuntos. |
+
+> [!NOTE]
+> Los vectores de prueba con JSON canónico y hash de esta familia se incorporan en F4.5-07, siguiendo exactamente el procedimiento de §4 y §6. Hasta entonces, esta sección define el contrato de `action` y `details`; el esquema JSON ya acepta `chat` y `subject_type: conversation`.
 
 ---
 

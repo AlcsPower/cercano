@@ -26,6 +26,7 @@ tests/lab/data/api-stub/requests.jsonl
 # Web frontend artifacts & cache
 console-web/.vite/
 console-web/dist/
+dist/
 console-web/node_modules/
 
 # IDE & OS

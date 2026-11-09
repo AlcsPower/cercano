@@ -107,6 +107,7 @@ cargo run -p cercano-audit -- verify eventos.jsonl --pubkey <CLAVE_PUBLICA_HEX>
 
 ## Especificaciones y Gobernanza
 
+- **Cercano Chat (F4.5):** chat de soporte embebido en el cliente y gestionado desde la consola; contrato en [`docs/specs/chat.md`](docs/specs/chat.md), plan en [`docs/PLAN-F4.5-CHAT.md`](docs/PLAN-F4.5-CHAT.md) y decisión en [`docs/adr/010-cercano-chat.md`](docs/adr/010-cercano-chat.md).
 - **Esquema de Eventos de Auditoría**: Especificado formalmente bajo JSON Schema Draft-07 en [`docs/specs/audit-events.schema.json`](docs/specs/audit-events.schema.json) y detallado en [`docs/specs/audit-events.md`](docs/specs/audit-events.md).
 - **Reglas de Trabajo para Agentes y Colaboradores**: Consulta [`AGENTS.md`](AGENTS.md).
 - **Seguridad y Clean-Room**: Prohibición estricta de ingeniería inversa o descompilación de binarios comerciales. Cercano se construye bajo el principio *clean-room* a partir de documentación pública y estándares abiertos. Consulta [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md).

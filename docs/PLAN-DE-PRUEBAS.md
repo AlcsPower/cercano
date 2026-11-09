@@ -1,6 +1,6 @@
 # Cercano — Plan de pruebas
 
-**Versión:** 0.3 · **Fecha:** 2026-11-06 · Aplica a todas las fases. Roles y reglas: `AGENTS.md`.
+**Versión:** 0.4 · **Fecha:** 2026-11-09 · Aplica a todas las fases. Roles y reglas: `AGENTS.md`.
 
 ## 1. Principios
 
@@ -129,6 +129,76 @@
 | TC-F3-082 | Ráfaga de elevaciones del mismo técnico | Se dispara la alarma |
 | TC-F3-083 | Elevación desatendida en un `soporte` con el perfil por defecto | Rechazada; solo se acepta si el perfil la habilita |
 | TC-F3-084 | Fuzzing del mensaje de elevación | Sin caídas ni fugas de información |
+
+### F4.5 (Cercano Chat)
+
+Los casos detallados viven en `tests/cases/TC-F4.5-*.md` durante la implementación. La suite se ejecuta en el laboratorio con TLS, un cliente Soporte, un cliente Técnico y dos cuentas técnicas.
+
+| ID | Caso | Resultado esperado |
+|---|---|---|
+| TC-F4.5-001 | Registro de dispositivo válido | Clave fijada; evento `chat.device.registered`; token de chat emitido |
+| TC-F4.5-002 | Registro con otra clave para el mismo `device_id` | 409 `key_mismatch`, sin cambios, evento de denegación |
+| TC-F4.5-003 | Nonce reutilizado | 401; no se emite token |
+| TC-F4.5-004 | Nonce caducado (>120 s) | 401; no se emite token |
+| TC-F4.5-005 | Firma inválida | 401; evento `chat.auth.failed` |
+| TC-F4.5-006 | Token de chat expirado o revocado | 401 en REST y cierre de SSE |
+| TC-F4.5-010 | Crear conversación con primer mensaje | 201, estado `waiting`, eventos `chat.opened` y `chat.message.created` |
+| TC-F4.5-011 | Segundo `POST /conversations` con una abierta | 200 con la misma conversación; mensaje añadido; sin duplicados |
+| TC-F4.5-012 | Paginación de mensajes | Orden correcto, `next_before` y sin solapamientos |
+| TC-F4.5-013 | Dos técnicos reclaman a la vez | Uno obtiene 200; el otro 409 `already_assigned` |
+| TC-F4.5-014 | Asignar, liberar y reasignar | Estado y `assigned_user_id` correctos; eventos |
+| TC-F4.5-015 | Cerrar y reabrir | Cerrada de solo lectura; reapertura solo `chat:manage` |
+| TC-F4.5-016 | Dispositivo A intenta leer la conversación de B | 403/404; sin fuga |
+| TC-F4.5-017 | Técnico sin permiso intenta leer una conversación ajena | 403; evento `chat.denied` |
+| TC-F4.5-018 | Primer uso sin Nombre/Apellido | El cliente no deja crear la conversación; la API devuelve 400 si faltan |
+| TC-F4.5-019 | Segundo uso con nombre guardado | Se precarga y se reutiliza; editarlo aplica solo a conversaciones nuevas |
+| TC-F4.5-020 | Snapshot del nombre y respaldo | La conversación conserva el nombre aunque el equipo cambie; sin nombre, la consola muestra el equipo |
+| TC-F4.5-021 | Buscar el nombre en auditoría, logs, telemetría y notificaciones | No aparece; solo está en la conversación y en la configuración local |
+| TC-F4.5-030 | Adjuntar PNG/JPEG/WebP/PDF | 201; mensaje con adjunto; imagen visible/PDF descargable |
+| TC-F4.5-031 | Adjuntar SVG/EXE/ZIP o un archivo con MIME falso | 415; no se guarda |
+| TC-F4.5-032 | Adjunto >10 MiB | 413; no se guarda |
+| TC-F4.5-033 | Nombre con `../`, barras o caracteres de control | Se sanea; no hay escritura fuera del directorio |
+| TC-F4.5-034 | Descargar un adjunto ajeno | 403/404 |
+| TC-F4.5-035 | Verificar SHA-256 y tamaño guardados | Coinciden con el archivo |
+| TC-F4.5-036 | Fallo de transacción tras escribir el archivo | No queda archivo huérfano |
+| TC-F4.5-040 | Ráfaga de mensajes por dispositivo | 429 con `Retry-After`; evento `chat.rate_limited` |
+| TC-F4.5-041 | Límite diario de conversaciones | 429; no se crea |
+| TC-F4.5-042 | Límite diario de adjuntos | 429; no se guarda |
+| TC-F4.5-043 | Reintento tras `Retry-After` | Se acepta cuando pasa la ventana |
+| TC-F4.5-050 | Cadena con eventos `chat.*`, de conexión y de administración | `cercano-audit verify` en verde |
+| TC-F4.5-051 | Buscar cuerpos de mensajes en la base de auditoría | Ninguno encontrado |
+| TC-F4.5-052 | Buscar tokens, claves y nombres de archivo en auditoría/logs | Ninguno encontrado |
+| TC-F4.5-053 | Purga de una conversación cerrada antigua | Mensajes y adjuntos borrados; auditoría intacta |
+| TC-F4.5-054 | Conversación abierta antigua | No se purga |
+| TC-F4.5-060 | Mensaje nuevo para el técnico asignado | Recibe el poke y refetchea |
+| TC-F4.5-061 | Mensaje nuevo para el dispositivo dueño | Recibe el poke y refetchea |
+| TC-F4.5-062 | Poke para un tercero | No lo recibe |
+| TC-F4.5-063 | Reconexión SSE tras corte | Refetch sin pérdida de mensajes |
+| TC-F4.5-064 | Consumidor atrasado | Recibe `resync` y refetchea |
+| TC-F4.5-065 | Revocación del token con SSE abierta | El stream se cierra en ≤60 s |
+| TC-F4.5-070 | Consola: filtros, búsqueda por nombre/equipo y badge | Resultados y contadores correctos |
+| TC-F4.5-071 | Notificación con la pestaña oculta | Se muestra sin cuerpo ni nombre; al pulsar enfoca la conversación |
+| TC-F4.5-072 | Reclamar, cerrar y escalar desde la consola | Acciones correctas y auditadas |
+| TC-F4.5-073 | Navegación por teclado y lector de pantalla | Foco visible, `aria-live`, todos los controles accesibles |
+| TC-F4.5-074 | Tema claro/oscuro y `prefers-reduced-motion` | Sin regresiones visuales ni movimiento no deseado |
+| TC-F4.5-075 | Modo demostración de la consola | «Chat no disponible»; no inventa conversaciones |
+| TC-F4.5-076 | Corte de SSE en la consola | Banner de reconexión y recuperación |
+| TC-F4.5-080 | Entrada «Chat de soporte» en el cliente | Abre la ventana dedicada y carga la conversación abierta |
+| TC-F4.5-081 | Enviar y recibir texto | Orden, estados y sin duplicados |
+| TC-F4.5-082 | Enviar imagen y PDF | Imagen en línea; PDF descargable |
+| TC-F4.5-083 | Llegada de mensaje con la ventana minimizada | Toast genérico; al abrir, mensaje visible |
+| TC-F4.5-084 | Corte de red en el cliente | Reconexión y refetch; los mensajes enviados no se duplican |
+| TC-F4.5-085 | Perfil con `chat.enabled=false` | El cliente no muestra el chat y el servidor rechaza |
+| TC-F4.5-086 | Escalar a sesión remota | Abre `cercano://`; consentimiento normal; `trace_id` compartido |
+| TC-F4.5-087 | Cambio de idioma del cliente | Claves nuevas presentes; textos en español/inglés |
+| TC-F4.5-088 | Ventana y diseño contra el mockup | Cabecera con marca del perfil, estado del servicio, aviso, hilo, composer y pie; sin ACME hardcodeado; sin typing/presencia |
+| TC-F4.5-089 | Doble check de leído | Un check al enviar; doble cuando `other_last_read_at` cubre el mensaje |
+| TC-F4.5-090 | E2E completo: chat → adjunto → respuesta → cierre → escalado | Todo correcto y `cercano-audit verify` en verde |
+| TC-F4.5-091 | Corte de red entre cliente/API y API/consola | Sin pérdida; reconexión |
+| TC-F4.5-092 | Cliente con `api_server` HTTP | Chat rechazado con aviso claro |
+| TC-F4.5-093 | Técnico sin 2FA intenta atender | Rechazado en producción (F4) |
+| TC-F4.5-094 | Buscar secretos y cuerpos en logs del cliente, API y consola | Ninguno encontrado |
+| TC-F4.5-095 | Notificación con cuerpo/nombre | No aparece ninguno de los dos |
 
 ## 7. Pruebas de seguridad por fase
 

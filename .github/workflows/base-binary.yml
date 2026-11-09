@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Cercano Contributors
+#
+# Workflow de CI para compilar el binario base reproducible de Cercano,
+# verificar determinismo bit-a-bit (TC-F3-021), generar SBOM SPDX 2.3 y publicar artefactos.
+
+name: Base Binary (Reproducible Build & SBOM)
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/F3-*'
+      - 'feat/**'
+      - 'fix/**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - 'feat/**'
+  workflow_dispatch:
+    inputs:
+      verify_reproducibility:
+        description: 'Ejecutar doble compilación para verificación de reproducibilidad (TC-F3-021)'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-reproducible-base:
+    name: Build Reproducible Base Binary & SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+
+      - name: Verify license headers
+        run: bash tools/check-license-headers.sh
+
+      - name: Apply patches
+        run: bash tools/apply-patches
+
+      - name: Build reproducible base binary and SBOM
+        run: |
+          BUILD_FLAGS="--out-dir dist/base --sbom"
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.verify_reproducibility }}" = "true" ]; then
+            BUILD_FLAGS="$BUILD_FLAGS --verify"
+          fi
+          bash builder/build-base.sh $BUILD_FLAGS
+
+      - name: Verify SHA-256 checksums
+        run: |
+          cd dist/base
+          sha256sum -c SHA256SUMS
+
+      - name: Validate SBOM format (SPDX 2.3 JSON)
+        run: |
+          test -f dist/base/sbom.spdx.json
+          python3 -m json.tool dist/base/sbom.spdx.json > /dev/null
+          echo "OK: SBOM SPDX 2.3 JSON validado correctamente."
+
+      - name: Inspect build metadata
+        run: |
+          cat dist/base/build-info.json
+
+      - name: Upload reproducible base artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cercano-base-binary-linux-x86_64
+          path: |
+            dist/base/
+          retention-days: 14
+          if-no-files-found: error

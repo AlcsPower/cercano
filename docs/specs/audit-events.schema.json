@@ -55,13 +55,14 @@
         "alarm",
         "console",
         "auth",
-        "build"
+        "build",
+        "chat"
       ],
       "description": "Categoría taxonómica del evento de auditoría."
     },
     "action": {
       "type": "string",
-      "pattern": "^(conn|file|alarm|console|auth|build)(\\.[a-z0-9_]+)+$",
+      "pattern": "^(conn|file|alarm|console|auth|build|chat)(\\.[a-z0-9_]+)+$",
       "description": "Acción específica auditada estructurada con notación de punto bajo su categoría (ej. conn.start, file.transfer, auth.login)."
     },
     "actor": {
@@ -81,7 +82,7 @@
     },
     "details": {
       "type": "object",
-      "description": "Atributos contextuales y metadatos específicos de la acción. Queda ESTRICTAMENTE PROHIBIDO almacenar secretos, contraseñas en texto claro, claves privadas, tokens de sesión o contenidos binarios no resumidos en este objeto.",
+      "description": "Atributos contextuales y metadatos específicos de la acción. Queda ESTRICTAMENTE PROHIBIDO almacenar secretos, contraseñas en texto claro, claves privadas, tokens de sesión, contenidos binarios no resumidos, el cuerpo de mensajes de chat o el nombre original de sus adjuntos en este objeto.",
       "additionalProperties": true
     },
     "prev_hash": {
@@ -155,6 +156,7 @@
             "session",
             "installer",
             "setting",
+            "conversation",
             "system"
           ],
           "description": "Tipo de entidad sujeta a la acción."

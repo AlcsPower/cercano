@@ -60,7 +60,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 |---|---|---|---|---|---|
 | F3-01 | Esquema y versionado del perfil | F0-07 | Builder | Seguridad | En verificación |
 | F3-02 | Cliente: lectura y verificación de perfil firmado | F3-01 | Cliente | Seguridad | En verificación |
-| F3-03 | Binario base reproducible y publicación de artefactos base | F0-05, F0-03 | Builder | QA | Pendiente |
+| F3-03 | Binario base reproducible y publicación de artefactos base | F0-05, F0-03 | Builder | QA | Hecho |
 | F3-04 | CLI `cercano-build` | F3-01, F3-02, F3-03 | Builder | QA | Pendiente |
 | F3-05 | Empaquetado Windows (.exe y .msi) | F3-04 | Builder | QA | Pendiente |
 | F3-06 | Firma Authenticode enchufable | F3-05 | Builder | Seguridad | Pendiente |
@@ -77,4 +77,26 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-17 | Auditoría `elev.*` y alarmas de elevación | F3-16, F2-02, F2-07 | ControlPlane | QA | Pendiente |
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador | Pendiente |
 
-_Total: 53 tareas (F0–F3). F4–F7 se detallan al cerrar la fase anterior._
+_Total: 53 tareas (F0–F3) + 15 de F4.5. F4–F7 se detallan al cerrar la fase anterior._
+
+## F4.5 — Cercano Chat (complemento, después de F4)
+
+Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F2-02.
+
+| ID | Tarea | Dep. | Rol | Verifica | Estado |
+|---|---|---|---|---|---|
+| F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA | En verificación |
+| F4.5-02 | Migración 004 y modelos | F4.5-01, F4 cerrado | ControlPlane | QA | Pendiente |
+| F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad | Pendiente |
+| F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4 cerrado | ControlPlane | QA | Pendiente |
+| F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad | Pendiente |
+| F4.5-06 | SSE, `ChatHub`, lecturas y resumen | F4.5-04 | ControlPlane | QA | Pendiente |
+| F4.5-07 | Auditoría, límites y retención | F4.5-02…06, F2-02 | ControlPlane | Seguridad | Pendiente |
+| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4 cerrado | Web | QA | Pendiente |
+| F4.5-09 | Consola: badge, notificaciones, reconexión, accesibilidad | F4.5-08 | Web | QA | Pendiente |
+| F4.5-10 | Cliente: módulo Rust y parche 006 | F4.5-03/04/06, F3-02 | Cliente | Seguridad | Pendiente |
+| F4.5-11 | Cliente: UI Flutter, nombre del contacto, adjuntos, i18n | F4.5-10, F4.5-13 | Cliente | QA | Pendiente |
+| F4.5-12 | Escalado a sesión remota (`cercano://`) | F4.5-08/11, F3-05 | Cliente + Web | Seguridad | Pendiente |
+| F4.5-13 | Perfil `policy.chat` y aplicación en servidor | F3-01/02/13, F4.5-04 | ControlPlane + Cliente | Seguridad | Pendiente |
+| F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador | Pendiente |
+| F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | Pendiente |
