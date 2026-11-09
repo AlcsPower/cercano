@@ -55,6 +55,12 @@ Use `trace_id` para reunir eventos del cliente, rendezvous/relay, API y consola.
 
 El controlador puede añadir una nota durante o después de la sesión. La nota se almacena como evento nuevo vinculado al `trace_id`; nunca se modifica el evento original. Las notas deben ser objetivas, fechadas y no contener secretos ni datos innecesarios.
 
+### Emisión desde el cliente de escritorio
+
+El cliente envía los eventos heredados a `POST /api/audit/conn`, `POST /api/audit/file` y `POST /api/audit/alarm`. Para que la API los acepte, aprovisione en el cliente la opción de configuración `api-token` con el token de ingestión del servidor; el cliente lo envía como `X-Cercano-Internal-Token` y nunca lo escribe en los registros. Sin ese valor, la API responde 401 y el evento no queda registrado. Use siempre `api-server` sobre HTTPS fuera del laboratorio.
+
+Los eventos de archivo llevan dirección, volumen y, cuando el evento cubre un único fichero con ruta local resoluble, su SHA-256; nunca se envía el contenido. Los lotes multiarchivo conservan el volumen y la lista de nombres, pero no un hash por fichero. El fin de sesión incluye el tipo de conexión (`remote`, `file_transfer`, `port_forward`, `view_camera`, `terminal`); el tipo se confirma en el evento `conn.auth`.
+
 ## 8. Gate M1: evidencia de cierre
 
 Para proponer el cierre de F2, el expediente debe incluir:
