@@ -61,7 +61,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-01 | Esquema y versionado del perfil | F0-07 | Builder | Seguridad | En verificación |
 | F3-02 | Cliente: lectura y verificación de perfil firmado | F3-01 | Cliente | Seguridad | En verificación |
 | F3-03 | Binario base reproducible y publicación de artefactos base | F0-05, F0-03 | Builder | QA | Hecho |
-| F3-04 | CLI `cercano-build` | F3-01, F3-02, F3-03 | Builder | QA | Pendiente |
+| F3-04 | CLI `cercano-build` | F3-01, F3-02, F3-03 | Builder | QA | En verificación |
 | F3-05 | Empaquetado Windows (.exe y .msi) | F3-04 | Builder | QA | Pendiente |
 | F3-06 | Firma Authenticode enchufable | F3-05 | Builder | Seguridad | Pendiente |
 | F3-07 | Servicio de build en `cercano-api`: cola, jobs, almacenamiento | F3-04, F1-04 | ControlPlane | QA | Pendiente |

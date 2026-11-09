@@ -325,6 +325,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "cercano-build"
+version = "0.1.0"
+dependencies = [
+ "audit-core",
+ "base64",
+ "cercano-api",
+ "chrono",
+ "clap",
+ "ed25519-dalek",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

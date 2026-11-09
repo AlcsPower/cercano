@@ -1,0 +1,101 @@
+// Copyright (C) 2026 Cercano Contributors
+//
+// This file is part of Cercano.
+//
+// Cercano is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Cercano is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Cercano. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+use clap::Parser;
+
+use cercano_build::{execute_build, BuildOptions};
+
+/// CLI de compilación y empaquetado de clientes especializados Cercano.
+#[derive(Parser, Debug)]
+#[command(
+    name = "cercano-build",
+    about = "CLI para empaquetar clientes Cercano especializados por rol (F3-04)",
+    version
+)]
+struct Args {
+    /// Ruta al perfil JSON (soporta perfil sin firmar o ya firmado)
+    #[arg(short = 'p', long = "profile")]
+    profile: PathBuf,
+
+    /// Directorio de salida
+    #[arg(short = 'o', long = "out", default_value = "dist/builds")]
+    out: PathBuf,
+
+    /// Ruta a clave privada Ed25519 (opcional, para firmar perfil si es raw JSON)
+    #[arg(short = 'k', long = "signing-key")]
+    signing_key: Option<PathBuf>,
+
+    /// Identificador de clave (opcional)
+    #[arg(long = "key-id")]
+    key_id: Option<String>,
+
+    /// Ruta al binario base reproducible (opcional; si existe lo empaqueta)
+    #[arg(short = 'b', long = "base-binary")]
+    base_binary: Option<PathBuf>,
+
+    /// Valida el perfil y sus invariantes de rol (soporte vs tecnico) sin generar artefactos
+    #[arg(long = "dry-run")]
+    dry_run: bool,
+}
+
+fn main() -> ExitCode {
+    let args = Args::parse();
+
+    let options = BuildOptions {
+        profile_path: args.profile,
+        out_dir: args.out,
+        signing_key_path: args.signing_key,
+        key_id: args.key_id,
+        base_binary_path: args.base_binary,
+        dry_run: args.dry_run,
+    };
+
+    match execute_build(&options) {
+        Ok(None) => {
+            println!("OK: Perfil validado correctamente. Invariantes de rol y esquema conformes.");
+            ExitCode::SUCCESS
+        }
+        Ok(Some(result)) => {
+            println!(
+                "OK: Artefacto para rol '{}' (versión {}) generado exitosamente en {} ({} ms)",
+                result.role,
+                result.version,
+                result.target_dir.display(),
+                result.elapsed_ms
+            );
+            println!(
+                "  - Perfil firmado: {}",
+                result.signed_profile_path.display()
+            );
+            println!("  - Manifiesto:     {}", result.manifest_path.display());
+            println!("  - Checksums:      {}", result.checksums_path.display());
+            if let Some(ref bin) = result.base_binary_path {
+                println!("  - Binario base:   {}", bin.display());
+            }
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("ERROR: {}", err);
+            ExitCode::FAILURE
+        }
+    }
+}

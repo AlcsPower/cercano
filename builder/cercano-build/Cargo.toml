@@ -1,0 +1,28 @@
+[package]
+name = "cercano-build"
+version = "0.1.0"
+edition = "2021"
+authors = ["Cercano Contributors"]
+license = "AGPL-3.0-only"
+description = "CLI tool for building specialized Cercano client bundles from signed profiles"
+
+[[bin]]
+name = "cercano-build"
+path = "src/main.rs"
+
+[dependencies]
+cercano-api = { path = "../../control-plane/cercano-api" }
+audit-core = { path = "../../control-plane/audit-core" }
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ed25519-dalek = { version = "2.1", default-features = false }
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+thiserror = "2.0"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+uuid = { version = "1.10", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "=3.10.1"
