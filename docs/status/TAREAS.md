@@ -138,11 +138,11 @@ Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5. F5-
 
 ## F6 — Optimización LAN y relays
 
-Fuente: `docs/PLAN-F6-LAN-RELAYS.md`. Depende del cierre de F5.
+Fuente: `docs/PLAN-F6-LAN-RELAYS.md`. Depende del cierre de F5, salvo F6-01…F6-05, que el propio plan permite en paralelo con F5. F6-01 se adelantó el 2026-11-10 (diseño y umbrales, sin medición).
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F6-01 | Spike de topologías, descubrimiento y transporte | F1-09, F2-06, F3-13 | Servidor + Seguridad | QA/Coordinador | Pendiente |
+| F6-01 | Spike de topologías, descubrimiento y transporte | F1-09, F2-06, F3-13 | Servidor + Seguridad | QA/Coordinador | En curso |
 | F6-02 | Configuración de sitios LAN, rangos y nodos relay | F6-01 | ControlPlane | Seguridad | Pendiente |
 | F6-03 | Descubrimiento LAN limitado y con interruptor administrativo | F6-01/02 | Servidor + Cliente | Seguridad/QA | Pendiente |
 | F6-04 | Salud, heartbeats, capacidad y retiro de relays | F6-02 | Servidor | QA | Pendiente |
@@ -190,4 +190,4 @@ Fuente: `docs/PLAN-F8-PORTABILIDAD.md`. Después de F7; **no bloquea M4**. SQL S
 | F8-09 | Matriz de pruebas SQLite/PostgreSQL/SQL Server y pruebas de fallo | F8-04…08 | QA | Coordinador | Pendiente |
 | F8-10 | Runbook `docs/guias/respaldos-y-migracion.md`, cierre e informe | F8-09 | Coordinador | Dueño | Pendiente |
 
-_Total: 53 tareas F0–F3, 10 de F4, 16 de F4.5, 13 de F5, 10 de F6, 13 de F7 y 10 de F8 (extra post-v1, no bloquea M4). Los planes F5–F8 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado. F8-01 arrancó el 2026-11-10 (análisis y ADR, sin código) y está en verificación; el resto de F8 sigue a la espera de esa aprobación. F5-01 quedó redactado el 2026-11-10 (ADR-012 y spec de identidad) y espera la aprobación del dueño y la revisión de Seguridad; no se ha escrito código de F5._
+_Total: 53 tareas F0–F3, 10 de F4, 16 de F4.5, 13 de F5, 10 de F6, 13 de F7 y 10 de F8 (extra post-v1, no bloquea M4). Los planes F5–F8 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado. F8-01 arrancó el 2026-11-10 (análisis y ADR, sin código) y está en verificación; el resto de F8 sigue a la espera de esa aprobación. F5-01 quedó redactado el 2026-11-10 (ADR-012 y spec de identidad) y espera la aprobación del dueño y la revisión de Seguridad; no se ha escrito código de F5. F6-01 arrancó el 2026-11-10 (spike S7: rutas, umbrales, amenazas y compatibilidad) y sigue en curso porque la medición exige laboratorio con motor Docker._

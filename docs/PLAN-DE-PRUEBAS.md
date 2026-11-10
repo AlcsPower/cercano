@@ -237,6 +237,39 @@ Fuente: [`PLAN-F5-IDENTIDAD.md`](PLAN-F5-IDENTIDAD.md) y [`specs/identidad.md`](
 | TC-F5-060 | Consola F5: carga, vacío, error, permisos y accesibilidad | Coherente con el API; 403 no se presenta como permitido |
 | TC-F5-061 | Diagnóstico de política efectiva en consola | Coincide con el API; sin datos secretos |
 
+### F6 (LAN y relays)
+
+Fuente: [`PLAN-F6-LAN-RELAYS.md`](PLAN-F6-LAN-RELAYS.md) y [`spikes/S7-lan-relays.md`](spikes/S7-lan-relays.md) (umbrales de §3). Los detalles viven en `tests/cases/TC-F6-*.md` y se escriben con la tarea que implementa cada caso. Todo en el laboratorio propio.
+
+| ID | Caso | Resultado esperado |
+|---|---|---|
+| TC-F6-001 | Descubrimiento desactivado (default) | No anuncia, no escucha; ninguna ruta se amplía |
+| TC-F6-002 | Rango permitido y host fuera de rango | Anuncia solo dentro del rango e interfaz autorizados |
+| TC-F6-003 | Interfaz de red no permitida | Ignorada; sin anuncio ni error que filtre datos |
+| TC-F6-004 | Anuncio falsificado en la LAN | No concede confianza; la conexión normal valida claves, consentimiento y rol |
+| TC-F6-005 | Apagado de emergencia durante el anuncio | Deja de anunciar de inmediato; sin reinicio del servicio |
+| TC-F6-010 | Dos relays con RTT distinto | Elige el mejor y se mantiene estable (histéresis ≥ 20 %) |
+| TC-F6-011 | Relay elegido detenido | Fallback ≤ 5 s al siguiente, mismo `trace_id` |
+| TC-F6-012 | Relay revocado o no registrado | No se anuncia ni se selecciona |
+| TC-F6-013 | Capacidad agotada en el mejor relay | No se selecciona; se informa el fallo seguro |
+| TC-F6-014 | Métricas equivalentes entre relays | Desempate determinista y repetible |
+| TC-F6-020 | Pérdida y jitter dentro y fuera de umbral | Sesión estable o degradación informada según S7 §3 |
+| TC-F6-021 | UDP bloqueado en el cliente | Ruta por relay en ≤ 10 s, sin duplicar sesión ni evento |
+| TC-F6-022 | Corte y reconexión de red | Reconecta sin duplicar sesión ni evento de auditoría |
+| TC-F6-023 | Relay caído a mitad de sesión | Reconexión por otra ruta conservando política y `trace_id` |
+| TC-F6-030 | Cambio de ruta con rol `soporte`/`tecnico` | Rol y permisos revalidados; sin escalada |
+| TC-F6-031 | Conmutación durante una sesión con consentimiento | No reinicia ni salta el consentimiento |
+| TC-F6-032 | Relay hostil o suplantado en la ruta | Contenido E2E intacto; límite documentado en S7 §6 |
+| TC-F6-033 | Búsqueda de secretos en trazas de ruta | Sin claves, tokens ni credenciales |
+| TC-F6-040 | Un `trace_id` de intento a ruta y sesión | Correlación completa en auditoría |
+| TC-F6-041 | Reintentos de conexión | Sin sesiones ni eventos duplicados |
+| TC-F6-050 | Cliente soportado y versión mínima | Directa y relay funcionan; versión no soportada se rechaza |
+| TC-F6-051 | Parches 001–007 tras F6 | Siguen aplicando y la suite permanece verde |
+| TC-F6-060 | WebSocket con proxy, TLS y corte (si se aprueba) | Autenticación, límites y fallback; sin bypass de controles |
+| TC-F6-061 | WebSocket diferido | ADR con los números de S7 §3 y decisión explícita |
+| TC-F6-070 | p50/p95, CPU y RAM frente a baseline F5 | Dentro de S7 §3; regresiones > 20 % explicadas |
+| TC-F6-071 | Carga sostenida y recuperación | Sin degradación no informada; recuperación sin reinicio |
+
 ### F8 (portabilidad y respaldos)
 
 Fuente: [`PLAN-F8-PORTABILIDAD.md`](PLAN-F8-PORTABILIDAD.md) y [`specs/db-portabilidad.md`](specs/db-portabilidad.md). La columna «Motores» indica dónde debe correr el caso; SQL Server solo si F8-01 lo aprueba.
