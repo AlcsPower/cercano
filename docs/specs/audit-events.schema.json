@@ -57,14 +57,15 @@
         "auth",
         "build",
         "chat",
-        "elev"
+        "elev",
+        "db"
       ],
       "description": "Categoría taxonómica del evento de auditoría."
     },
     "action": {
       "type": "string",
-      "pattern": "^(conn|file|alarm|console|auth|build|chat|elev)(\\.[a-z0-9_]+)+$",
-      "description": "Acción específica auditada estructurada con notación de punto bajo su categoría (ej. conn.start, file.transfer, auth.login, elev.requested)."
+      "pattern": "^(conn|file|alarm|console|auth|build|chat|elev|db)(\\.[a-z0-9_]+)+$",
+      "description": "Acción específica auditada estructurada con notación de punto bajo su categoría (ej. conn.start, file.transfer, auth.login, elev.requested, db.backup_created)."
     },
     "actor": {
       "$ref": "#/definitions/Actor"
@@ -159,6 +160,8 @@
             "build_job",
             "setting",
             "conversation",
+            "backup",
+            "migration",
             "system"
           ],
           "description": "Tipo de entidad sujeta a la acción."

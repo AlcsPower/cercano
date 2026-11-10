@@ -94,7 +94,7 @@ Fuente: `docs/PLAN-F4-CONSOLA.md`. F4 puede ir en paralelo con F3; solo F4-07 (g
 | F4-09 | E2E y gate F4 | F4-08 | QA | Coordinador | Pendiente |
 | F4-10 | Cierre de F4, documentación e informe | F4-09 | Coordinador | Dueño | Pendiente |
 
-_Total: 53 tareas (F0–F3) + 10 de F4 + 16 de F4.5. F5–F7 se detallan al cerrar la fase anterior._
+_Total: 53 tareas (F0–F3) + 10 de F4 + 16 de F4.5. F5–F7 se detallan al cerrar la fase anterior. F8 (extra post-v1) tiene 10 tareas planificadas en `PLAN-F8-PORTABILIDAD.md`._
 
 ## F4.5 — Cercano Chat (complemento, después de F4)
 
@@ -118,3 +118,20 @@ Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F
 | F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador | Pendiente |
 | F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | En curso |
 | F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA | En curso |
+
+## F8 — Portabilidad y respaldos gestionados (extra post-v1)
+
+Fuente: `docs/PLAN-F8-PORTABILIDAD.md`. Después de F7; **no bloquea M4**. SQL Server condicionado al veredicto de F8-01.
+
+| ID | Tarea | Dep. | Rol | Verifica | Estado |
+|---|---|---|---|---|---|
+| F8-01 | ADR-011, inventario de SQL y spike de viabilidad MSSQL | — | ControlPlane + Seguridad | Coordinador | Pendiente |
+| F8-02 | Crate `db-core`: pool, dialecto, marcadores, timestamps, factoría y `AppState` | F8-01 | ControlPlane | QA | Pendiente |
+| F8-03 | Esquema y migraciones por motor, disparadores, fingerprint en CI | F8-02 | ControlPlane | Seguridad | Pendiente |
+| F8-04 | Portar consultas de `cercano-api` y `audit-core` a SQL portable | F8-03 | ControlPlane | QA | Pendiente |
+| F8-05 | Formato de archivo firmado y verificador | F8-02 | ControlPlane | Seguridad | Pendiente |
+| F8-06 | API de respaldo y restauración; programación y retención; auditoría `db.backup.*`/`db.restore.*` | F8-04, F8-05 | ControlPlane | QA | Pendiente |
+| F8-07 | Asistente de migración: preflight, mantenimiento, copia, verificación, corte y rollback | F8-06 | ControlPlane | Seguridad | Pendiente |
+| F8-08 | Consola: pestaña «Mantenimiento», permiso `db:admin`, confirmaciones y progreso | F8-06, F8-07, F4-06 | Web | QA | Pendiente |
+| F8-09 | Matriz de pruebas SQLite/PostgreSQL/SQL Server y pruebas de fallo | F8-04…08 | QA | Coordinador | Pendiente |
+| F8-10 | Runbook `docs/guias/respaldos-y-migracion.md`, cierre e informe | F8-09 | Coordinador | Dueño | Pendiente |

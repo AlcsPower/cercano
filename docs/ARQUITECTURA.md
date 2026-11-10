@@ -17,7 +17,7 @@
                     │   ├─ jobs de build ─────────► cercano-builder ─► artefactos firmados
                     │   ├─ Cercano Chat: conversaciones, mensajes, adjuntos, SSE
                      │   └─ exportadores (syslog/CEF/JSONL/webhook)
-                    └──► BD (SQLite por defecto / PostgreSQL)
+                    └──► BD (SQLite por defecto / PostgreSQL / SQL Server — F8)
 
  console-web (SPA) ── HTTPS ──► cercano-api   (consola y chat)
 ```
@@ -37,6 +37,8 @@ Se conservan los puertos por defecto de upstream (TCP 21114–21119, UDP 21116) 
 | `branding/` | Nuevo | SVG, PNG, ICO | Logo, iconos y guía de marca (ver `branding/README.md`) |
 
 **Cercano Chat (F4.5).** Complemento de soporte: la persona usuaria con Cercano Soporte abre una conversación desde el cliente (módulo dentro de `vendor/client`, parche 006) y un técnico la atiende desde `console-web`. Las conversaciones, mensajes y metadatos de adjuntos viven en `cercano-api`; los adjuntos, en disco y solo por endpoint autenticado. La identidad del cliente es el par Ed25519 del dispositivo con reto firmado; el técnico usa su cuenta y los permisos de F4. El tiempo real usa SSE con pokes sin contenido, y el escalado abre una sesión remota con `trace_id` compartido. Contrato completo en [`docs/specs/chat.md`](specs/chat.md); decisión en [ADR-010](adr/010-cercano-chat.md).
+
+**Portabilidad de datos (F8, post-v1).** El motor por defecto sigue siendo SQLite; F8 añade PostgreSQL y, si el spike lo valida, SQL Server. La capa `db-core` unifica el pool, el dialecto y los marcadores de consulta; el esquema se mantiene por motor en archivos de migración embebidos con disparadores de inmutabilidad equivalentes; los timestamps se generan en Rust y `audit_events` no se reescribe (cambiaría la cadena). Respaldo, restauración y migración usan **un mismo archivo firmado** (manifiesto + líneas JSON, SHA-256 por tabla, Ed25519 con `audit_signing_key`), operado desde la consola con modo mantenimiento y corte por configuración. Plan en [`docs/PLAN-F8-PORTABILIDAD.md`](PLAN-F8-PORTABILIDAD.md); contrato en [`docs/specs/db-portabilidad.md`](specs/db-portabilidad.md); decisión en [ADR-011](adr/011-portabilidad-bd.md).
 
 ## 2. Estructura del repositorio
 
@@ -65,6 +67,7 @@ cercano/
 | 008 | Dos roles de instalador (`soporte` y `tecnico`) dentro del perfil firmado; el rol se registra con el `installer_id` y el servidor lo aplica en cada operación de técnico | El instalador por sí solo no es una barrera: un cliente modificado no debe poder actuar como técnico | Propuesto, depende de S4 |
 | 009 | Elevación con credenciales: consentimiento por solicitud, canal cifrado de la sesión, un solo uso, sin persistencia y sin pasar por `cercano-api`; desactivada por defecto hasta tener 2FA | Reducir el impacto de manejar credenciales de administrador | Propuesto, depende de S6 |
 | 010 | Cercano Chat: chat embebido en el cliente, gestión en `console-web`, mensajes persistidos en `cercano-api`, SSE para avisos, adjuntos en disco y sin E2E en v1; identidad de dispositivo por Ed25519 y nombre natural del contacto como snapshot | Resolver problemas pequeños sin sesión remota y con trazabilidad, reutilizando el cliente y la consola | Aceptado, F4.5 |
+| 011 | Portabilidad de BD: `db-core` (SQLite/PostgreSQL/SQL Server, SQL portable y migraciones por motor) y un único archivo firmado para respaldo, restauración y migración desde la consola | Salir del encierro en SQLite sin reescribir el control plane y dar respaldo/restauración verificables y reversibles | Propuesto, F8 (ratifica en F8-01) |
 
 Los ADR se formalizan en `docs/adr/NNN-titulo.md` al ratificarse en F0-10.
 
