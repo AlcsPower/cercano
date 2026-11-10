@@ -20,7 +20,7 @@ El sistema de auditoría de **Cercano** proporciona un registro estructurado, in
 ## 2. Esquema Común de Evento de Auditoría
 
 El archivo formal JSON Schema Draft-07 se encuentra publicado en:  
-[`docs/specs/audit-events.schema.json`](file:///c:/Users/alcs/OneDrive%20-%20cercano.local/Documentos/Mis%20Proyectos/Cercano/docs/specs/audit-events.schema.json).
+ [`docs/specs/audit-events.schema.json`](file:///c:/Users/alcs/OneDrive%20-%20cercano.local/Documentos/Mis%20Proyectos/Cercano/docs/specs/audit-events.schema.json).
 
 ### 2.1 Campos Obligatorios y Opcionales
 
@@ -238,6 +238,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "59a485effb765f553590d51fbcc9c3e8f0dcc8910d36c4c72dc322a3c4e12b87"
 }
 ```
+
 **`hash` calculado:** `59a485effb765f553590d51fbcc9c3e8f0dcc8910d36c4c72dc322a3c4e12b87`
 
 ---
@@ -260,7 +261,6 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 - **Condición:** Se registra solo si el cliente heredado envía una acción de conexión no clasificada o desconocida en `/api/audit/conn`.
 
 ---
-
 
 ### 6.5 `conn.fail` — Intento Fallido de Conexión
 
@@ -301,6 +301,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "a3627d1b6ad042130ff846cd6de7aa0a0da77037b10b0e421909aba8db9809b8"
 }
 ```
+
 **`hash` calculado:** `a3627d1b6ad042130ff846cd6de7aa0a0da77037b10b0e421909aba8db9809b8`
 
 ---
@@ -348,6 +349,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "e376d334a9656490ed36e0dbe238b5e9a91a978d07d862c5066312c953d63b46"
 }
 ```
+
 **`hash` calculado:** `e376d334a9656490ed36e0dbe238b5e9a91a978d07d862c5066312c953d63b46`
 
 ---
@@ -386,6 +388,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "3cc2f1e47d412cee62efd5bb2c4a4a6733c0a77536a76eb2d83782b6762d603e"
 }
 ```
+
 **`hash` calculado:** `3cc2f1e47d412cee62efd5bb2c4a4a6733c0a77536a76eb2d83782b6762d603e`
 
 ---
@@ -423,6 +426,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "4b97c4f8f2e34c9ca78b343c990c334177376ba6048e7075ab2129eb5f0f84cb"
 }
 ```
+
 **`hash` calculado:** `4b97c4f8f2e34c9ca78b343c990c334177376ba6048e7075ab2129eb5f0f84cb`
 
 ---
@@ -460,6 +464,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "d30f6d5a768d42dcd34a7c1183bf227907e52bc4b8d960818f362d92cbba69f8"
 }
 ```
+
 **`hash` calculado:** `d30f6d5a768d42dcd34a7c1183bf227907e52bc4b8d960818f362d92cbba69f8`
 
 ---
@@ -504,6 +509,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "f86b48eb67e5ccb0aadcaf349492a60291742358f2e0ce565b21ea1aa7a1ac94"
 }
 ```
+
 **`hash` calculado:** `f86b48eb67e5ccb0aadcaf349492a60291742358f2e0ce565b21ea1aa7a1ac94`
 
 ---
@@ -551,6 +557,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "52b6899dcacb082b38551704223eb15d2dd70b654c575df3abdfe41039b1842b"
 }
 ```
+
 **`hash` calculado:** `52b6899dcacb082b38551704223eb15d2dd70b654c575df3abdfe41039b1842b`
 
 ---
@@ -596,6 +603,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "618dc72b0e9b6bdda3ae925602bc58b26ca91ac7f55371592f6da1a8fbfff719"
 }
 ```
+
 **`hash` calculado:** `618dc72b0e9b6bdda3ae925602bc58b26ca91ac7f55371592f6da1a8fbfff719`
 
 ---
@@ -641,6 +649,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "ce022af42a607d56643dae5beca21b8d3e0db7d830884850e7c436421d34bd42"
 }
 ```
+
 **`hash` calculado:** `ce022af42a607d56643dae5beca21b8d3e0db7d830884850e7c436421d34bd42`
 
 ---
@@ -688,6 +697,7 @@ Para cada evento se incluye el vector de prueba matemático oficial:
   "hash": "56cb8604287e301cacd764bc2ea89f45cbf42a6fed993036faf380eecb01f621"
 }
 ```
+
 **`hash` calculado:** `56cb8604287e301cacd764bc2ea89f45cbf42a6fed993036faf380eecb01f621`
 
 ---
@@ -747,6 +757,30 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 - `alarm.elev_rejections`: Solicitudes de elevación rechazadas consecutivamente por usuarios (> 2 rechazos seguidos para un mismo técnico o dispositivo).
 - `alarm.elev_exhausted`: Se agota el límite máximo de 3 intentos fallidos en una misma sesión.
 - `alarm.elev_after_hours`: Solicitud o ejecución de elevación fuera del horario laboral establecido o durante fines de semana.
+
+---
+
+### 6.17 `auth.2fa_*` — Eventos de 2FA TOTP (F4-01)
+
+- **Emisor (`source`):** `api` (el control plane registra la acción observada; `actor.actor_type` distingue `user`, `device` o `system`).
+- **Categoría (`category`):** `auth`.
+- **Condición:** cualquier evento relacionado con el enrolamiento, verificación, fallo, uso o revocación de factor TOTP RFC 6238 en la consola web.
+- **`trace_id`:** UUIDv7 que correlaciona el evento con la sesión de login correspondiente.
+- **`action`:** uno de `auth.2fa_enroll`, `auth.2fa_verify`, `auth.2fa_failed`, `auth.2fa_recovery_used`, `auth.2fa_revoked`.
+- **`subject_type`:** `user` en la mayoría de los casos; `device` cuando el evento proviene de una operación de dispositivo; `system` para bloqueos automáticos.
+- **`outcome`:** `success`, `failure` o `denied`.
+- **Campos esperados en `details`:** parámetros contextuales; **estrictamente prohibido** incluir el secreto TOTP (`totp_secret`) o el código TOTP en claro. Ver especificación de cada acción a continuación.
+
+| `action` | Descripción | `details` permitidos (ejemplo) | `details` prohibidos |
+|---|---|---|---|
+| `auth.2fa_enroll` | Usuario enrola un nuevo factor TOTP. | `{ "method": "totp", "ip": "192.168.1.50" }` | `totp_secret`, cualquier código TOTP en claro |
+| `auth.2fa_verify` | Verificación exitosa de TOTP o recovery en login. | `{ "status": "success", "method": "totp|recovery", "ip": "192.168.1.50" }` | código TOTP en claro, hash SHA-256 de recovery code en claro |
+| `auth.2fa_failed` | Fallo de TOTP, recovery o bloqueo de cuenta. | `{ "reason": "invalid_code|invalid_recovery|account_locked", "attempt_count": 3, "ip": "192.168.1.50" }` | `totp_secret`, código TOTP en claro, hash de recovery code en claro |
+| `auth.2fa_recovery_used` | Un código de recuperación fue consumido con éxito. | `{ "code_index": 3, "ip": "192.168.1.50" }` | hash SHA-256 del recovery code en claro |
+| `auth.2fa_revoked` | Factor 2FA desvinculado (por usuario o admin). | `{ "by": "user|admin", "ip": "192.168.1.50" }` | `totp_secret`, cualquier código de recovery en claro |
+
+> [!IMPORTANT]
+> La regla de oro del subsistema de auditoría (*Zero Secret Leaks*) se aplica con plenitud a `auth.2fa_*`: ningún secreto, ni código TOTP en claro, ni hash SHA-256 de recovery codes en claro puede aparecer en el objeto `details`. Solo metadatos contextuales (IP, índices, métodos) están permitidos. El esquema JSON ya acepta la familia `auth.*`; estos eventos se encadenan con `prev_hash`/`hash` RFC 8785 (JCS) igual que `auth.login`, `auth.fail`, `auth.logout`.
 
 ---
 
