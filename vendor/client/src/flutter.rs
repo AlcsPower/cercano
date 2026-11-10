@@ -1398,6 +1398,8 @@ pub fn session_start_(
     // is_connected is used to indicate whether to start a peer connection. For two cases:
     // 1. "Move tab to new window"
     // 2. multi ui session within the same peer connection.
+    // Cercano: validacion de rol para inicio de conexiones salientes (F3-14 / F3-15)
+    crate::cercano_profile::validate_outgoing_connection()?;
     let mut is_connected = false;
     let mut is_found = false;
     for s in sessions::get_sessions() {

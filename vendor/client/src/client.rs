@@ -385,6 +385,8 @@ impl Client {
         ),
         (i32, String),
     )> {
+        // Cercano: validacion de rol para inicio de conexiones salientes (F3-14 / F3-15)
+        crate::cercano_profile::validate_outgoing_connection()?;
         debug_assert!(peer == interface.get_id());
         interface.update_direct(None);
         interface.update_received(false);

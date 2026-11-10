@@ -22,6 +22,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `003-client-default-endpoints.patch` | F1-08 | `vendor/client` | Configuración por defecto de red apuntando a ID Server `127.0.0.1:21116`, Relay `127.0.0.1:21117`, API Server `http://127.0.0.1:21114`, y latido de telemetría hacia `POST /api/devices/heartbeat` | `src/common.rs`, `src/rendezvous_mediator.rs`, `src/client.rs`, `src/hbbs_http/sync.rs`, `vendor/server/libs/hbb_common/src/config.rs` | 2026-11-05 | Agente-Cliente |
 | `004-client-audit-hooks.patch` | F2-05 | `vendor/client` | Propaga `trace_id`, par autenticado y tipo en `conn.end`, añade volumen y SHA-256 (tope 512 MiB al emitir) y autentica emisión con `X-Cercano-Client-Token` solo sobre HTTPS | `src/server/connection.rs` | 2026-11-09 | Agente-Cliente |
 | `005-client-signed-profile.patch` | F3-02 | `vendor/client` | Localización, verificación de firma Ed25519 y aplicación de perfil de cliente firmado (`cercano-profile.signed.json`), comprobación de caducidad y restricciones de rol | `src/cercano_profile.rs`, `src/common.rs`, `src/lib.rs` | 2026-11-09 | Agente-Cliente |
+| `006-client-roles-modes.patch` | F3-14, F3-15 | `vendor/client` | Modos soporte y técnico: helpers de rol, bloqueo de salida y libreta en soporte, control de salida y sesión en técnico, protección de ajustes de red y elevación estructurada | `src/cercano_profile.rs`, `src/client.rs`, `src/flutter.rs`, `src/ui_interface.rs` | 2026-11-10 | Agente-Cliente |
 
 ---
 
@@ -124,6 +125,36 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/common.rs`
   - `src/lib.rs`
 - **Estrategia de actualización (upstream sync):** El módulo `cercano_profile` es puramente aditivo; se engancha en `load_custom_client()` en `src/common.rs`. Al actualizar upstream, verificar que `config::OVERWRITE_SETTINGS` y `config::APP_NAME` continúen existiendo en `hbb_common`.
+
+---
+
+### [006-client-roles-modes.patch] Tareas F3-14 y F3-15: Modos de cliente Soporte y Técnico
+
+- **Archivo:** `patches/006-client-roles-modes.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-14`, `F3-15`
+- **Fecha:** `2026-11-10`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** Implementa el comportamiento, restricciones y capacidades diferenciadas en el cliente Cercano conforme a la Matriz de la Sección 1 de `PLAN-F3-GENERADOR.md` y las directrices arquitectónicas de `ADR-008`:
+  - **Rol Soporte (`role: "soporte"`) [F3-14]:**
+    - Bloqueo estricto e incondicional de conexiones salientes (`validate_outgoing_connection`) con mensaje descriptivo ("Cercano Soporte está configurado exclusivamente para recibir asistencia técnica").
+    - Bloqueo de libreta de direcciones y lista de dispositivos remotos (`is_address_book_enabled() -> false`).
+    - Bloqueo e inmutabilidad de ajustes de servidor, clave y red (`is_network_settings_locked() -> true` y filtros en `ui_interface.rs`).
+    - Consentimiento obligatorio de la persona usuaria para cada sesión entrante, salvo que el perfil firmado habilite explícitamente `unattended_access`.
+    - Indicador permanente de sesión activa y capacidad de terminación inmediata por el usuario final.
+    - Notificación y diálogo estructurado de elevación entrante (`ElevationRequestNotification`: motivo, solicitante, ticket y timestamp), impidiendo que el cliente soporte emita solicitudes de elevación.
+  - **Rol Técnico (`role: "tecnico"`) [F3-15]:**
+    - Control de conexiones salientes exigiendo sesión técnica autenticada en `cercano-api` (`can_initiate_outgoing_connections() -> bool`).
+    - Libreta y dispositivos restringidos exclusivamente a personal técnico con sesión iniciada.
+    - Manejo de sesión técnica (`set_technician_session`, `get_technician_session_token`) y cierre de sesión seguro (`clear_technician_session`) que limpia completamente el estado local, tokens y credenciales en memoria al hacer logout.
+    - Ajustes de red y servidor bloqueados (fijados por el perfil preconfigurado).
+    - Emisión de solicitudes de elevación condicionada al permiso `elev:use`.
+- **Archivos modificados:**
+  - `src/cercano_profile.rs`
+  - `src/client.rs`
+  - `src/flutter.rs`
+  - `src/ui_interface.rs`
+- **Estrategia de actualización (upstream sync):** Las verificaciones se sitúan en puntos de entrada clave (`Client::start`, `session_start_`, `is_option_fixed`, `try_set_options`). Al actualizar upstream, verificar que `Client::start` y `try_set_options` mantengan su firma o adaptar el hook de validación.
 
 ---
 

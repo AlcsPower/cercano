@@ -221,6 +221,14 @@ pub fn use_texture_render() -> bool {
 
 #[inline]
 pub fn is_option_fixed(key: &str) -> bool {
+    if crate::cercano_profile::is_network_settings_locked()
+        && matches!(
+            key,
+            "custom-rendezvous-server" | "relay-server" | "api-server" | "key"
+        )
+    {
+        return true;
+    }
     config::OVERWRITE_DISPLAY_SETTINGS
         .read()
         .unwrap()
@@ -422,7 +430,13 @@ pub fn set_options(m: HashMap<String, String>) {
     hbb_common::allow_err!(try_set_options(m));
 }
 
-pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()> {
+pub fn try_set_options(mut m: HashMap<String, String>) -> hbb_common::ResultType<()> {
+    if crate::cercano_profile::is_network_settings_locked() {
+        m.remove("custom-rendezvous-server");
+        m.remove("relay-server");
+        m.remove("api-server");
+        m.remove("key");
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         if !crate::trusted_devices::config::changes_authentication(&m) {
@@ -458,6 +472,15 @@ pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()>
 
 #[inline]
 pub fn set_option(key: String, value: String) {
+    if crate::cercano_profile::is_network_settings_locked()
+        && matches!(
+            key.as_str(),
+            "custom-rendezvous-server" | "relay-server" | "api-server" | "key"
+        )
+    {
+        log::warn!("Modificación de ajuste de red bloqueada por perfil Cercano: {}", key);
+        return;
+    }
     if key == "2fa"
         || key == keys::OPTION_ENABLE_TRUSTED_DEVICES
         || key == keys::OPTION_TRUSTED_DEVICE_EXPIRATION

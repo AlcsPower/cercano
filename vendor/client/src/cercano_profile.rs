@@ -38,6 +38,30 @@ pub const DEFAULT_PROFILE_PUBLIC_KEY_BASE64: &str =
 
 lazy_static::lazy_static! {
     pub static ref ACTIVE_PROFILE: RwLock<Option<VerifiedProfileInfo>> = RwLock::new(None);
+    pub static ref TECHNICIAN_SESSION: RwLock<Option<TechnicianSession>> = RwLock::new(None);
+    pub static ref PENDING_ELEVATION_REQUEST: RwLock<Option<ElevationRequestNotification>> = RwLock::new(None);
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TechnicianSession {
+    pub token: String,
+    pub username: String,
+    pub permissions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ElevationRequestNotification {
+    pub request_id: String,
+    pub requester_name: String,
+    pub reason: String,
+    pub ticket: Option<String>,
+    pub timestamp_rfc3339: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ElevationConsentResponse {
+    Approved,
+    Denied,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -465,5 +489,351 @@ pub fn load_and_apply_profile() -> bool {
             );
             false
         }
+    }
+}
+
+pub fn is_support_mode() -> bool {
+    ACTIVE_PROFILE
+        .read()
+        .ok()
+        .and_then(|p| p.as_ref().map(|prof| prof.role == "soporte"))
+        .unwrap_or(false)
+}
+
+pub fn is_technician_mode() -> bool {
+    ACTIVE_PROFILE
+        .read()
+        .ok()
+        .and_then(|p| p.as_ref().map(|prof| prof.role == "tecnico"))
+        .unwrap_or(false)
+}
+
+pub fn can_initiate_outgoing_connections() -> bool {
+    if is_support_mode() {
+        return false;
+    }
+    if is_technician_mode() {
+        return get_technician_session_token().is_some();
+    }
+    if let Ok(guard) = ACTIVE_PROFILE.read() {
+        if let Some(profile) = guard.as_ref() {
+            return profile.allow_outgoing;
+        }
+    }
+    true
+}
+
+pub fn validate_outgoing_connection() -> ResultType<()> {
+    if is_support_mode() {
+        return Err(anyhow!(
+            "Cercano Soporte está configurado exclusivamente para recibir asistencia técnica"
+        ));
+    }
+    if is_technician_mode() {
+        if get_technician_session_token().is_none() {
+            return Err(anyhow!(
+                "Debe iniciar sesión con su cuenta técnica antes de iniciar conexiones"
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub fn is_address_book_enabled() -> bool {
+    if is_support_mode() {
+        return false;
+    }
+    if is_technician_mode() {
+        return get_technician_session_token().is_some();
+    }
+    true
+}
+
+pub fn is_network_settings_locked() -> bool {
+    if is_support_mode() || is_technician_mode() {
+        return true;
+    }
+    if let Ok(guard) = ACTIVE_PROFILE.read() {
+        if let Some(profile) = guard.as_ref() {
+            return profile.hide_network_settings;
+        }
+    }
+    false
+}
+
+pub fn requires_session_approval() -> bool {
+    if let Ok(guard) = ACTIVE_PROFILE.read() {
+        if let Some(profile) = guard.as_ref() {
+            return !profile.unattended_access;
+        }
+    }
+    true
+}
+
+pub fn get_technician_session_token() -> Option<String> {
+    TECHNICIAN_SESSION
+        .read()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|s| s.token.clone()))
+}
+
+pub fn get_technician_session() -> Option<TechnicianSession> {
+    TECHNICIAN_SESSION
+        .read()
+        .ok()
+        .and_then(|guard| guard.clone())
+}
+
+pub fn set_technician_session(token: String, username: String, permissions: Vec<String>) {
+    if let Ok(mut guard) = TECHNICIAN_SESSION.write() {
+        *guard = Some(TechnicianSession {
+            token,
+            username,
+            permissions,
+        });
+    }
+}
+
+pub fn clear_technician_session() {
+    if let Ok(mut guard) = TECHNICIAN_SESSION.write() {
+        *guard = None;
+    }
+}
+
+pub fn set_active_profile(profile: Option<VerifiedProfileInfo>) {
+    if let Ok(mut guard) = ACTIVE_PROFILE.write() {
+        *guard = profile;
+    }
+}
+
+pub fn active_session_count() -> usize {
+    #[cfg(not(any(target_os = "ios")))]
+    {
+        crate::ui_cm_interface::get_clients_length()
+    }
+    #[cfg(any(target_os = "ios"))]
+    {
+        0
+    }
+}
+
+pub fn user_terminate_session(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
+    {
+        crate::ui_cm_interface::close(conn_id);
+    }
+}
+
+impl ElevationRequestNotification {
+    pub fn new(
+        request_id: impl Into<String>,
+        requester_name: impl Into<String>,
+        reason: impl Into<String>,
+        ticket: Option<String>,
+    ) -> ResultType<Self> {
+        let r = reason.into();
+        if r.trim().is_empty() {
+            return Err(anyhow!("El motivo de la solicitud de elevación es obligatorio"));
+        }
+        let req = requester_name.into();
+        if req.trim().is_empty() {
+            return Err(anyhow!("El solicitante de la elevación es obligatorio"));
+        }
+        Ok(Self {
+            request_id: request_id.into(),
+            requester_name: req,
+            reason: r,
+            ticket,
+            timestamp_rfc3339: chrono::Utc::now().to_rfc3339(),
+        })
+    }
+}
+
+pub fn can_request_elevation() -> bool {
+    if is_support_mode() {
+        return false;
+    }
+    if is_technician_mode() {
+        if let Some(session) = get_technician_session() {
+            return session.permissions.iter().any(|p| p == "elev:use" || p == "admin");
+        }
+    }
+    false
+}
+
+pub fn handle_incoming_elevation_request(
+    request: ElevationRequestNotification,
+) -> ResultType<()> {
+    if !is_support_mode() {
+        return Err(anyhow!("Las solicitudes de elevación solo se reciben en modo soporte"));
+    }
+    if let Ok(mut guard) = PENDING_ELEVATION_REQUEST.write() {
+        *guard = Some(request);
+    }
+    Ok(())
+}
+
+pub fn get_pending_elevation_request() -> Option<ElevationRequestNotification> {
+    PENDING_ELEVATION_REQUEST
+        .read()
+        .ok()
+        .and_then(|guard| guard.clone())
+}
+
+pub fn respond_to_elevation_request(
+    request_id: &str,
+    response: ElevationConsentResponse,
+) -> ResultType<ElevationConsentResponse> {
+    let mut pending = PENDING_ELEVATION_REQUEST
+        .write()
+        .map_err(|e| anyhow!("Lock error: {}", e))?;
+    if let Some(req) = pending.as_ref() {
+        if req.request_id != request_id {
+            return Err(anyhow!("Identificador de solicitud de elevación no coincide"));
+        }
+    } else {
+        return Err(anyhow!("No hay ninguna solicitud de elevación pendiente"));
+    }
+    *pending = None;
+    Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_soporte_profile(unattended: bool) -> VerifiedProfileInfo {
+        VerifiedProfileInfo {
+            profile_id: "test-soporte-id".to_string(),
+            role: "soporte".to_string(),
+            rendezvous_server: "cercano.lan:21116".to_string(),
+            relay_server: "relay.lan:21117".to_string(),
+            api_server: "https://cercano.lan:21114".to_string(),
+            allow_outgoing: false,
+            allow_incoming: true,
+            unattended_access: unattended,
+            allow_file_transfer: true,
+            allow_clipboard: true,
+            allow_audio: true,
+            hide_network_settings: true,
+        }
+    }
+
+    fn sample_tecnico_profile() -> VerifiedProfileInfo {
+        VerifiedProfileInfo {
+            profile_id: "test-tecnico-id".to_string(),
+            role: "tecnico".to_string(),
+            rendezvous_server: "cercano.lan:21116".to_string(),
+            relay_server: "relay.lan:21117".to_string(),
+            api_server: "https://cercano.lan:21114".to_string(),
+            allow_outgoing: true,
+            allow_incoming: true,
+            unattended_access: false,
+            allow_file_transfer: true,
+            allow_clipboard: true,
+            allow_audio: true,
+            hide_network_settings: true,
+        }
+    }
+
+    #[test]
+    fn test_soporte_mode_restrictions() {
+        set_active_profile(Some(sample_soporte_profile(false)));
+        clear_technician_session();
+
+        assert!(is_support_mode());
+        assert!(!is_technician_mode());
+
+        // Rechazo de conexión saliente
+        assert!(!can_initiate_outgoing_connections());
+        let err = validate_outgoing_connection().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Cercano Soporte está configurado exclusivamente para recibir asistencia técnica"
+        );
+
+        // Bloqueo de libreta
+        assert!(!is_address_book_enabled());
+
+        // Bloqueo de ajustes de red y servidor
+        assert!(is_network_settings_locked());
+
+        // Aprobación requerida por defecto si unattended_access es false
+        assert!(requires_session_approval());
+
+        // Soporte no puede solicitar elevación
+        assert!(!can_request_elevation());
+    }
+
+    #[test]
+    fn test_soporte_mode_unattended_approval() {
+        set_active_profile(Some(sample_soporte_profile(true)));
+        assert!(!requires_session_approval());
+    }
+
+    #[test]
+    fn test_soporte_elevation_notification() {
+        set_active_profile(Some(sample_soporte_profile(false)));
+
+        let notif = ElevationRequestNotification::new(
+            "elev-123",
+            "Carlos TI",
+            "Instalar certificado raíz",
+            Some("INC-4001".to_string()),
+        )
+        .unwrap();
+
+        assert!(handle_incoming_elevation_request(notif.clone()).is_ok());
+        assert_eq!(get_pending_elevation_request(), Some(notif));
+
+        let res = respond_to_elevation_request("elev-123", ElevationConsentResponse::Approved).unwrap();
+        assert_eq!(res, ElevationConsentResponse::Approved);
+        assert_eq!(get_pending_elevation_request(), None);
+    }
+
+    #[test]
+    fn test_tecnico_mode_lifecycle_and_capabilities() {
+        set_active_profile(Some(sample_tecnico_profile()));
+        clear_technician_session();
+
+        assert!(!is_support_mode());
+        assert!(is_technician_mode());
+
+        // Sin login: conexión rechazada
+        assert!(!can_initiate_outgoing_connections());
+        let err = validate_outgoing_connection().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Debe iniciar sesión con su cuenta técnica antes de iniciar conexiones"
+        );
+
+        // Sin login: libreta no accesible
+        assert!(!is_address_book_enabled());
+
+        // Ajustes de red bloqueados (fijados por el perfil)
+        assert!(is_network_settings_locked());
+
+        // Login exitoso
+        set_technician_session(
+            "tok_tech_secret_123".to_string(),
+            "tecnico_alberto".to_string(),
+            vec!["remote:connect".to_string(), "elev:use".to_string()],
+        );
+
+        assert_eq!(
+            get_technician_session_token(),
+            Some("tok_tech_secret_123".to_string())
+        );
+        assert!(can_initiate_outgoing_connections());
+        assert!(validate_outgoing_connection().is_ok());
+        assert!(is_address_book_enabled());
+        assert!(can_request_elevation());
+
+        // Logout: limpia completamente el estado local
+        clear_technician_session();
+        assert_eq!(get_technician_session_token(), None);
+        assert!(!can_initiate_outgoing_connections());
+        assert!(!is_address_book_enabled());
+        assert!(!can_request_elevation());
     }
 }

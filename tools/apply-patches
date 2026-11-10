@@ -38,6 +38,13 @@ for patch_file in "${patches[@]}"; do
     continue
   fi
 
+  # Si la reversión directa falla porque parches posteriores modificaron archivos creados por este parche
+  check_err="$(git apply -p1 --check "$patch_file" 2>&1 || true)"
+  if echo "$check_err" | grep -q "already exists in working directory"; then
+    echo "OK: $patch_name ya aplicado (archivos creados ya existen en árbol)."
+    continue
+  fi
+
   # Comprobar si se puede aplicar limpiamente
   if git apply -p1 --check "$patch_file" &>/dev/null; then
     git apply -p1 "$patch_file"
