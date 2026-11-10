@@ -1,6 +1,6 @@
 # Plan de trabajo — F7: Endurecimiento y release beta
 
-**Versión:** 0.1 · **Fecha:** 2026-11-10 · **Estado:** propuesta para revisión del Coordinador · **Duración estimada:** 3 semanas  
+**Versión:** 0.2 · **Fecha:** 2026-11-10 · **Estado:** revisado por el Coordinador el 2026-11-10; pendiente de aprobación del dueño · **Duración estimada:** 3 semanas  
 **Objetivo (M4):** preparar una beta pública verificable y operable, con revisión de seguridad, cadena de suministro, artefactos firmados, procedimientos de actualización/recuperación y criterios claros de soporte.  
 **Depende de:** cierre de F6; gates de F0–F5; conexión directa/relay, auditoría, generador, consola y documentación de las capacidades que se anuncien. Las funciones diferidas no se presentan como disponibles.  
 **Referencias:** `docs/ROADMAP.md`, `docs/ARQUITECTURA.md`, `docs/PLAN-DE-PRUEBAS.md`, `AGENTS.md`, `SECURITY.md`, `NOTICE`, `deploy/` y los informes de cierre previos.
@@ -31,14 +31,14 @@ La beta debe permitir instalación limpia, actualización desde una versión Cer
 
 ## 3. Criterios de aceptación
 
-- **F7-01:** matriz de alcance nombra versiones/plataformas, funciones entregadas, funciones no soportadas, proceso de reporte de errores, datos recopilados y canales de actualización. Cada promesa tiene evidencia en CI o laboratorio.
+- **F7-01:** matriz de alcance nombra versiones/plataformas, funciones entregadas, funciones no soportadas, el estado en la beta de cada función sensible (elevación con credenciales, LAPS, Cercano Chat, OIDC/LDAP, descubrimiento LAN, WebSocket: activada, desactivada por defecto o no incluida), proceso de reporte de errores, datos recopilados y canales de actualización. Cada promesa tiene evidencia en CI o laboratorio.
 - **F7-02/03:** revisión de amenazas actualizada contra arquitectura implementada y no solo la prevista; pruebas autorizadas exclusivamente sobre el laboratorio Cercano. Se cubren autenticación/2FA, RBAC, IDOR, perfiles y roles de instalador, revocación, LAPS si fue aprobado, chat/adjuntos, hash chain, relays, API expuesta y despliegue. Hallazgos tienen severidad, evidencia protegida, responsable y fecha objetivo.
 - **F7-04:** cero hallazgos críticos/altos abiertos. Hallazgos medios/bajos tienen mitigación, responsable, vencimiento y aceptación explícita del dueño para la beta; un cambio de código se vuelve a probar por un agente distinto.
 - **F7-05:** inventario de dependencias directas/transitivas, licencias AGPL compatibles, avisos de atribución, SBOM CycloneDX o SPDX y escaneo de vulnerabilidades por cada artefacto publicado. CVE aceptadas o no corregibles quedan justificadas; no se ignoran silenciosamente.
 - **F7-06:** build desde tag/commit inmutable en runner controlado; hashes/atestación asociados; firma verificable de los artefactos disponibles en la beta; verificación de firma falla de forma cerrada ante alteración. Claves de firma segregadas y no accesibles al job de build ordinario.
-- **F7-07/08:** procedimiento paso a paso para claves, rotación, respaldo cifrado y restauración; prueba de que los checkpoints siguen verificables tras restauración; nunca se respalda material sin cifrar de forma accidental; objetivo de recuperación y pérdida de datos acordado y medido.
+- **F7-07/08:** procedimiento paso a paso para claves, rotación, respaldo cifrado y restauración; prueba de que los checkpoints siguen verificables tras restauración; nunca se respalda material sin cifrar de forma accidental; objetivo de recuperación y pérdida de datos acordado y medido. El procedimiento manual cubre la base de datos (`cercano.db`), las claves, los adjuntos del chat, los checkpoints y la configuración: la guía de respaldo actual del chat no incluye `cercano.db` y se corrige aquí. F8 lo automatizará después.
 - **F7-09:** instalación limpia y upgrade soportado desde versiones declaradas, migraciones en BD representativa, backup antes de actualizar y procedimiento de recuperación. No se afirma rollback automático de migraciones destructivas; se documenta su límite.
-- **F7-10/11:** guías sobre TLS, puertos, usuarios de servicio, firewall, retención, desactivación de funciones, incidentes, actualizaciones y monitoreo; logs no contienen contraseñas, tokens, secretos TOTP/LAPS, mensajes de chat ni credenciales de firma.
+- **F7-10/11:** guía de migración desde una instalación RustDesk OSS (hito M4 del roadmap) o decisión de F7-01 de sacarla de la beta y actualizar el roadmap; guías sobre TLS, puertos, usuarios de servicio, firewall, retención, desactivación de funciones, incidentes, actualizaciones y monitoreo; logs no contienen contraseñas, tokens, secretos TOTP/LAPS, mensajes de chat ni credenciales de firma.
 - **F7-12/13:** RC probado en CI y laboratorio, notas de versión con hashes/SBOM/licencias/conocidos, evidencia firmada por QA/Seguridad y aprobación del dueño. Publicación solo después del gate completo; informe `docs/status/F7-cierre.md`.
 
 ## 4. Pruebas y evidencia
@@ -57,7 +57,7 @@ Crear `tests/cases/TC-F7-*.md` y registrar en `docs/PLAN-DE-PRUEBAS.md` durante 
 | Operación | Health checks, alertas, rotación, revocación, retención y guía de incidentes ejecutados por otra persona |
 | Privacidad | Búsqueda automatizada de secretos y muestreo de logs/auditoría/exportaciones/notificaciones |
 
-**Gate F7 / M4:** todas las tareas cerradas o diferidas con aceptación documentada; pruebas de fase en verde; cero críticos/altos; riesgos restantes aceptados por el dueño; firmas, hashes, SBOM, NOTICE y código fuente correspondientes disponibles; restore y actualización demostrados; documentación y proceso de reporte publicados; RC aprobado. Un pentest sin retest o un backup no restaurado no satisface el gate.
+**Gate F7 / M4:** todas las tareas cerradas o diferidas con aceptación documentada; la elevación con credenciales solo se habilita en producción con 2FA obligatoria para técnicos y F3-18 cerrada; pruebas de fase en verde; cero críticos/altos; riesgos restantes aceptados por el dueño; firmas, hashes, SBOM, NOTICE y código fuente correspondientes disponibles; restore y actualización demostrados; documentación y proceso de reporte publicados; RC aprobado. Un pentest sin retest o un backup no restaurado no satisface el gate.
 
 ## 5. Riesgos y límites
 

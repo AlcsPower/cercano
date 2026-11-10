@@ -1,6 +1,6 @@
 # Plan de trabajo — F5: Identidad y control de acceso
 
-**Versión:** 0.1 · **Fecha:** 2026-11-10 · **Estado:** propuesta para revisión del Coordinador · **Duración estimada:** 4–5 semanas  
+**Versión:** 0.2 · **Fecha:** 2026-11-10 · **Estado:** revisado por el Coordinador el 2026-11-10; pendiente de aprobación del dueño · **Duración estimada:** 4–5 semanas  
 **Objetivo:** habilitar directorio de dispositivos, grupos, políticas centralizadas y federación de identidad, manteniendo el control de acceso en el servidor y la auditoría verificable.  
 **Depende de:** cierre de F4 y F4.5; F1-04, F1-05, F2-02, F2-08, F3-01/02/09/13 y F4 (RBAC/2FA) disponibles. La integración con Windows LAPS queda sujeta al análisis de seguridad de F5-01/F5-10.  
 **Referencias:** `docs/ROADMAP.md`, `docs/ARQUITECTURA.md`, `docs/PLAN-F4-CONSOLA.md`, `docs/PLAN-F3-GENERADOR.md`, `docs/PLAN-F4.5-CHAT.md`, `docs/specs/api.yaml`, `docs/specs/cercano-profile.md` y `docs/PLAN-DE-PRUEBAS.md`.
@@ -19,6 +19,7 @@ No incluye multi-tenant, roles totalmente configurables, cliente web remoto, ni 
 - Los cambios de identidad, política, grupo, proveedor y acceso privilegiado generan eventos de auditoría sin contraseñas, tokens, secretos OIDC/LDAP ni credenciales LAPS.
 - Las políticas centrales no pueden habilitar capacidades prohibidas por el perfil firmado o por el rol de instalador.
 - Las cuentas locales y el procedimiento de recuperación del administrador deben seguir disponibles según una ruta explícita, protegida y auditada.
+- **2FA:** LDAP nunca sustituye la 2FA TOTP de Cercano (F4-04). OIDC solo cuenta como segundo factor si el administrador lo habilita y el proveedor garantiza MFA en el token (`amr`/`acr`); si no, se exige el TOTP de Cercano. La elevación con credenciales (F3-16) y LAPS (F5-10) exigen el estado de 2FA verificado por Cercano, sea cual sea el proveedor de inicio de sesión.
 
 ## 2. Modelo funcional propuesto
 
@@ -35,7 +36,7 @@ No incluye multi-tenant, roles totalmente configurables, cliente web remoto, ni 
 | ID | Tarea | Dep. | Rol | Verifica |
 |---|---|---|---|---|
 | F5-01 | Aprobar modelo de grupos, libreta, estrategias, federación, LAPS y orden de migraciones; actualizar ADR/specs y catálogo de pruebas | F4, F4.5 | Coordinador + Seguridad | Dueño/QA |
-| F5-02 | Migración aditiva 009 y modelos de grupos, membresías, libreta y estrategias | F5-01 | ControlPlane | QA |
+| F5-02 | Migración aditiva (siguiente versión libre; hoy la 009) y modelos de grupos, membresías, libreta y estrategias | F5-01 | ControlPlane | QA |
 | F5-03 | API CRUD de grupos y libreta con paginación, validación y eventos de auditoría | F5-02, F4-05 | ControlPlane | QA |
 | F5-04 | Enforcement de alcance por rol/grupo y permisos entre grupos | F5-02/03 | ControlPlane | Seguridad |
 | F5-05 | Servicio de estrategias: versionado, resolución, precedencia, asignación y explicación de política efectiva | F5-01/02 | ControlPlane | Seguridad/QA |
@@ -43,21 +44,19 @@ No incluye multi-tenant, roles totalmente configurables, cliente web remoto, ni 
 | F5-07 | Inicio de sesión OIDC: descubrimiento, Authorization Code + PKCE, callback y vinculación de identidad | F5-01, F4 | ControlPlane | Seguridad |
 | F5-08 | Autenticación LDAP sobre TLS, mapeo explícito de grupos y límites de disponibilidad | F5-01, F4 | ControlPlane | Seguridad |
 | F5-09 | Evaluar cambio de ID de dispositivo; ADR con decisión implementar/diferir y pruebas de migración si procede | F5-01, F1-05 | Coordinador + Servidor | Seguridad/Dueño |
-| F5-10 | Evaluar e integrar Windows LAPS con aprobación por solicitud y `elev:l aps`/permiso equivalente definido en especificación | F5-01, F3-16/17, F4 | ControlPlane + Cliente | Seguridad |
+| F5-10 | Evaluar e integrar Windows LAPS con aprobación por solicitud y `elev:laps`/permiso equivalente definido en especificación | F5-01, F3-16…18, F4 | ControlPlane + Cliente | Seguridad |
 | F5-11 | Consola: grupos, libreta, estrategias, asignaciones, acceso federado y diagnóstico de política efectiva | F5-03…08 | Web | QA |
 | F5-12 | Pruebas de integración, autorización, migración, abuso de identidad y laboratorio LAN | F5-03…11 | QA + Seguridad | Coordinador |
 | F5-13 | Documentación de operador, recuperación de identidad y gate F5 | F5-12 | Coordinador | Dueño |
 
-> Corrección editorial pendiente antes de aprobar: en F5-10 el permiso se denominará de forma consistente `elev:laps` (sin espacio) en la especificación y el código.
-
 ## 4. Criterios de aceptación por tarea
 
-- **F5-01:** matriz de datos/permisos, precedencia de políticas, configuración de OIDC/LDAP, modelo de amenazas y migraciones aprobados. Definir qué claims se aceptan, cómo se vinculan cuentas, qué pasa cuando el IdP/directorio no está disponible y cómo se conserva el acceso de emergencia. La decisión sobre cambio de ID y LAPS incluye amenazas y límites explícitos.
-- **F5-02:** migración 009 solo se aplica después de 007 y 008; funciona desde BD vacía y desde una copia con migraciones previas; es aditiva, reversible o tiene procedimiento de recuperación documentado, conserva datos y crea índices/constraints verificados.
+- **F5-01:** matriz de datos/permisos, precedencia de políticas, configuración de OIDC/LDAP, modelo de amenazas y migraciones aprobados. Definir qué claims se aceptan, cómo se vinculan cuentas, cómo se combinan OIDC/LDAP con la 2FA TOTP de Cercano (ver invariantes), qué pasa cuando el IdP/directorio no está disponible y cómo se conserva el acceso de emergencia. La decisión sobre cambio de ID y LAPS incluye amenazas y límites explícitos.
+- **F5-02:** la migración usa la siguiente versión libre al empezar F5-02 (hoy la 009, tras la 008 de `control-plane/cercano-api/src/db.rs`) y se aplica en orden; usa DDL simple y portable (sin `datetime('now')`, `strftime` ni `AUTOINCREMENT`), porque F8 portará el esquema a otros motores; funciona desde BD vacía y desde una copia con migraciones previas; es aditiva, reversible o tiene procedimiento de recuperación documentado, conserva datos y crea índices/constraints verificados.
 - **F5-03/04:** cada endpoint comprueba autorización en servidor; pruebas positivas y negativas para admin/operator/auditor y varios grupos; una referencia a un ID de otro grupo no revela ni modifica el recurso; todas las operaciones de escritura y denegaciones relevantes quedan auditadas.
 - **F5-05/06:** resolución determinista, versionada y explicable. Una estrategia caducada, malformada o no disponible no concede permisos; el cliente no puede editar ni elevar una política firmada; se documenta la duración de caché y el comportamiento sin red.
 - **F5-07:** OIDC valida emisor, audiencia, `state`, `nonce`, PKCE, firma/rotación de claves y callback exacto; no se acepta login CSRF ni vinculación automática por correo; secretos no aparecen en URL persistente, logs, auditoría o frontend. Revocar/desvincular una identidad invalida sesiones según política.
-- **F5-08:** LDAP usa TLS con validación de certificado; no hay bind simple sin TLS ni persistencia de contraseñas; límites de tiempo y errores no filtran si una cuenta existe. El mapeo de grupos es allowlist y el fallo del directorio no crea sesiones privilegiadas.
+- **F5-08:** LDAP usa TLS con validación de certificado; no hay bind simple sin TLS ni persistencia de contraseñas; límites de tiempo y errores no filtran si una cuenta existe. El mapeo de grupos es allowlist y el fallo del directorio no crea sesiones privilegiadas. Una sesión iniciada por LDAP sigue pasando por la 2FA de Cercano.
 - **F5-09:** ADR con escenarios de colisión, historial de auditoría, referencias, perfiles/instaladores y recuperación. Si se implementa, el cambio es transaccional, autorizado y auditado; el ID anterior no puede apropiarse ni reutilizarse silenciosamente.
 - **F5-10:** si se aprueba, cada consulta LAPS requiere técnico autenticado con 2FA, permiso dedicado, consentimiento y alcance explícitos; el secreto solo se entrega para una solicitud, no se almacena ni se audita en claro, y la acción queda limitada/expira. Si no puede garantizarse el flujo, se difiere; no se crea una bóveda propia.
 - **F5-11:** estados de carga/vacío/error, permisos reflejados, navegación accesible y diagnósticos sin datos secretos. Ninguna vista presenta un permiso como efectivo si el API lo rechaza.
@@ -69,7 +68,7 @@ Crear `tests/cases/TC-F5-*.md` y registrar los casos en `docs/PLAN-DE-PRUEBAS.md
 
 | Grupo | Verificación mínima |
 |---|---|
-| Datos y migración | 009 sobre BD limpia y versiones 007/008; constraints, rollback/recuperación y conservación |
+| Datos y migración | Migración de F5 sobre BD limpia y sobre la última versión previa; constraints, rollback/recuperación y conservación |
 | Autorización | Matriz rol × operación × grupo; IDOR, enumeración y acceso cruzado denegados y auditados |
 | Estrategias | Precedencia determinista; política caducada/inválida; cliente offline; la política no amplía rol/perfil |
 | OIDC | `state`/`nonce`/PKCE, emisor/audiencia erróneos, claves rotadas, callback y vinculación de cuentas |
@@ -89,7 +88,7 @@ Crear `tests/cases/TC-F5-*.md` y registrar los casos en `docs/PLAN-DE-PRUEBAS.md
 | Caída/latencia del directorio bloquea acceso | Timeouts, salud observada, cuenta break-glass controlada y procedimiento probado |
 | Secreto LAPS expuesto a un técnico o al backend | Consentimiento y alcance, exposición efímera, sin almacenamiento; diferir si no es demostrable |
 | Cambios de ID rompen historial/instaladores | Evaluación independiente; no implementar hasta resolver identidad y recuperación |
-| Migraciones de F4/F4.5 concurrentes | Orden de versión fijado por Coordinador; migración 009 posterior a 007/008 |
+| Migraciones de F3/F4/F4.5/F6 concurrentes | Orden de versión fijado por el Coordinador; la migración de F5 va después de la última existente |
 
 ## 7. Fuera de alcance
 

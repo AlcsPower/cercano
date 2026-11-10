@@ -123,7 +123,7 @@ Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5.
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
 | F5-01 | Aprobar modelo de grupos, libreta, estrategias, federación, LAPS y orden de migraciones | F4, F4.5 | Coordinador + Seguridad | Dueño/QA | Pendiente |
-| F5-02 | Migración aditiva 009 y modelos de grupos, membresías, libreta y estrategias | F5-01 | ControlPlane | QA | Pendiente |
+| F5-02 | Migración aditiva (siguiente versión libre; hoy la 009) y modelos de grupos, membresías, libreta y estrategias | F5-01 | ControlPlane | QA | Pendiente |
 | F5-03 | API CRUD de grupos y libreta con auditoría | F5-02, F4-05 | ControlPlane | QA | Pendiente |
 | F5-04 | Enforcement de alcance por rol/grupo y permisos entre grupos | F5-02/03 | ControlPlane | Seguridad | Pendiente |
 | F5-05 | Servicio de estrategias: versionado, precedencia y política efectiva | F5-01/02 | ControlPlane | Seguridad/QA | Pendiente |
@@ -131,7 +131,7 @@ Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5.
 | F5-07 | Inicio de sesión OIDC con PKCE y vinculación de identidad | F5-01, F4 | ControlPlane | Seguridad | Pendiente |
 | F5-08 | Autenticación LDAP sobre TLS y mapeo explícito de grupos | F5-01, F4 | ControlPlane | Seguridad | Pendiente |
 | F5-09 | Evaluar cambio de ID de dispositivo y decisión ADR | F5-01, F1-05 | Coordinador + Servidor | Seguridad/Dueño | Pendiente |
-| F5-10 | Evaluar/integrar Windows LAPS bajo consentimiento y permiso dedicado | F5-01, F3-16/17, F4 | ControlPlane + Cliente | Seguridad | Pendiente |
+| F5-10 | Evaluar/integrar Windows LAPS bajo consentimiento y permiso dedicado | F5-01, F3-16…18, F4 | ControlPlane + Cliente | Seguridad | Pendiente |
 | F5-11 | Consola: grupos, libreta, estrategias, federación y política efectiva | F5-03…08 | Web | QA | Pendiente |
 | F5-12 | Pruebas de integración, autorización, identidad y laboratorio LAN | F5-03…11 | QA + Seguridad | Coordinador | Pendiente |
 | F5-13 | Documentación de operador y cierre F5 | F5-12 | Coordinador | Dueño | Pendiente |
@@ -142,12 +142,12 @@ Fuente: `docs/PLAN-F6-LAN-RELAYS.md`. Depende del cierre de F5.
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F6-01 | Spike de topologías, descubrimiento y transporte | F5 | Servidor + Seguridad | QA/Coordinador | Pendiente |
+| F6-01 | Spike de topologías, descubrimiento y transporte | F1-09, F2-06, F3-13 | Servidor + Seguridad | QA/Coordinador | Pendiente |
 | F6-02 | Configuración de sitios LAN, rangos y nodos relay | F6-01 | ControlPlane | Seguridad | Pendiente |
 | F6-03 | Descubrimiento LAN limitado y con interruptor administrativo | F6-01/02 | Servidor + Cliente | Seguridad/QA | Pendiente |
 | F6-04 | Salud, heartbeats, capacidad y retiro de relays | F6-02 | Servidor | QA | Pendiente |
 | F6-05 | Selector multi-relay, scoring, desempate y fallback | F6-04 | Servidor | QA | Pendiente |
-| F6-06 | Cliente: selección/reintento conservando política y `trace_id` | F6-05, F3-13, F5 | Cliente | Seguridad/QA | Pendiente |
+| F6-06 | Cliente: selección/reintento conservando política y `trace_id` | F6-05, F3-13, F5-05 | Cliente | Seguridad/QA | Pendiente |
 | F6-07 | Evaluar WebSocket e implementar solo con ADR aprobado | F6-01 | Servidor + Cliente | Seguridad | Pendiente |
 | F6-08 | Telemetría operativa y auditoría de rutas | F6-03…07, F2 | ControlPlane + Servidor | Seguridad | Pendiente |
 | F6-09 | Pruebas de rendimiento, resiliencia y compatibilidad | F6-03…08 | QA | Coordinador | Pendiente |
@@ -173,4 +173,4 @@ Fuente: `docs/PLAN-F7-RELEASE.md`. Depende del cierre de F6.
 | F7-12 | Candidato beta (RC), pruebas y publicación de notas | F7-04…11 | Builder + QA | Dueño/Coordinador | Pendiente |
 | F7-13 | Informe de cierre, deuda y gate M4 | F7-12 | Coordinador | Dueño | Pendiente |
 
-_Total: 53 tareas F0–F3, 10 de F4, 16 de F4.5, 13 de F5, 10 de F6 y 13 de F7. Los planes F5–F7 son propuestas y no indican que las fases hayan comenzado._
+_Total: 53 tareas F0–F3, 10 de F4, 16 de F4.5, 13 de F5, 10 de F6 y 13 de F7. Los planes F5–F7 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado._

@@ -1,8 +1,8 @@
 # Plan de trabajo — F6: Optimización LAN y relays
 
-**Versión:** 0.1 · **Fecha:** 2026-11-10 · **Estado:** propuesta para revisión del Coordinador · **Duración estimada:** 3 semanas  
+**Versión:** 0.2 · **Fecha:** 2026-11-10 · **Estado:** revisado por el Coordinador el 2026-11-10; pendiente de aprobación del dueño · **Duración estimada:** 3 semanas  
 **Objetivo:** mejorar la selección y resiliencia de rutas en redes corporativas/LAN mediante descubrimiento controlado, varios relays y evaluación de WebSocket, sin sacrificar consentimiento, cifrado, roles ni trazabilidad.  
-**Depende de:** cierre de F5; M0 (conexión directa y relay), F2 (auditoría/`trace_id`), F3 (roles/revocación), política efectiva de F5 y entorno reproducible de `tests/lab/`.  
+**Depende de:** M0 (conexión directa y relay), F2 (auditoría/`trace_id`), F3 (roles/revocación) y entorno reproducible de `tests/lab/`. F6-01…F6-05 pueden ir en paralelo con F5; F6-06 y el cierre de F6 esperan la política efectiva de F5 (F5-05).  
 **Referencias:** `docs/ROADMAP.md`, `docs/ARQUITECTURA.md`, `docs/PLAN-DE-PRUEBAS.md`, `docs/PLAN-F0-F1.md`, `docs/PLAN-F3-GENERADOR.md` y `patches/INDEX.md`.
 
 ## 1. Alcance y principios
@@ -18,12 +18,12 @@
 
 | ID | Tarea | Dep. | Rol | Verifica |
 |---|---|---|---|---|
-| F6-01 | Spike de topologías, descubrimiento y transporte; fijar métricas, amenazas y compatibilidad | F5 | Servidor + Seguridad | QA/Coordinador |
+| F6-01 | Spike de topologías, descubrimiento y transporte; fijar métricas, amenazas y compatibilidad | F1-09, F2-06, F3-13 | Servidor + Seguridad | QA/Coordinador |
 | F6-02 | Configuración versionada de sitios LAN, rangos/interfaces autorizados y nodos relay | F6-01 | ControlPlane | Seguridad |
 | F6-03 | Descubrimiento LAN limitado, autenticado cuando corresponda y con interruptor administrativo | F6-01/02 | Servidor + Cliente | Seguridad/QA |
 | F6-04 | Registro de salud de relays, heartbeats, capacidad y retiro seguro de nodos | F6-02 | Servidor | QA |
 | F6-05 | Selector multi-relay: elegibilidad, puntuación de latencia/salud, desempate y fallback | F6-04 | Servidor | QA |
-| F6-06 | Integración de cliente: obtener opciones, conectar/reintentar y conservar política/`trace_id` | F6-05, F3-13, F5 | Cliente | Seguridad/QA |
+| F6-06 | Integración de cliente: obtener opciones, conectar/reintentar y conservar política/`trace_id` | F6-05, F3-13, F5-05 | Cliente | Seguridad/QA |
 | F6-07 | Evaluar WebSocket; implementar solo con ADR aprobado y criterio de necesidad medible | F6-01 | Servidor + Cliente | Seguridad |
 | F6-08 | Telemetría operativa y auditoría de rutas; métricas agregadas y sin datos identificables innecesarios | F6-03…07, F2 | ControlPlane + Servidor | Seguridad |
 | F6-09 | Pruebas de rendimiento, resiliencia, red y compatibilidad en laboratorio | F6-03…08 | QA | Coordinador |
@@ -32,8 +32,8 @@
 ## 3. Criterios de aceptación
 
 - **F6-01:** informe reproducible compara ruta directa, relay único/múltiple y WebSocket si aplica, con latencia, jitter, pérdida, consumo, amenazas y compatibilidad con clientes. Umbrales de selección y objetivos de rendimiento se acuerdan antes de medir.
-- **F6-02:** configuración validada y versionada; no acepta hosts/rangos fuera de la política; el operador puede retirar un relay sin reiniciar todo el servicio; cambios quedan auditados.
-- **F6-03:** el descubrimiento está desactivado o limitado por política, interfaz y rango explícitos; no propaga credenciales, claves privadas ni listas globales de equipos; no amplía el alcance de acceso; mecanismo de apagado probado.
+- **F6-02:** configuración validada y versionada; no acepta hosts/rangos fuera de la política; el operador puede retirar un relay sin reiniciar todo el servicio; cambios quedan auditados. F6-01 define cómo se autentica un relay ante hbbs y el cliente (clave o identidad fijada por el administrador) y F6-02 lo implementa: un relay no registrado no se selecciona. Las tablas nuevas usan DDL portable (sin `datetime('now')`, `strftime` ni `AUTOINCREMENT`) porque F8 portará el esquema.
+- **F6-03:** el descubrimiento está desactivado o limitado por política, interfaz y rango explícitos; no propaga credenciales, claves privadas ni listas globales de equipos; no amplía el alcance de acceso; un anuncio descubierto nunca otorga confianza: solo sirve para intentar la conexión normal, que valida claves, consentimiento y rol; mecanismo de apagado probado.
 - **F6-04/05:** nodos no saludables o revocados no se seleccionan; la selección es estable ante mediciones equivalentes; se respeta preferencia de conexión directa y las restricciones por sitio; al no haber relay válido, se informa fallo seguro en vez de seleccionar uno arbitrario.
 - **F6-06:** cambio de ruta no reinicia consentimiento ni privilegios; revocación y rol del instalador se vuelven a comprobar; el `trace_id` correlaciona intentos y ruta efectiva; reintentos no producen duplicados de sesión/auditoría.
 - **F6-07:** decisión ADR documenta evidencia a favor/en contra, requisitos de proxy/TLS, autenticación, límites y modo fallback. Si se implementa, WebSocket conserva autorización y cifrado, no crea una vía de bypass de controles y tiene pruebas de proxy y corte.
