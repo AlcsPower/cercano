@@ -9,7 +9,7 @@ import { LoginView } from './components/views/LoginView';
 import { DashboardView } from './components/views/DashboardView';
 import { DevicesView } from './components/views/DevicesView';
 import { ChatView } from './components/views/ChatView';
-import { BuilderView } from './components/views/BuilderView';
+const BuilderView = React.lazy(() => import('./components/views/BuilderView').then((m) => ({ default: m.BuilderView })));
 import { SecurityView } from './components/views/SecurityView';
 import { NetworkView } from './components/views/NetworkView';
 import { UsersView } from './components/views/UsersView';
@@ -160,7 +160,11 @@ export const App: React.FC = () => {
           />
         )}
 
-        {activeTab === 'builder' && <BuilderView />}
+        {activeTab === 'builder' && (
+          <React.Suspense fallback={null}>
+            <BuilderView />
+          </React.Suspense>
+        )}
 
         {activeTab === 'security' && (
           <SecurityView

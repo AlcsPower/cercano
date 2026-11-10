@@ -3,7 +3,10 @@
 
 import {
   AuthResponse,
+  BuildJobRecord,
+  CercanoProfilePayload,
   Device,
+  EnqueueBuildResponse,
   LoginResponse,
   LoginResult,
   MfaChallengeResponse,
@@ -109,6 +112,36 @@ class CercanoApiClient {
   private mockDevices: Device[] = [...INITIAL_DEVICES];
   private currentMockPublicKey: string = 'yF3t1X7uWqH2Q9PzLmNk8JvB6sD5cF4aG3eH2jK1mN0=';
   private connectionListeners: ((isLive: boolean) => void)[] = [];
+  private mockBuildJobs: BuildJobRecord[] = [
+    {
+      id: 'build-soporte-01',
+      user_id: 'usr-admin-demo',
+      role: 'soporte',
+      profile_id: '0192e300-1111-7111-8111-000000000001',
+      status: 'completed',
+      artifact_path: '/var/lib/cercano/builds/cercano-soporte-1.0.0.zip',
+      error_message: null,
+      logs: '[2026-11-10T10:00:00Z] Perfil soporte validado e inyectado.\n[2026-11-10T10:00:03Z] Artefacto cercano-soporte-1.0.0.zip firmado exitosamente.',
+      created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+      started_at: new Date(Date.now() - 3600000 * 4 + 1000).toISOString(),
+      completed_at: new Date(Date.now() - 3600000 * 4 + 3000).toISOString(),
+      expires_at: new Date(Date.now() + 3600000 * 24 * 7).toISOString(),
+    },
+    {
+      id: 'build-tecnico-02',
+      user_id: 'usr-admin-demo',
+      role: 'tecnico',
+      profile_id: '0192e300-2222-7222-8222-000000000002',
+      status: 'completed',
+      artifact_path: '/var/lib/cercano/builds/cercano-tecnico-1.0.0.zip',
+      error_message: null,
+      logs: '[2026-11-09T15:30:00Z] Perfil técnico autorizado con builder:create:tecnico.\n[2026-11-09T15:30:04Z] Artefacto cercano-tecnico-1.0.0.zip generado con éxito.',
+      created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
+      started_at: new Date(Date.now() - 3600000 * 24 + 1000).toISOString(),
+      completed_at: new Date(Date.now() - 3600000 * 24 + 4000).toISOString(),
+      expires_at: new Date(Date.now() + 3600000 * 24 * 6).toISOString(),
+    },
+  ];
 
   constructor() {
     this.token = localStorage.getItem('cercano_auth_token');
@@ -831,6 +864,276 @@ class CercanoApiClient {
         },
       ],
     };
+  }
+
+  // ==========================================
+  // Builder Service API (Milestone M2 / F4-07)
+  // ==========================================
+
+  /**
+   * Enqueues a new client installer compilation job.
+   * Calls POST /api/builds with { profile }.
+   */
+  public async enqueueBuild(
+    profileInput: CercanoProfilePayload | { profile: CercanoProfilePayload }
+  ): Promise<EnqueueBuildResponse> {
+    const profile: CercanoProfilePayload =
+      'profile' in profileInput ? profileInput.profile : profileInput;
+
+    if (this.isConnectedToLiveApi) {
+      try {
+        const res = await fetch('/api/builds', {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({ profile }),
+        });
+
+        if (res.status === 202 || res.ok) {
+          return (await res.json()) as EnqueueBuildResponse;
+        }
+
+        if (res.status === 403) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(
+            data.message ||
+              'Acceso denegado: Se requieren permisos administrativos o específicos para compilar este perfil.'
+          );
+        }
+
+        if (res.status === 400) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(
+            data.message ||
+              'Error de validación: El perfil no cumple las invariantes de seguridad requeridas.'
+          );
+        }
+
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || `Error del servidor (${res.status})`);
+      } catch (err: unknown) {
+        if (this.isConnectedToLiveApi) {
+          throw err;
+        }
+      }
+    }
+
+    // Offline / Demo Fallback Mode
+    const jobId = 'build-' + Math.random().toString(36).substring(2, 10);
+    const createdAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+
+    const newJob: BuildJobRecord = {
+      id: jobId,
+      user_id: 'usr-admin-demo',
+      role: profile.role,
+      profile_id: profile.profile_id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '0192e300-1111-7111-8111-000000000099'),
+      status: 'queued',
+      artifact_path: `/var/lib/cercano/builds/cercano-${profile.role}-1.0.0.zip`,
+      error_message: null,
+      logs: `[${createdAt}] Trabajo de compilación recibido y encolado en memoria\n[${createdAt}] Perfil rol: ${profile.role}, esquema: ${profile.schema_version}\n[${createdAt}] Servidor rendezvous: ${profile.server.rendezvous_server}\n[${createdAt}] Servidor relay: ${profile.server.relay_server}`,
+      created_at: createdAt,
+      started_at: null,
+      completed_at: null,
+      expires_at: expiresAt,
+    };
+
+    this.mockBuildJobs.unshift(newJob);
+
+    // Simulate lifecycle progression for offline demo / testing
+    setTimeout(() => {
+      const job = this.mockBuildJobs.find((j) => j.id === jobId);
+      if (job && job.status === 'queued') {
+        job.status = 'running';
+        job.started_at = new Date().toISOString();
+        job.logs += `\n[${job.started_at}] Iniciando compilación de binarios e inyección de perfil firmado...`;
+      }
+    }, 1200);
+
+    setTimeout(() => {
+      const job = this.mockBuildJobs.find((j) => j.id === jobId);
+      if (job && job.status === 'running') {
+        job.status = 'completed';
+        job.completed_at = new Date().toISOString();
+        job.logs += `\n[${job.completed_at}] Compilación completada con éxito. Artefacto ZIP generado y firmado.`;
+      }
+    }, 3200);
+
+    return {
+      id: jobId,
+      user_id: 'usr-admin-demo',
+      role: profile.role,
+      profile_id: profile.profile_id,
+      status: 'queued',
+      created_at: createdAt,
+      expires_at: expiresAt,
+    };
+  }
+
+  /**
+   * Retrieves the current state and execution logs of a build job.
+   * Calls GET /api/builds/:id.
+   */
+  public async getBuildJob(id: string): Promise<BuildJobRecord> {
+    if (this.isConnectedToLiveApi) {
+      try {
+        const res = await fetch(`/api/builds/${id}`, {
+          method: 'GET',
+          headers: this.getHeaders(),
+        });
+        if (res.ok) {
+          return (await res.json()) as BuildJobRecord;
+        }
+        if (res.status === 404) {
+          throw new Error('Trabajo de compilación no encontrado.');
+        }
+        if (res.status === 403) {
+          throw new Error('Acceso denegado: no tiene permisos para inspeccionar este trabajo.');
+        }
+      } catch (err: unknown) {
+        if (this.isConnectedToLiveApi) throw err;
+      }
+    }
+
+    const job = this.mockBuildJobs.find((j) => j.id === id);
+    if (!job) {
+      throw new Error(`Trabajo de compilación ${id} no encontrado.`);
+    }
+    return { ...job };
+  }
+
+  /**
+   * Alias for getBuildJob.
+   */
+  public async getBuild(id: string): Promise<BuildJobRecord> {
+    return this.getBuildJob(id);
+  }
+
+  /**
+   * Lists build jobs with optional filters.
+   * Calls GET /api/builds.
+   */
+  public async listBuildJobs(query?: {
+    role?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<BuildJobRecord[]> {
+    if (this.isConnectedToLiveApi) {
+      try {
+        const params = new URLSearchParams();
+        if (query?.role) params.append('role', query.role);
+        if (query?.status) params.append('status', query.status);
+        if (query?.limit) params.append('limit', String(query.limit));
+        if (query?.offset) params.append('offset', String(query.offset));
+
+        const url = `/api/builds${params.toString() ? `?${params.toString()}` : ''}`;
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: this.getHeaders(),
+        });
+        if (res.ok) {
+          return (await res.json()) as BuildJobRecord[];
+        }
+      } catch {
+        // Fallback to offline store
+      }
+    }
+
+    let result = [...this.mockBuildJobs];
+    if (query?.role) {
+      result = result.filter((j) => j.role === query.role);
+    }
+    if (query?.status) {
+      result = result.filter((j) => j.status === query.status);
+    }
+    const offset = query?.offset || 0;
+    const limit = query?.limit || 50;
+    return result.slice(offset, offset + limit);
+  }
+
+  /**
+   * Alias for listBuildJobs.
+   */
+  public async getBuilds(role?: string, status?: string): Promise<BuildJobRecord[]> {
+    return this.listBuildJobs({ role, status });
+  }
+
+  /**
+   * Downloads the packaged client ZIP artifact from the server.
+   * Calls GET /api/builds/:id/download.
+   */
+  public async downloadBuildArtifact(id: string): Promise<Blob> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch(`/api/builds/${id}/download`, {
+        method: 'GET',
+        headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+      });
+
+      if (res.status === 410) {
+        throw new Error('El instalador solicitado ha caducado por la política de retención del servidor.');
+      }
+      if (res.status === 403) {
+        throw new Error('Acceso denegado: No tiene permisos suficientes para descargar este paquete.');
+      }
+      if (res.status === 409) {
+        throw new Error('El paquete aún se encuentra en cola o proceso de compilación.');
+      }
+      if (!res.ok) {
+        throw new Error(`Error en la descarga del paquete (${res.status})`);
+      }
+
+      return await res.blob();
+    }
+
+    // Offline / Demo fallback: Return synthetic ZIP package blob
+    const job = this.mockBuildJobs.find((j) => j.id === id);
+    if (!job) {
+      throw new Error('Trabajo de compilación no encontrado.');
+    }
+    if (job.status !== 'completed') {
+      throw new Error('El paquete aún se encuentra en proceso de compilación.');
+    }
+
+    const manifest = JSON.stringify(
+      {
+        build_id: job.id,
+        role: job.role,
+        profile_id: job.profile_id,
+        generated_at: job.completed_at || job.created_at,
+        format: 'cercano-signed-package-v1',
+        files: ['cercano-profile.signed.json', 'build-manifest.json', 'SHA256SUMS'],
+      },
+      null,
+      2
+    );
+
+    const zipHeader = `PK\x03\x04\x14\x00\x00\x00\x08\x00`;
+    const content = `${zipHeader}\n[CERCANO-OFFLINE-ZIP-PACKAGE]\n${manifest}\n`;
+    return new Blob([content], { type: 'application/zip' });
+  }
+
+  /**
+   * Revokes an active installer package.
+   * Calls POST /api/builds/:id/revoke.
+   */
+  public async revokeBuildJob(id: string, reason?: string): Promise<void> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch(`/api/builds/${id}/revoke`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ reason: reason || 'Revocado desde consola web' }),
+      });
+      if (!res.ok) {
+        throw new Error('Error al revocar el instalador en el servidor.');
+      }
+      return;
+    }
+
+    const job = this.mockBuildJobs.find((j) => j.id === id);
+    if (job) {
+      job.status = 'revoked';
+      job.logs += `\n[${new Date().toISOString()}] Instalador revocado por el operador. Razón: ${reason || 'N/A'}`;
+    }
   }
 }
 

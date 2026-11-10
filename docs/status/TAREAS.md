@@ -88,7 +88,7 @@ Fuente: `docs/PLAN-F4-CONSOLA.md`. F4 puede ir en paralelo con F3; solo F4-07 (g
 | F4-04 | 2FA TOTP: enrolar, login en dos pasos, recovery, revocación | F4-02, F4-03 | ControlPlane | Seguridad | Hecho |
 | F4-05 | Middleware RBAC y permisos `chat:*` | F4-03 | ControlPlane | QA | Hecho |
 | F4-06 | Consola: usuarios, roles, auditoría, ajustes y 2FA; login 2FA | F4-03, F4-04, F4-05 | Web | QA | Hecho |
-| F4-07 | Integración del generador en la consola (F3-07 hecho; espera F4-05/06) | F3-07, F4-05, F4-06 | Web | QA | Pendiente |
+| F4-07 | Integración del generador en la consola (F3-07 hecho; espera F4-05/06) | F3-07, F4-05, F4-06 | Web | QA | Hecho |
 | F4-08 | Pruebas de permisos, IDOR, 2FA y sesiones | F4-03…07 | QA | Coordinador | Pendiente |
 | F4-09 | E2E y gate F4 | F4-08 | QA | Coordinador | Pendiente |
 | F4-10 | Cierre de F4, documentación e informe | F4-09 | Coordinador | Dueño | Pendiente |

@@ -111,6 +111,97 @@ export interface CustomClientProfile {
   allow_terminal: boolean;
 }
 
+export type BuildRole = 'soporte' | 'tecnico';
+export type BuildJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'revoked';
+
+export interface BuildJobRecord {
+  id: string;
+  user_id: string;
+  role: BuildRole;
+  profile_id: string;
+  status: BuildJobStatus;
+  artifact_path?: string | null;
+  error_message?: string | null;
+  logs?: string | null;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  expires_at?: string | null;
+}
+
+export interface EnqueueBuildResponse {
+  id: string;
+  user_id: string;
+  role: string;
+  profile_id: string;
+  status: string;
+  created_at: string;
+  expires_at?: string | null;
+}
+
+export interface BuildServerConfig {
+  rendezvous_server: string;
+  relay_server: string;
+  api_server: string;
+  server_public_key: string;
+}
+
+export interface BuildIdentityConfig {
+  app_name?: string;
+  about_text?: string;
+  icon?: string;
+}
+
+export interface BuildPolicyConfig {
+  allow_incoming: boolean;
+  allow_outgoing: boolean;
+  unattended_access: boolean;
+  require_approval: boolean;
+  allow_file_transfer?: boolean;
+  allow_clipboard?: boolean;
+  allow_audio?: boolean;
+  allow_terminal?: boolean;
+  allow_port_forward?: boolean;
+  hide_network_settings?: boolean;
+  enable_elevation?: boolean;
+  unattended_elevation?: boolean;
+}
+
+export interface BuildInstallationConfig {
+  mode: 'installed' | 'portable';
+  install_path?: string | null;
+  auto_start: boolean;
+  create_desktop_shortcut: boolean;
+  silent: boolean;
+}
+
+export interface BuildIdentificationConfig {
+  device_group?: string;
+  default_owner?: string;
+}
+
+export interface BuildExpirationConfig {
+  expires_at?: string | null;
+  max_uses?: number | null;
+}
+
+export interface CercanoProfilePayload {
+  schema_version: string;
+  profile_id: string;
+  created_at?: string;
+  role: BuildRole;
+  server: BuildServerConfig;
+  identity?: BuildIdentityConfig;
+  policy: BuildPolicyConfig;
+  installation: BuildInstallationConfig;
+  identification?: BuildIdentificationConfig;
+  expiration?: BuildExpirationConfig;
+}
+
+export interface EnqueueBuildRequest {
+  profile: CercanoProfilePayload;
+}
+
 export type ChatStatus = 'waiting' | 'assigned' | 'active' | 'closed';
 export type ChatSenderType = 'client' | 'technician' | 'system';
 
