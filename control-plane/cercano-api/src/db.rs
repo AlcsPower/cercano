@@ -178,6 +178,27 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_devices_role ON devices(role);
         "#,
     },
+    Migration {
+        version: 7,
+        name: "007_console_rbac_2fa",
+        sql: r#"
+        ALTER TABLE users ADD COLUMN totp_secret TEXT;
+        ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE users ADD COLUMN is_2fa_required INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE users ADD COLUMN totp_confirmed_at TEXT;
+        ALTER TABLE users ADD COLUMN recovery_codes TEXT;
+
+        CREATE TABLE IF NOT EXISTS mfa_challenges (
+            token      TEXT PRIMARY KEY,
+            user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            expires_at TEXT NOT NULL,
+            used_at    TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expires_at ON mfa_challenges(expires_at);
+        "#,
+    },
 ];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
@@ -341,7 +362,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 6);
+        assert_eq!(rows.len(), 7);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
         assert_eq!(rows[1].get::<i64, _>("version"), 2);
@@ -354,6 +375,8 @@ mod tests {
         assert_eq!(rows[4].get::<String, _>("name"), "005_revocations_schema");
         assert_eq!(rows[5].get::<i64, _>("version"), 6);
         assert_eq!(rows[5].get::<String, _>("name"), "006_device_roles_schema");
+        assert_eq!(rows[6].get::<i64, _>("version"), 7);
+        assert_eq!(rows[6].get::<String, _>("name"), "007_console_rbac_2fa");
 
         // Verify build_jobs table exists
         let build_jobs = sqlx::query("SELECT count(*) as cnt FROM build_jobs")
@@ -390,6 +413,13 @@ mod tests {
             .unwrap();
         assert_eq!(attempts.get::<i64, _>("cnt"), 0);
 
+        // Verify the F4 2FA challenge table exists
+        let challenges = sqlx::query("SELECT count(*) as cnt FROM mfa_challenges")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(challenges.get::<i64, _>("cnt"), 0);
+
         // Verify idempotency of run_migrations
         let second_run = run_migrations(&pool).await;
         assert!(second_run.is_ok());
@@ -408,7 +438,62 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 6);
+        assert_eq!(rows.len(), 7);
+    }
+
+    #[tokio::test]
+    async fn test_f4_02_2fa_schema_columns_and_cascade() {
+        let pool = init_db("sqlite::memory:").await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO users (id, username, password_hash, role, is_active, totp_secret, totp_enabled, is_2fa_required, totp_confirmed_at, recovery_codes) VALUES (?, ?, ?, ?, 1, ?, 1, 1, ?, ?)",
+        )
+        .bind("u-2fa")
+        .bind("twofa")
+        .bind("hash")
+        .bind("admin")
+        .bind("JBSWY3DPEHPK3PXP")
+        .bind("2026-11-10T00:00:00Z")
+        .bind(r#"[{"hash":"abc","used":false}]"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let row = sqlx::query(
+            "SELECT totp_secret, totp_enabled, is_2fa_required, totp_confirmed_at, recovery_codes FROM users WHERE id = 'u-2fa'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.get::<String, _>("totp_secret"), "JBSWY3DPEHPK3PXP");
+        assert_eq!(row.get::<i64, _>("totp_enabled"), 1);
+        assert_eq!(row.get::<i64, _>("is_2fa_required"), 1);
+        assert_eq!(
+            row.get::<String, _>("totp_confirmed_at"),
+            "2026-11-10T00:00:00Z"
+        );
+        assert_eq!(
+            row.get::<String, _>("recovery_codes"),
+            r#"[{"hash":"abc","used":false}]"#
+        );
+
+        sqlx::query(
+            "INSERT INTO mfa_challenges (token, user_id, expires_at) VALUES ('ch-1', 'u-2fa', datetime('now', '+5 minutes'))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query("DELETE FROM users WHERE id = 'u-2fa'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let remaining = sqlx::query("SELECT count(*) as cnt FROM mfa_challenges")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining.get::<i64, _>("cnt"), 0);
     }
     #[tokio::test]
     async fn test_purge_stale_records() {
