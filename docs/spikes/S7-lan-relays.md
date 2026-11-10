@@ -4,7 +4,7 @@
 - **Tarea asociada:** F6-01
 - **Fecha:** 2026-11-10
 - **Rol:** Agente-Servidor + Agente-Seguridad
-- **Estado:** En curso — diseño, umbrales y amenazas fijados; **medición pendiente en laboratorio**
+- **Estado:** En verificación — diseño, umbrales, amenazas y **medición de red** hechos; la medición de sesión depende de F6-05/F6-06 (ver §10)
 - **Criterios de aceptación:** plan F6-01 (informe reproducible) y TC-F6-001…020
 
 ---
@@ -129,12 +129,15 @@ Si no se cumplen, se difiere con el ADR de F6-07 y los números de §3 como evid
 - Veredicto por ruta: cumple / no cumple, con el motivo; y decisión de WebSocket (§7).
 - Evidencia de que la conmutación no duplica sesiones ni eventos de auditoría.
 
-## 10. Pendiente y límites del spike
+## 10. Medición realizada y límites
 
-- **No ejecutado:** esta estación no tiene motor Docker (`docker` sin engine y sin WSL accesible), y
-  el laboratorio de §2 exige contenedores. El informe F6-01 queda en «En curso» hasta medir.
-- El laboratorio LAN no representa WAN: la latencia real de un cliente remoto no se extrapola; los
-  umbrales de §3 son para LAN y se revisan si aparece un escenario WAN.
-- Bloquear UDP con firewall local puede variar entre Windows y Linux; se documenta el método usado.
-- Sin proxy corporativo real, la condición 1 de §7 no se puede demostrar aquí: WebSocket seguirá
-  diferido hasta que exista ese escenario.
+**Medido (2026-11-10, laboratorio real):** RTT/jitter/pérdida de directa, un salto y dos saltos de
+relay; throughput TCP directo, con 20 ms ±5 ms y 1 % de pérdida, y con 100 ms ±20 ms; consumo del nodo
+relay en reposo y con 10 conexiones. Resultados y evaluación en
+[`docs/status/informes/F6-01.md`](../status/informes/F6-01.md) §3–§4. Hallazgo principal: **la
+pérdida domina** (1 % de pérdida a 20 ms de RTT deja el TCP en 0,7–0,9 MB/s), y el criterio «3× la
+directa» no es informativo por debajo de 10 ms; se propone un suelo absoluto que decide el Coordinador.
+
+**No medible todavía:** establecimiento y RTT de sesión, capacidad real y coste de reenvío de `hbbr`
+con tráfico (necesitan el cliente con sesión y el selector de F6-05); conmutación y fallback (F6-05/06);
+WebSocket (F6-07 y un proxy corporativo real). Los umbrales de §3 son de LAN y no se extrapolan a WAN.
