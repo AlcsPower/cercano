@@ -84,7 +84,7 @@ Fuente: `docs/PLAN-F4-CONSOLA.md`. F4 puede ir en paralelo con F3; solo F4-07 (g
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
 | F4-01 | Especificar matriz RBAC, flujo 2FA y eventos `auth.2fa_*` | F1-04, F2-08 | Coordinador + Seguridad | Seguridad | En curso |
-| F4-02 | Migración 007: campos 2FA y `mfa_challenges` | F4-01 | ControlPlane | QA | En curso |
+| F4-02 | Migración 007: campos 2FA y `mfa_challenges` | F4-01 | ControlPlane | QA | En verificación |
 | F4-03 | API de usuarios, roles y ajustes con permisos | F4-02 | ControlPlane | QA | Pendiente |
 | F4-04 | 2FA TOTP: enrolar, login en dos pasos, recovery, revocación | F4-02, F4-03 | ControlPlane | Seguridad | Pendiente |
 | F4-05 | Middleware RBAC y permisos `chat:*` | F4-03 | ControlPlane | QA | Pendiente |
