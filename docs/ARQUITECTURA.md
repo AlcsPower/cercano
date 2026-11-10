@@ -133,7 +133,7 @@ Importante: S3–S5 se hacen observando el **código abierto** del cliente y su 
 | Cadena de suministro | Dependencia comprometida | `cargo-deny`, `cargo-audit`, SBOM, builds reproducibles, firma |
 | MITM en LAN | Interceptación en red local | Cifrado extremo a extremo del protocolo, verificación de clave del servidor, TLS en API |
 
-Cada fase incluye una revisión de seguridad del Agente-Seguridad (ver `AGENTS.md`).
+Cada fase incluye una revisión de seguridad del Agente-Seguridad (ver `AGENTS.md`). El análisis exhaustivo bajo metodología STRIDE y LINDDUN para roles de instalador y elevación de privilegios se detalla en [`docs/specs/threat-model-roles-elevation.md`](specs/threat-model-roles-elevation.md) (revisión F3-18).
 
 ## 7. Licencia y límites legales
 

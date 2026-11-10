@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Licencia-AGPL--3.0-blue.svg" alt="Licencia AGPL-3.0">
   <img src="https://img.shields.io/badge/Rust-1.75%2B-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/React-18-61dafb.svg" alt="React 18">
-  <img src="https://img.shields.io/badge/Tests-194%20passing-brightgreen.svg" alt="Tests Status">
+  <img src="https://img.shields.io/badge/Tests-186%20Rust%20passing-brightgreen.svg" alt="Tests Status">
 </p>
 
 ---
@@ -23,8 +23,8 @@ Ofrece las capacidades empresariales que tradicionalmente se reservan a versione
 3. **Generador y empaquetador de instaladores personalizados (Hito M2)**: Compilación reproducible de instaladores Windows (`.exe` y `.msi`) configurados por rol (`soporte` vs `tecnico`), con firma digital Authenticode enchufable, listas de materiales de software (SBOM CycloneDX/SPDX) y verificación de procedencia.
 4. **Seguridad y roles aplicados en el servidor (ADR-008)**: El servidor valida de forma inmutable el tipo de instalador (`installer_id`), bloqueando cualquier intento de inicio de conexiones o escalada no autorizada desde clientes de soporte y disparando alarmas de seguridad críticas.
 
-> 🚀 **Estado del Proyecto: Fase 3 avanzada (Hito M2: Generador de instaladores personalizados).**  
-> Fases 0 (Fundación), 1 (Núcleo y Paridad Básica) y 2 (Auditoría y Traza Inmutable) completadas. Consulta el detalle en [`docs/status/TAREAS.md`](docs/status/TAREAS.md) y [`docs/ROADMAP.md`](docs/ROADMAP.md).  
+> 🚀 **Estado del Proyecto: Fase 3 completada (Hito M2: Generador de instaladores personalizados cerrado).**  
+> Fases 0 (Fundación), 1 (Núcleo y Paridad Básica), 2 (Auditoría y Traza Inmutable) y 3 (Generador y Roles de Instalador) completadas. Consulta el detalle en [`docs/status/F3-cierre.md`](docs/status/F3-cierre.md), [`docs/status/TAREAS.md`](docs/status/TAREAS.md) y [`docs/ROADMAP.md`](docs/ROADMAP.md).  
 > **Rama principal de trabajo y coordinación:** [`docs/F0-01-gobernanza`](https://github.com/AlcsPower/cercano/tree/docs/F0-01-gobernanza).
 
 ---
@@ -43,7 +43,7 @@ cercano/
 │   └── cercano-audit/    # Herramienta CLI: Exportación y verificación forense fuera de línea
 ├── console-web/          # Consola Web administrativa: React 18 + Vite + Tailwind CSS (Diseño Apple/Emil)
 ├── vendor/               # Código base del cliente y servidor gestionado bajo parches limpios e idempotentes
-├── patches/              # Parches modulares con gobernanza estricta (001 a 006) per AGENTS.md
+├── patches/              # Parches modulares con gobernanza estricta (001 a 007) per AGENTS.md
 ├── branding/             # Guía de marca, logotipos oficiales (SVG/PNG) e iconos de instalador (.ico)
 ├── docs/                 # Documentación técnica, especificaciones RFC, guías de despliegue y ADRs
 └── tools/                # Utilidades de desarrollo, scripts de parches y verificación de licencias AGPL-3.0
@@ -68,6 +68,9 @@ cercano/
 | **Revocación y Caducidad Inmediata** | Publicación de listas de revocación con caché HTTP y ETag; rechazo fulminante de dispositivos revogados o caducados (< 60 s). | `cercano-api` | ✅ Producción |
 | **SBOM y Atestación de Procedencia** | Generación de SBOMs estándar CycloneDX (v1.5) y SPDX (v2.3) con hash reproducible exacto en `SHA256SUMS` y `build-provenance.json`. | `cercano-build` | ✅ Producción |
 | **Enforcement de Roles en Servidor** | Mitigación autoritativa (ADR-008): el servidor bloquea el inicio de conexiones desde instaladores `soporte` y dispara `alarm.role_violation`. | `cercano-api` | ✅ Producción |
+| **Elevación con Credenciales Efímeras** | Flujo Spike S6 con consentimiento de usuario (60s), borrado en RAM (`zeroize`), bloqueo tras 3 intentos (`elev.exhausted`) y Zero Secrets. | `cercano-api` + cliente | ✅ Producción |
+| **Auditoría `elev.*` y Alarmas** | Esquema extendido RFC con eventos de elevación encadenados y 5 alarmas en tiempo real (`alarm.role_violation`, `elev_exhausted`, etc.). | `audit-core` + `cercano-api` | ✅ Producción |
+| **Modelo de Amenazas y Fuzzing** | Análisis STRIDE/LINDDUN formalizado (`threat-model-roles-elevation.md`), pruebas de abuso y fuzzing con 0 hallazgos altos/críticos. | Documentación + tests | ✅ Producción |
 | **Guía de Despliegue Masivo** | Documentación exhaustiva para despliegues empresariales mediante GPO, Microsoft Intune, RMM, exclusiones EDR y scripts de validación. | `docs/guias/` | ✅ Producción |
 
 ---
