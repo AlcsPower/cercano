@@ -199,6 +199,121 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expires_at ON mfa_challenges(expires_at);
         "#,
     },
+    Migration {
+        version: 8,
+        name: "008_chat_schema",
+        sql: r#"
+        CREATE TABLE IF NOT EXISTS chat_devices (
+            device_id    TEXT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+            public_key   TEXT NOT NULL,
+            installer_id TEXT,
+            display_name TEXT,
+            last_auth_at TEXT,
+            revoked_at   TEXT,
+            created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_auth_nonces (
+            id         TEXT PRIMARY KEY,
+            device_id  TEXT NOT NULL REFERENCES chat_devices(device_id) ON DELETE CASCADE,
+            nonce      TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_at    TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_device_sessions (
+            token      TEXT PRIMARY KEY,
+            device_id  TEXT NOT NULL REFERENCES chat_devices(device_id) ON DELETE CASCADE,
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_conversations (
+            id                 TEXT PRIMARY KEY,
+            device_id          TEXT NOT NULL,
+            device_name        TEXT,
+            device_hostname    TEXT,
+            device_os          TEXT,
+            installer_id       TEXT,
+            status             TEXT NOT NULL DEFAULT 'waiting'
+                               CHECK (status IN ('waiting','assigned','active','closed')),
+            assigned_user_id   TEXT REFERENCES users(id) ON DELETE SET NULL,
+            contact_first_name TEXT,
+            contact_last_name  TEXT,
+            created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+            last_message_at    TEXT,
+            closed_at          TEXT,
+            closed_by          TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id                TEXT PRIMARY KEY,
+            conversation_id   TEXT NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            sender_type       TEXT NOT NULL CHECK (sender_type IN ('client','technician','system')),
+            sender_id         TEXT,
+            sender_name       TEXT,
+            body              TEXT NOT NULL DEFAULT '',
+            client_message_id TEXT,
+            created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_attachments (
+            id            TEXT PRIMARY KEY,
+            message_id    TEXT NOT NULL UNIQUE REFERENCES chat_messages(id) ON DELETE CASCADE,
+            original_name TEXT NOT NULL,
+            mime          TEXT NOT NULL,
+            size_bytes    INTEGER NOT NULL,
+            sha256        TEXT NOT NULL,
+            storage_key   TEXT NOT NULL UNIQUE,
+            created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_reads (
+            conversation_id TEXT NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            reader_type     TEXT NOT NULL CHECK (reader_type IN ('device','user')),
+            reader_id       TEXT NOT NULL,
+            last_read_at    TEXT NOT NULL,
+            PRIMARY KEY (conversation_id, reader_type, reader_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_branding (
+            id                INTEGER PRIMARY KEY CHECK (id = 1),
+            organization_name TEXT,
+            support_name      TEXT NOT NULL DEFAULT 'Cercano Soporte',
+            logo_url          TEXT,
+            accent_color      TEXT NOT NULL DEFAULT '#3B5BFF',
+            welcome_text      TEXT,
+            info_text         TEXT,
+            privacy_text      TEXT,
+            updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_by        TEXT
+        );
+        INSERT OR IGNORE INTO chat_branding (id) VALUES (1);
+
+        CREATE INDEX IF NOT EXISTS idx_chat_conversations_status
+            ON chat_conversations(status, last_message_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_chat_conversations_assignee
+            ON chat_conversations(assigned_user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_chat_conversations_device
+            ON chat_conversations(device_id, status);
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation
+            ON chat_messages(conversation_id, created_at, id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_messages_client_id
+            ON chat_messages(conversation_id, sender_type, sender_id, client_message_id)
+            WHERE client_message_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_chat_attachments_message
+            ON chat_attachments(message_id);
+        CREATE INDEX IF NOT EXISTS idx_chat_device_sessions_expiry
+            ON chat_device_sessions(expires_at);
+        CREATE INDEX IF NOT EXISTS idx_chat_nonces_expiry
+            ON chat_auth_nonces(expires_at);
+        CREATE INDEX IF NOT EXISTS idx_chat_reads_reader
+            ON chat_reads(reader_type, reader_id);
+        "#,
+    },
 ];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
@@ -362,7 +477,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 7);
+        assert_eq!(rows.len(), 8);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
         assert_eq!(rows[1].get::<i64, _>("version"), 2);
@@ -377,6 +492,8 @@ mod tests {
         assert_eq!(rows[5].get::<String, _>("name"), "006_device_roles_schema");
         assert_eq!(rows[6].get::<i64, _>("version"), 7);
         assert_eq!(rows[6].get::<String, _>("name"), "007_console_rbac_2fa");
+        assert_eq!(rows[7].get::<i64, _>("version"), 8);
+        assert_eq!(rows[7].get::<String, _>("name"), "008_chat_schema");
 
         // Verify build_jobs table exists
         let build_jobs = sqlx::query("SELECT count(*) as cnt FROM build_jobs")
@@ -420,6 +537,31 @@ mod tests {
             .unwrap();
         assert_eq!(challenges.get::<i64, _>("cnt"), 0);
 
+        // Verify the chat schema and its singleton branding seed
+        for table in [
+            "chat_devices",
+            "chat_auth_nonces",
+            "chat_device_sessions",
+            "chat_conversations",
+            "chat_messages",
+            "chat_attachments",
+            "chat_reads",
+        ] {
+            let count = sqlx::query(&format!("SELECT count(*) as cnt FROM {table}"))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(count.get::<i64, _>("cnt"), 0, "tabla {table} vacía");
+        }
+
+        let branding = sqlx::query("SELECT id, support_name, accent_color FROM chat_branding")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(branding.get::<i64, _>("id"), 1);
+        assert_eq!(branding.get::<String, _>("support_name"), "Cercano Soporte");
+        assert_eq!(branding.get::<String, _>("accent_color"), "#3B5BFF");
+
         // Verify idempotency of run_migrations
         let second_run = run_migrations(&pool).await;
         assert!(second_run.is_ok());
@@ -438,7 +580,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 7);
+        assert_eq!(rows.len(), 8);
     }
 
     #[tokio::test]
@@ -494,6 +636,98 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(remaining.get::<i64, _>("cnt"), 0);
+    }
+
+    #[tokio::test]
+    async fn test_f4_5_02_chat_schema_constraints_and_relations() {
+        let pool = init_db("sqlite::memory:").await.unwrap();
+
+        sqlx::query("INSERT INTO devices (id, name) VALUES ('dev-1', 'PC-RECEPCION')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO users (id, username, password_hash, role, is_active) VALUES ('u-1', 'tech', 'hash', 'admin', 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO chat_conversations (id, device_id, device_name, status, assigned_user_id, contact_first_name, contact_last_name) VALUES ('c-1', 'dev-1', 'PC-RECEPCION', 'waiting', 'u-1', 'Ana', 'Pérez')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO chat_messages (id, conversation_id, sender_type, sender_id, sender_name, body) VALUES ('m-1', 'c-1', 'client', 'dev-1', 'PC-RECEPCION', 'Hola')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO chat_attachments (id, message_id, original_name, mime, size_bytes, sha256, storage_key) VALUES ('a-1', 'm-1', 'captura.png', 'image/png', 1234, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'k-1')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO chat_reads (conversation_id, reader_type, reader_id, last_read_at) VALUES ('c-1', 'device', 'dev-1', datetime('now'))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO chat_devices (device_id, public_key) VALUES ('dev-1', 'key')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Status CHECK
+        assert!(sqlx::query(
+            "INSERT INTO chat_conversations (id, device_id, status) VALUES ('c-bad', 'dev-1', 'bogus')"
+        )
+        .execute(&pool)
+        .await
+        .is_err());
+
+        // Foreign key on messages
+        assert!(sqlx::query(
+            "INSERT INTO chat_messages (id, conversation_id, sender_type) VALUES ('m-bad', 'missing', 'client')"
+        )
+        .execute(&pool)
+        .await
+        .is_err());
+
+        // Deleting the assigned user sets the conversation assignee to NULL.
+        sqlx::query("DELETE FROM users WHERE id = 'u-1'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let assigned =
+            sqlx::query("SELECT assigned_user_id FROM chat_conversations WHERE id = 'c-1'")
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+                .get::<Option<String>, _>("assigned_user_id");
+        assert!(assigned.is_none());
+
+        // Deleting the device cascades the chat identity but preserves the conversation snapshot.
+        sqlx::query("DELETE FROM devices WHERE id = 'dev-1'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let identities = sqlx::query("SELECT count(*) as cnt FROM chat_devices")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get::<i64, _>("cnt");
+        assert_eq!(identities, 0);
+        let conversations = sqlx::query("SELECT count(*) as cnt FROM chat_conversations")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get::<i64, _>("cnt");
+        assert_eq!(conversations, 1);
     }
     #[tokio::test]
     async fn test_purge_stale_records() {

@@ -21,6 +21,7 @@ pub mod alarms;
 pub mod audit;
 pub mod auth;
 pub mod builder;
+pub mod chat;
 pub mod config;
 pub mod db;
 pub mod devices;

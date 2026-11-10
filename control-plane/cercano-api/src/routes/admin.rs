@@ -344,12 +344,13 @@ pub async fn update_user_handler(
 
     if let Some(role) = payload.role.as_deref() {
         let role = validate_role(role)?;
-        if current.role == permissions::ADMIN && role != permissions::ADMIN {
-            if active_admin_count(&state.db).await? <= 1 {
-                return Err(AdminError::Conflict(
-                    "No se puede degradar al último administrador.".to_string(),
-                ));
-            }
+        if current.role == permissions::ADMIN
+            && role != permissions::ADMIN
+            && active_admin_count(&state.db).await? <= 1
+        {
+            return Err(AdminError::Conflict(
+                "No se puede degradar al último administrador.".to_string(),
+            ));
         }
         if role != current.role {
             sqlx::query("UPDATE users SET role = ? WHERE id = ?")
@@ -362,12 +363,13 @@ pub async fn update_user_handler(
     }
 
     if let Some(is_active) = payload.is_active {
-        if current.role == permissions::ADMIN && !is_active {
-            if active_admin_count(&state.db).await? <= 1 {
-                return Err(AdminError::Conflict(
-                    "No se puede desactivar al último administrador.".to_string(),
-                ));
-            }
+        if current.role == permissions::ADMIN
+            && !is_active
+            && active_admin_count(&state.db).await? <= 1
+        {
+            return Err(AdminError::Conflict(
+                "No se puede desactivar al último administrador.".to_string(),
+            ));
         }
         if is_active != current.is_active {
             sqlx::query("UPDATE users SET is_active = ? WHERE id = ?")
