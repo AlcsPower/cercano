@@ -2,6 +2,7 @@
 
 **Para:** Coordinador · **De:** Agente Web / ControlPlane (sesión actual) · **Fecha:** 2026-11-09
 **Asunto:** Revisar y aprobar `docs/PLAN-F4-CONSOLA.md`; confirmar el arranque de F4 en paralelo con F3.
+**Estado:** Aprobado por el Coordinador el 2026-11-10. F4-01 y F4-02 en curso.
 
 ## 1. Contexto
 
@@ -14,7 +15,7 @@
 1. **F4 no espera a F3.** F4 depende de F1-04 y F2-08 (hechos). Solo **F4-07** (generador en la consola) depende de F3-07 (ya hecho) y de F4-05/06 (RBAC/consola). El resto de F4 puede ejecutarse en paralelo con F3.
 2. **RBAC** sobre `users.role` (`admin`, `operator`, `auditor`; `user` legacy como `operator` de solo lectura), con matriz de permisos por endpoint y vista. Sin tabla de permisos configurable en v1.
 3. **2FA TOTP** (RFC 6238) con `totp-rs` (MIT): enrolamiento, login en dos pasos (`202` + `mfa_token`, sesión solo tras verificar), códigos de recuperación con hash SHA-256 de un solo uso, bloqueo tras 5 fallos y auditoría `auth.2fa_*`. El secreto TOTP se guarda en la BD; en v1 no se cifra a nivel de campo (se documenta como deuda o se añade cifrado si Seguridad lo exige).
-4. **Migración 005 aditiva:** `totp_secret`, `totp_enabled`, `is_2fa_required`, `totp_confirmed_at`, `recovery_codes` y `mfa_challenges`; no se recrea `users`.
+4. **Migración 007 aditiva:** `totp_secret`, `totp_enabled`, `is_2fa_required`, `totp_confirmed_at`, `recovery_codes` y `mfa_challenges`; no se recrea `users`. La migración de chat de F4.5 será 008 y se mergea después.
 5. **Tareas F4-01…F4-10** y su reflejo en `docs/status/TAREAS.md`. F4-05/06 (RBAC/consola) deben ir antes de F4-07.
 6. **Relación F4.5:** la consola aporta `chat:attend/manage/read` y la marca del chat (F4.5-16); el icono/nombre del ejecutable sigue en el perfil firmado F3.
 
@@ -24,7 +25,7 @@
 |---|---|---|
 | `docs/F4.5-01-chat-design` (`.worktrees/f4.5-docs`) | `3c4e5dc`, `e6368ee` | Plan F4, guía de operación del chat, marca del chat, TAREAS/ROADMAP. Sin marca fija en la UI. |
 | `feat/F4.5-08-console-chat` (`.worktrees/f4.5-console`) | `c3f3856` | Consola de chat y formulario de marca, mock-first; rebasada sobre F3-07. |
-| `feat/F4.5-02-chat-schema` (`.worktrees/f4.5-02`) | `c6416fa` | Migración 004 y modelos; pendiente de ejecutar la suite. |
+| `feat/F4.5-02-chat-schema` (`.worktrees/f4.5-02`) | `c6416fa` | Migración 008 (rama antigua con 004; requiere rebase/renumeración) y modelos; pendiente de ejecutar la suite. |
 
 - **Consola:** `tsc --noEmit` y `lint:design` en verde. `npm run build` no se pudo ejecutar en este equipo: esbuild devuelve `spawn EPERM` por el sandbox; debe correrse en CI/fuera del sandbox.
 - **Rust:** `cargo fmt --check` verde. `cargo test` no se pudo ejecutar: faltan `link.exe` (MSVC) y `dlltool.exe` (GNU) en este equipo. CI/laboratorio debe ejecutar la suite.

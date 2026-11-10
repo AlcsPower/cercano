@@ -135,7 +135,7 @@ El nombre del equipo (`device_name`/`hostname`) no basta para que el técnico id
 
 ## 5. Modelo de datos
 
-Migración **004_chat_schema**, aditiva. Se aplica sobre bases existentes sin tocar tablas previas. `schema_migrations` pasa de 3 a 4 filas.
+Migración **008_chat_schema**, aditiva. Se aplica **después de la 007 de F4** (`007_console_rbac_2fa`) sobre bases existentes sin tocar tablas previas. `schema_migrations` pasa de 7 a 8 filas.
 
 ```sql
 CREATE TABLE IF NOT EXISTS chat_devices (
@@ -694,7 +694,7 @@ La fuente de la marca visible (nombre de la organización, nombre de soporte, lo
 
 ## 13. Compatibilidad y versionado
 
-- La migración 004 es aditiva; no cambia tablas ni endpoints existentes.
+- La migración 008 es aditiva; no cambia tablas ni endpoints existentes. Se aplica después de la 007 de F4.
 - La API de chat es v1 bajo `/api/chat`; un cambio incompatible requiere `/api/chat/v2` o un nuevo contrato documentado.
 - El perfil gana un objeto opcional `chat`; el esquema sube de MINOR y los clientes antiguos rechazan perfiles que no entienden (comportamiento seguro). El generador no emite `chat` para clientes que no lo soportan.
 - El parche 006 es aditivo y se registra en `patches/INDEX.md`; no reestructura rutas existentes.

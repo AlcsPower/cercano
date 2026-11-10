@@ -29,7 +29,7 @@ Una persona usuaria con **Cercano Soporte** instalado abre una conversación des
 La arquitectura, el modelo de datos, la API, la autenticación, la SSE, los adjuntos y los límites están en [`docs/specs/chat.md`](specs/chat.md). Resumen:
 
 - **Cliente:** módulo Rust nuevo (red, firma, SSE, toast) + página Flutter nueva; parche `006-client-support-chat.patch`; hooks delgados; sin reestructurar el cliente upstream.
-- **API:** módulo `chat/` en `cercano-api`; migración 004; `ChatHub`; SSE; retención; auditoría `chat.*`.
+- **API:** módulo `chat/` en `cercano-api`; migración 008 (después de la 007 de F4); `ChatHub`; SSE; retención; auditoría `chat.*`.
 - **Consola:** `ChatView` con lista y conversación; badge, notificaciones y reconexión; sin librerías nuevas.
 - **Despliegue:** sin puertos nuevos; nginx ajusta SSE y tamaño de subida; TLS obligatorio.
 
@@ -51,7 +51,7 @@ La arquitectura, el modelo de datos, la API, la autenticación, la SSE, los adju
 | ID | Tarea | Dep. | Rol | Verifica |
 |---|---|---|---|---|
 | F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA |
-| F4.5-02 | Migración 004 y modelos | F4.5-01 | ControlPlane | QA |
+| F4.5-02 | Migración 008 y modelos | F4.5-01, F4-02 | ControlPlane | QA |
 | F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad |
 | F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4 | ControlPlane | QA |
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad |
@@ -73,9 +73,9 @@ La arquitectura, el modelo de datos, la API, la autenticación, la SSE, los adju
 Crear `docs/specs/chat.md`, `docs/adr/010-cercano-chat.md` y este plan; actualizar `ARQUITECTURA.md`, `ROADMAP.md`, `TAREAS.md`, `PLAN-DE-PRUEBAS.md`, el esquema de auditoría y el informe F4.5-01. No se toca código.
 *CA:* documentos coherentes; esquema de auditoría válido en JSON; tareas y `TC-F4.5-*` registrados; `git diff` solo de documentación; F4.5-01 `En verificación`.
 
-**F4.5-02 Migración 004 y modelos.**
-Añadir a `control-plane/cercano-api/src/db.rs` la migración `004_chat_schema` con las tablas e índices de `docs/specs/chat.md` §5, incluidos `contact_first_name` y `contact_last_name` en `chat_conversations` **y la tabla `chat_branding`**. Crear `src/chat/mod.rs` con los structs/servicios base y la actualización de `schema_migrations` esperada (4 filas). Actualizar las pruebas de `db.rs`.
-*CA:* migración sobre BD vacía y sobre BD con 001–003 aplicadas; sin pérdida de datos; índices presentes; `cargo test -p cercano-api` en verde; prueba de idempotencia de migraciones.
+**F4.5-02 Migración 008 y modelos.**
+Añadir a `control-plane/cercano-api/src/db.rs` la migración `008_chat_schema` con las tablas e índices de `docs/specs/chat.md` §5, incluidos `contact_first_name` y `contact_last_name` en `chat_conversations` **y la tabla `chat_branding`**. Se aplica **después de la migración 007 de F4**; `schema_migrations` esperada: 8 filas (versiones 1–8). Crear `src/chat/mod.rs` con los structs/servicios base. Actualizar las pruebas de `db.rs`. **La rama existente `feat/F4.5-02-chat-schema` (`c6416fa`) está basada en F3-02 con la migración 004 y debe rebasarse sobre la base actual y renumerarse a 008 antes de mergear.**
+*CA:* migración sobre BD vacía y sobre BD con 001–007; sin pérdida de datos; índices presentes; `cargo test -p cercano-api` en verde; prueba de idempotencia de migraciones.
 
 **F4.5-03 Autenticación de dispositivo.**
 Crear `src/chat/auth.rs` y las rutas `POST /api/chat/devices/register`, `/auth/challenge`, `/auth/verify`, `/devices/{id}/reset`. Añadir `CERCANO_CLIENT_INGEST_TOKEN` como precondición del registro (solo HTTPS), fijación de clave, nonces de un solo uso, tokens de 15 min, revocación y auditoría `chat.device.*`/`chat.auth.failed`.

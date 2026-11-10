@@ -1,6 +1,6 @@
 # Plan de trabajo — F4: Consola web, RBAC y 2FA
 
-**Versión:** 0.1 · **Fecha:** 2026-11-09 · **Fase:** F4 · **Duración estimada:** 4 semanas
+**Versión:** 0.1 · **Fecha:** 2026-11-09 · **Estado:** aprobado por el Coordinador (2026-11-10) · **Fase:** F4 · **Duración estimada:** 4 semanas
 **Objetivo (M3):** administración completa (usuarios, dispositivos, auditoría, generador y ajustes) desde el navegador, con permisos por rol y 2FA.
 **Depende de:** F1-04 (usuarios/sesiones), F2-08 (auditoría de API/consola) y, solo para el generador, F3-07 (servicio de build).
 **Documentos:** [`docs/specs/chat.md`](specs/chat.md) (permisos `chat:*` y marca), [`docs/PLAN-F4.5-CHAT.md`](PLAN-F4.5-CHAT.md), [`docs/PLAN-F3-GENERADOR.md`](PLAN-F3-GENERADOR.md).
@@ -62,7 +62,7 @@ Se reutiliza `users.role`; el rol legacy `user` se trata como `operator` de solo
 
 ## 5. Datos y API
 
-### 5.1 Migración 005 (aditiva)
+### 5.1 Migración 007 (aditiva)
 
 ```sql
 ALTER TABLE users ADD COLUMN totp_secret TEXT;
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS mfa_challenges (
 
 - `users.role` no cambia; se admiten `admin`, `operator`, `auditor` y el legacy `user`.
 - No se recrea la tabla `users` ni se pierden datos.
-- La migración 005 se aplica después de 004 (chat).
+- La migración 007 se aplica después de 006 (`006_device_roles_schema`). La migración de chat de F4.5 será 008 y debe mergearse después de 007 para mantener el orden; el Coordinador fija el orden de merge.
 
 ### 5.2 Endpoints
 
@@ -129,7 +129,7 @@ Todas las vistas nuevas: estados vacío/carga/error, teclado, foco visible, `ari
 | ID | Tarea | Dep. | Rol | Verifica | CA |
 |---|---|---|---|---|---|
 | F4-01 | Especificar matriz de permisos, flujo 2FA y modelo de datos; actualizar `audit-events.md` con `auth.2fa_*` | F1-04, F2-08 | Coordinador + Seguridad | Revisión de la matriz y del flujo; sin códigos de recuperación en claro | Documento aprobado; matriz cubre cada vista/endpoint; eventos definidos |
-| F4-02 | Migración 005: campos 2FA en `users` y `mfa_challenges`; actualizar pruebas de migración | F4-01 | ControlPlane | QA | Migración sobre BD vacía y con 001–004; sin pérdida; `cargo test` |
+| F4-02 | Migración 007: campos 2FA en `users` y `mfa_challenges`; actualizar pruebas de migración | F4-01 | ControlPlane | QA | Migración sobre BD vacía y con 001–006; sin pérdida; `cargo test` |
 | F4-03 | API de usuarios, roles y ajustes; enforcement de `users:*`, `roles:*`, `settings:*` | F4-02 | ControlPlane | QA | CRUD y 403 por rol; sin contraseñas, secretos ni hashes en respuestas |
 | F4-04 | 2FA en el API: enrolar/confirmar/verify/revoke/recovery; login en dos pasos; bloqueo | F4-02, F4-03 | ControlPlane | Seguridad | TOTP válido/inválido; recovery de un solo uso; sesión solo tras 2FA; lockout; auditoría |
 | F4-05 | Middleware RBAC y permisos `chat:*`; pruebas de la matriz | F4-03 | ControlPlane | QA | Cada rol/endpoint esperado; 403 auditado; no rompe `/api/chat` |
@@ -152,7 +152,7 @@ Casos principales (detalle en `tests/cases/`):
 | TC-F4-005 | TOTP inválido/caducado → 401, `auth.2fa_failed`, bloqueo tras 5 |
 | TC-F4-006 | Recovery code: primer uso OK, segundo 401, `used` persistido |
 | TC-F4-007 | Revocar 2FA invalida sesiones y exige reenrolamiento |
-| TC-F4-010 | Migración 005 sobre BD existente; `schema_migrations` = 5 |
+| TC-F4-010 | Migración 007 sobre BD existente; `schema_migrations` = 7 |
 | TC-F4-011 | `GET /api/users` sin permiso → 403 auditado |
 | TC-F4-020 | Vistas nuevas: vacío/carga/error/accesibilidad |
 | TC-F4-030 | E2E: login admin + 2FA + usuarios + auditoría + generador |
