@@ -26,6 +26,7 @@ pub mod db;
 pub mod devices;
 pub mod health;
 pub mod middleware;
+pub mod permissions;
 pub mod profile;
 pub mod revocation;
 pub mod routes;
@@ -77,6 +78,21 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/auth/login", post(auth::login_handler))
         .route("/api/auth/logout", post(auth::logout_handler))
         .route("/api/auth/me", get(auth::me_handler))
+        .route(
+            "/api/users",
+            get(routes::admin::list_users_handler).post(routes::admin::create_user_handler),
+        )
+        .route(
+            "/api/users/:id",
+            get(routes::admin::get_user_handler)
+                .patch(routes::admin::update_user_handler)
+                .delete(routes::admin::delete_user_handler),
+        )
+        .route("/api/roles", get(routes::admin::list_roles_handler))
+        .route(
+            "/api/settings",
+            get(routes::admin::get_settings_handler).patch(routes::admin::update_settings_handler),
+        )
         .route("/api/devices/heartbeat", post(devices::heartbeat_handler))
         .route("/api/devices", get(devices::list_devices_handler))
         .route(
