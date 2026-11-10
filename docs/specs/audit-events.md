@@ -30,8 +30,8 @@ El archivo formal JSON Schema Draft-07 se encuentra publicado en:
 | `trace_id` | `string` | **Sí** | Identificador de correlación que asocia todos los eventos de una misma sesión o transacción de extremo a extremo. |
 | `ts` | `string` (ISO 8601) | **Sí** | Marca de tiempo UTC en formato RFC 3339 con milisegundos (`YYYY-MM-DDTHH:MM:SS.sssZ`). |
 | `source` | `string` (Enum) | **Sí** | Componente emisor: `client`, `hbbs`, `hbbr`, `api`, `console`, `builder`. |
-| `category` | `string` (Enum) | **Sí** | Categoría funcional: `conn`, `file`, `alarm`, `console`, `auth`, `build`, `chat`. |
-| `action` | `string` (Pattern) | **Sí** | Acción auditada jerárquica: `^(conn\|file\|alarm\|console\|auth\|build\|chat)(\.[a-z0-9_]+)+$`. |
+| `category` | `string` (Enum) | **Sí** | Categoría funcional: `conn`, `file`, `alarm`, `console`, `auth`, `build`, `chat`, `elev`. |
+| `action` | `string` (Pattern) | **Sí** | Acción auditada jerárquica: `^(conn\|file\|alarm\|console\|auth\|build\|chat\|elev)(\.[a-z0-9_]+)+$`. |
 | `actor` | `object` | **Sí** | Entidad que inicia o ejecuta la acción (usuario, dispositivo o sistema). |
 | `subject` | `object` | No | Entidad receptora, recurso o dispositivo sobre el que recae la acción. |
 | `outcome` | `string` (Enum) | **Sí** | Resultado: `success` (éxito), `failure` (fallo funcional/error), `denied` (denegado por política o falta de privilegios). |
@@ -127,6 +127,7 @@ Adicionalmente, cada $N$ eventos (por defecto $N=10\,000$) o cada $T$ minutos (p
 | **Archivos y Portapapeles** | Contenido binario o texto en bruto de ficheros transferidos, contenido copiado al portapapeles. | Metadatos exclusivos: ruta remota (`remote_path`), nombre de archivo (`file_name`), tamaño en bytes (`bytes_transferred`), y hash SHA-256 del contenido (`sha256`). |
 | **Conversaciones de Cercano Chat** | Cuerpo de los mensajes de chat, nombre original de los adjuntos, contenido de los adjuntos. | Identificadores (`conversation_id`, `message_id`, `attachment_id`), remitente, longitud del texto, tipo MIME, tamaño en bytes y SHA-256 del adjunto. |
 | **Datos Personales Sensibles** | Números de tarjeta de crédito, números de identificación personal innecesarios, datos médicos. | Identificadores de usuario internos de la organización (`usr_...`). |
+| **Elevación de Privilegios (`elev.*`)** | Contraseñas en texto claro, credenciales de administrador, hashes de contraseñas. | Solo identificador del solicitante, nombre de usuario de destino, dominio, motivo, ticket, duración y resultado (regla de oro: cero secretos). |
 
 ---
 
@@ -720,6 +721,31 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 > [!NOTE]
 > Los vectores de prueba con JSON canónico y hash de esta familia se incorporan en F4.5-07, siguiendo exactamente el procedimiento de §4 y §6. Hasta entonces, esta sección define el contrato de `action` y `details`; el esquema JSON ya acepta `chat` y `subject_type: conversation`.
+
+---
+
+### 6.16 `elev.*` — Eventos de Elevación de Privilegios (F3-17)
+
+- **Emisor (`source`):** `client` (el equipo cliente registra los eventos de interacción local y ejecución) o `api` (el control plane registra solicitudes remotas y alarmas).
+- **Categoría (`category`):** `elev`.
+- **Condición:** Solicitud, consentimiento, rechazo, envío de credenciales E2E, ejecución, fallo o agotamiento de intentos de elevación de privilegios en el equipo cliente.
+- **Regla de oro de seguridad (Zero Secrets):** En `details`, queda **ESTRICTAMENTE PROHIBIDO** almacenar contraseñas en claro, credenciales de administrador o hashes de contraseñas. Solo se permiten metadatos contextuales: `requester_id`, `target_username`, `target_domain`, `reason`, `ticket`, `duration_ms` y `error`.
+
+| `action` | Uso | Campos Requeridos / Permitidos en `details` |
+|---|---|---|
+| `elev.requested` | El técnico solicita elevación de privilegios con motivo y ticket. | `reason`, `ticket` (opcional), `target_username`, `target_domain` (opcional). |
+| `elev.approved` | La persona usuaria acepta conscientemente la elevación en el diálogo local. | `dialog_response: "approved"`, `prompt_duration_ms` (opcional). |
+| `elev.rejected` | La persona usuaria rechaza la elevación. | `dialog_response: "rejected"`, `rejection_reason` (opcional). |
+| `elev.submitted` | Credenciales de administrador transmitidas por canal cifrado E2E (solo metadatos). | `target_username`, `target_domain` (opcional). **NUNCA la contraseña ni su hash.** |
+| `elev.executed` | Acción o comando ejecutado con privilegios elevados en el sistema operativo. | `target_username`, `elevation_type` (`uac`, `service`, `runas`), `command` (opcional), `duration_ms`. |
+| `elev.failed` | Fallo de autenticación o error en la ejecución con privilegios elevados. | `target_username`, `error`, `attempt_number`. |
+| `elev.exhausted` | Límite de 3 intentos fallidos de elevación alcanzado en la sesión activa. | `target_username`, `attempts: 3`, `lockout_action: "session_elevation_disabled"`. |
+
+#### Alarmas de Seguridad Asociadas a Elevación:
+- `alarm.elev_frequency`: Ráfaga de solicitudes o ejecuciones de elevación por el mismo técnico en una ventana corta (> 3 elevaciones en < 10 minutos).
+- `alarm.elev_rejections`: Solicitudes de elevación rechazadas consecutivamente por usuarios (> 2 rechazos seguidos para un mismo técnico o dispositivo).
+- `alarm.elev_exhausted`: Se agota el límite máximo de 3 intentos fallidos en una misma sesión.
+- `alarm.elev_after_hours`: Solicitud o ejecución de elevación fuera del horario laboral establecido o durante fines de semana.
 
 ---
 

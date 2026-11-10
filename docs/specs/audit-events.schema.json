@@ -56,14 +56,15 @@
         "console",
         "auth",
         "build",
-        "chat"
+        "chat",
+        "elev"
       ],
       "description": "Categoría taxonómica del evento de auditoría."
     },
     "action": {
       "type": "string",
-      "pattern": "^(conn|file|alarm|console|auth|build|chat)(\\.[a-z0-9_]+)+$",
-      "description": "Acción específica auditada estructurada con notación de punto bajo su categoría (ej. conn.start, file.transfer, auth.login)."
+      "pattern": "^(conn|file|alarm|console|auth|build|chat|elev)(\\.[a-z0-9_]+)+$",
+      "description": "Acción específica auditada estructurada con notación de punto bajo su categoría (ej. conn.start, file.transfer, auth.login, elev.requested)."
     },
     "actor": {
       "$ref": "#/definitions/Actor"

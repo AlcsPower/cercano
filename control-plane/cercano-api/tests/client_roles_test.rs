@@ -63,6 +63,7 @@ pub enum ElevationConsentResponse {
     Denied,
 }
 
+static ROLES_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static ACTIVE_PROFILE: RwLock<Option<VerifiedProfileInfo>> = RwLock::new(None);
 static TECHNICIAN_SESSION: RwLock<Option<TechnicianSession>> = RwLock::new(None);
 static PENDING_ELEVATION_REQUEST: RwLock<Option<ElevationRequestNotification>> = RwLock::new(None);
@@ -127,10 +128,8 @@ fn validate_outgoing_connection() -> Result<(), &'static str> {
             "Cercano Soporte está configurado exclusivamente para recibir asistencia técnica",
         );
     }
-    if is_technician_mode() {
-        if get_technician_session_token().is_none() {
-            return Err("Debe iniciar sesión con su cuenta técnica antes de iniciar conexiones");
-        }
+    if is_technician_mode() && get_technician_session_token().is_none() {
+        return Err("Debe iniciar sesión con su cuenta técnica antes de iniciar conexiones");
     }
     Ok(())
 }
@@ -251,6 +250,7 @@ fn create_tecnico_profile() -> VerifiedProfileInfo {
 
 #[test]
 fn test_f3_14_soporte_outgoing_connections_strictly_blocked() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     set_active_profile(Some(create_soporte_profile(false)));
     clear_technician_session();
 
@@ -270,6 +270,7 @@ fn test_f3_14_soporte_outgoing_connections_strictly_blocked() {
 
 #[test]
 fn test_f3_14_soporte_address_book_disabled() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     set_active_profile(Some(create_soporte_profile(false)));
     clear_technician_session();
 
@@ -281,6 +282,7 @@ fn test_f3_14_soporte_address_book_disabled() {
 
 #[test]
 fn test_f3_14_soporte_network_settings_locked() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     set_active_profile(Some(create_soporte_profile(false)));
     clear_technician_session();
 
@@ -292,6 +294,7 @@ fn test_f3_14_soporte_network_settings_locked() {
 
 #[test]
 fn test_f3_14_soporte_session_approval_logic() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     // 1. Por defecto: aprobación obligatoria (unattended_access = false)
     set_active_profile(Some(create_soporte_profile(false)));
     assert!(
@@ -309,6 +312,7 @@ fn test_f3_14_soporte_session_approval_logic() {
 
 #[test]
 fn test_f3_14_soporte_incoming_elevation_dialog_flow() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     set_active_profile(Some(create_soporte_profile(false)));
 
     // Soporte es receptor: no puede solicitar elevación
@@ -344,6 +348,7 @@ fn test_f3_14_soporte_incoming_elevation_dialog_flow() {
 
 #[test]
 fn test_f3_15_tecnico_requires_authenticated_session() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     set_active_profile(Some(create_tecnico_profile()));
     clear_technician_session();
 
@@ -392,6 +397,7 @@ fn test_f3_15_tecnico_requires_authenticated_session() {
 
 #[test]
 fn test_f3_15_tecnico_network_settings_locked() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     set_active_profile(Some(create_tecnico_profile()));
     assert!(
         is_network_settings_locked(),
@@ -401,6 +407,7 @@ fn test_f3_15_tecnico_network_settings_locked() {
 
 #[test]
 fn test_f3_15_tecnico_elevation_permissions_check() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     set_active_profile(Some(create_tecnico_profile()));
 
     // Técnico con sesión pero SIN permiso elev:use
@@ -433,6 +440,7 @@ fn test_f3_15_tecnico_elevation_permissions_check() {
 
 #[test]
 fn test_f3_matrix_section_1_compliance() {
+    let _lock = ROLES_TEST_MUTEX.lock().unwrap();
     // 1. Rol Soporte
     set_active_profile(Some(create_soporte_profile(false)));
     clear_technician_session();

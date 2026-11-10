@@ -3040,21 +3040,28 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
         si.dwFlags = STARTF_USESHOWWINDOW;
         let mut pi: PROCESS_INFORMATION = mem::zeroed();
         let wexe = wide_string(exe);
-        if FALSE
-            == CreateProcessWithLogonW(
-                wuser.as_ptr(),
-                wpc.as_ptr(),
-                wpwd.as_ptr(),
-                LOGON_WITH_PROFILE,
-                wexe.as_ptr(),
-                wcmd.as_mut_ptr(),
-                CREATE_UNICODE_ENVIRONMENT,
-                NULL,
-                NULL as _,
-                &mut si as *mut STARTUPINFOW,
-                &mut pi as *mut PROCESS_INFORMATION,
-            )
-        {
+        let success = CreateProcessWithLogonW(
+            wuser.as_ptr(),
+            wpc.as_ptr(),
+            wpwd.as_ptr(),
+            LOGON_WITH_PROFILE,
+            wexe.as_ptr(),
+            wcmd.as_mut_ptr(),
+            CREATE_UNICODE_ENVIRONMENT,
+            NULL,
+            NULL as _,
+            &mut si as *mut STARTUPINFOW,
+            &mut pi as *mut PROCESS_INFORMATION,
+        );
+
+        // Borrado seguro de memoria RAM (zeroize) de la contrasena en UTF-16
+        for w in wpwd.iter_mut() {
+            std::ptr::write_volatile(w, 0);
+        }
+        std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+        wpwd.clear();
+
+        if FALSE == success {
             let last_error = GetLastError();
             bail!(
                 "CreateProcessWithLogonW failed : \"{}\", error {}",

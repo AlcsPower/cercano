@@ -1093,7 +1093,7 @@ pub mod client {
                         }
                     }
                 }
-                StartPara::Logon(username, password) => {
+                StartPara::Logon(username, mut password) => {
                     #[allow(unused_mut)]
                     let mut exe = std::env::current_exe()?.to_string_lossy().to_string();
                     #[cfg(feature = "flutter")]
@@ -1155,12 +1155,23 @@ pub mod client {
                             exe = dst.to_string_lossy().to_string();
                         }
                     }
-                    if let Err(e) = crate::platform::windows::create_process_with_logon(
+                    let logon_res = crate::platform::windows::create_process_with_logon(
                         username.as_str(),
                         password.as_str(),
                         &exe,
                         &portable_service_arg,
-                    ) {
+                    );
+
+                    // Borrado seguro de memoria RAM (zeroize) de la contrasena
+                    unsafe {
+                        for b in password.as_bytes_mut() {
+                            std::ptr::write_volatile(b, 0);
+                        }
+                    }
+                    std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+                    password.clear();
+
+                    if let Err(e) = logon_res {
                         clear_runtime_shmem_state();
                         bail!("Failed to run portable service process: {}", e);
                     }

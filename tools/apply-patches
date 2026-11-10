@@ -38,6 +38,21 @@ for patch_file in "${patches[@]}"; do
     continue
   fi
 
+  # Si la reversión directa falla porque parches posteriores ya fueron aplicados encima
+  subsequent_applied=false
+  for later_patch in "${patches[@]}"; do
+    if [[ "$later_patch" > "$patch_file" ]]; then
+      if git apply -p1 --reverse --check "$later_patch" &>/dev/null; then
+        subsequent_applied=true
+        break
+      fi
+    fi
+  done
+  if [[ "$subsequent_applied" == "true" ]]; then
+    echo "OK: $patch_name ya aplicado (parche posterior vigente en árbol)."
+    continue
+  fi
+
   # Si la reversión directa falla porque parches posteriores modificaron archivos creados por este parche
   check_err="$(git apply -p1 --check "$patch_file" 2>&1 || true)"
   if echo "$check_err" | grep -q "already exists in working directory"; then

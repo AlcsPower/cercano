@@ -23,6 +23,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `004-client-audit-hooks.patch` | F2-05 | `vendor/client` | Propaga `trace_id`, par autenticado y tipo en `conn.end`, añade volumen y SHA-256 (tope 512 MiB al emitir) y autentica emisión con `X-Cercano-Client-Token` solo sobre HTTPS | `src/server/connection.rs` | 2026-11-09 | Agente-Cliente |
 | `005-client-signed-profile.patch` | F3-02 | `vendor/client` | Localización, verificación de firma Ed25519 y aplicación de perfil de cliente firmado (`cercano-profile.signed.json`), comprobación de caducidad y restricciones de rol | `src/cercano_profile.rs`, `src/common.rs`, `src/lib.rs` | 2026-11-09 | Agente-Cliente |
 | `006-client-roles-modes.patch` | F3-14, F3-15 | `vendor/client` | Modos soporte y técnico: helpers de rol, bloqueo de salida y libreta en soporte, control de salida y sesión en técnico, protección de ajustes de red y elevación estructurada | `src/cercano_profile.rs`, `src/client.rs`, `src/flutter.rs`, `src/ui_interface.rs` | 2026-11-10 | Agente-Cliente |
+| `007-client-elevation.patch` | F3-16 | `vendor/client` | Flujo de elevación supervisada con credenciales: consentimiento obligatorio, `SecureElevationCredential` con zeroize, límite de 3 fallos y un solo uso | `src/cercano_profile.rs`, `src/platform/windows.rs`, `src/server/portable_service.rs` | 2026-11-10 | Agente-Cliente |
 
 ---
 
@@ -155,6 +156,28 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/flutter.rs`
   - `src/ui_interface.rs`
 - **Estrategia de actualización (upstream sync):** Las verificaciones se sitúan en puntos de entrada clave (`Client::start`, `session_start_`, `is_option_fixed`, `try_set_options`). Al actualizar upstream, verificar que `Client::start` y `try_set_options` mantengan su firma o adaptar el hook de validación.
+
+---
+
+### [007-client-elevation.patch] Tarea F3-16: Spike S6 y elevación con credenciales
+
+- **Archivo:** `patches/007-client-elevation.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-16`
+- **Fecha:** `2026-11-10`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** Implementa el flujo integral de elevación administrativa supervisada en Windows (Spike S6, ADR-009):
+  - **Consentimiento obligatorio de la persona usuaria:** En `src/cercano_profile.rs`, las credenciales de elevación no son aceptadas ni procesadas a menos que el usuario final haya aprobado explícitamente la solicitud (`ElevationConsentResponse::Approved`). Si el usuario rechaza (`Denied`), el flujo se aborta de inmediato sin transmitir nada.
+  - **Estructura de credenciales segura (`SecureElevationCredential`):** Encapsula usuario, dominio y contraseña con borrado seguro de memoria RAM (`zeroize` volátil) ejecutado inmediatamente tras su uso y de forma determinista en `Drop`. Implementa `Debug` y `Display` con redacción permanente (`[REDACTED]`) para evitar fugas en logs o volcados.
+  - **Soporte universal de cuentas:** Análisis sintáctico para cuentas locales (`.\Admin`, `Admin`) y cuentas de dominio Active Directory (`CORP\admin`, `admin@corp.lan`).
+  - **Control de intentos y prevención de bloqueos (`ElevationSessionTracker`):** Límite estricto de máximo 3 intentos fallidos consecutivos por sesión antes del bloqueo temporal (`MAX_FAILED_ELEVATION_ATTEMPTS = 3`), protegiendo cuentas de dominio contra directivas de bloqueo de Active Directory.
+  - **Mínimo privilegio y caducidad:** Consentimiento de un solo uso que expira de inmediato tras ser consumido y caduca a los 60 segundos si no se ejecuta.
+  - **Borrado seguro de buffers de Windows:** En `src/platform/windows.rs` (`create_process_with_logon`) y `src/server/portable_service.rs` (`start_portable_service`), los vectores UTF-16 (`wpwd`) y cadenas UTF-8 de contraseñas son sobreescritos con ceros en memoria volátil inmediatamente tras la invocación a las APIs de Windows.
+- **Archivos modificados:**
+  - `src/cercano_profile.rs`
+  - `src/platform/windows.rs`
+  - `src/server/portable_service.rs`
+- **Estrategia de actualización (upstream sync):** Los componentes de elevación residen principalmente en `cercano_profile.rs`. En `platform/windows.rs` y `server/portable_service.rs`, el zeroize se aplica directamente sobre los buffers locales tras la llamada a `CreateProcessWithLogonW`. Al sincronizar con upstream, comprobar que `create_process_with_logon` mantenga la firma y aplicar la limpieza volátil sobre cualquier buffer auxiliar de contraseña.
 
 ---
 

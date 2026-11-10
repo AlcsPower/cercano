@@ -123,6 +123,20 @@ pub struct AlarmConfig {
     pub ip_burst_window_secs: i64,
     /// Configured CIDR whitelist ranges. If empty, whitelist enforcement is disabled.
     pub ip_whitelist: Vec<String>,
+    /// Maximum elevation requests allowed for a single technician before triggering `alarm.elev_frequency` (default: 3).
+    pub elev_frequency_threshold: usize,
+    /// Sliding window duration in seconds for technician elevation requests (default: 600 seconds / 10 minutes).
+    pub elev_frequency_window_secs: i64,
+    /// Maximum consecutive rejected elevation requests before triggering `alarm.elev_rejections` (default: 2).
+    pub elev_rejections_threshold: usize,
+    /// Whether after-hours elevation detection is enabled (default: true).
+    pub elev_after_hours_enabled: bool,
+    /// Start hour for standard business hours (UTC, 0..23, inclusive, default: 7).
+    pub elev_business_hours_start: u32,
+    /// End hour for standard business hours (UTC, 0..23, exclusive, default: 19).
+    pub elev_business_hours_end: u32,
+    /// Whether after-hours alarm triggers on weekends (Saturday & Sunday, default: true).
+    pub elev_weekends_are_after_hours: bool,
 }
 
 impl Default for AlarmConfig {
@@ -133,6 +147,13 @@ impl Default for AlarmConfig {
             ip_burst_threshold: 30,
             ip_burst_window_secs: 60,
             ip_whitelist: Vec::new(),
+            elev_frequency_threshold: 3,
+            elev_frequency_window_secs: 600,
+            elev_rejections_threshold: 2,
+            elev_after_hours_enabled: true,
+            elev_business_hours_start: 7,
+            elev_business_hours_end: 19,
+            elev_weekends_are_after_hours: true,
         }
     }
 }
@@ -143,6 +164,8 @@ pub struct AlarmEngine {
     audit: Arc<audit_core::AuditStore>,
     failed_logins: Mutex<HashMap<String, Vec<DateTime<Utc>>>>,
     ip_attempts: Mutex<HashMap<String, Vec<DateTime<Utc>>>>,
+    technician_elevations: Mutex<HashMap<String, Vec<DateTime<Utc>>>>,
+    consecutive_rejections: Mutex<HashMap<String, usize>>,
 }
 
 impl AlarmEngine {
@@ -162,6 +185,8 @@ impl AlarmEngine {
             audit,
             failed_logins: Mutex::new(HashMap::new()),
             ip_attempts: Mutex::new(HashMap::new()),
+            technician_elevations: Mutex::new(HashMap::new()),
+            consecutive_rejections: Mutex::new(HashMap::new()),
         }
     }
 
@@ -492,6 +517,303 @@ impl AlarmEngine {
         self.audit.append(input).await
     }
 
+    /// Checks whether a given timestamp is outside configured business hours (or on a weekend).
+    pub fn is_after_hours(&self, dt: &DateTime<Utc>) -> bool {
+        if !self.config.elev_after_hours_enabled {
+            return false;
+        }
+
+        use chrono::{Datelike, Timelike, Weekday};
+        if self.config.elev_weekends_are_after_hours {
+            let weekday = dt.weekday();
+            if weekday == Weekday::Sat || weekday == Weekday::Sun {
+                return true;
+            }
+        }
+
+        let hour = dt.hour();
+        if self.config.elev_business_hours_start < self.config.elev_business_hours_end {
+            // Normal daytime window, e.g. 7:00 to 19:00
+            hour < self.config.elev_business_hours_start
+                || hour >= self.config.elev_business_hours_end
+        } else {
+            // Nighttime window crossing midnight, e.g. 22:00 to 6:00
+            hour < self.config.elev_business_hours_start
+                && hour >= self.config.elev_business_hours_end
+        }
+    }
+
+    /// Records an elevation request or execution attempt for a technician.
+    ///
+    /// If more than 3 elevations (> `elev_frequency_threshold`) occur from the same technician
+    /// within a 10-minute window (`elev_frequency_window_secs`), automatically records an
+    /// `alarm.elev_frequency` event directly into `AuditStore` and returns `Some(event)`.
+    pub async fn record_elevation_attempt(
+        &self,
+        technician_id: &str,
+        target_device: Option<&str>,
+        actor_ip: Option<&str>,
+        trace_id: Option<&str>,
+        event_time: Option<DateTime<Utc>>,
+    ) -> Result<Option<AuditEvent>, AuditError> {
+        let now = event_time.unwrap_or_else(Utc::now);
+        let cutoff = now - Duration::seconds(self.config.elev_frequency_window_secs);
+
+        let count = {
+            let mut lock = self.technician_elevations.lock().unwrap();
+            if lock.len() > 1024 {
+                lock.retain(|_, entries| {
+                    entries.retain(|t| *t > cutoff);
+                    !entries.is_empty()
+                });
+            }
+            let entries = lock.entry(technician_id.to_string()).or_default();
+            entries.retain(|t| *t > cutoff);
+            entries.push(now);
+            entries.len()
+        };
+
+        if count > self.config.elev_frequency_threshold {
+            let trace = trace_id
+                .map(String::from)
+                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+            let actor = Actor::with_details(
+                technician_id,
+                "user",
+                Some(technician_id.to_string()),
+                actor_ip.map(String::from),
+            );
+            let subject = target_device.map(|dev| Subject::with_details(dev, "device", None));
+
+            let details = json!({
+                "alarm_name": "alarm.elev_frequency",
+                "severity": "high",
+                "reason": format!(
+                    "Technician '{}' exceeded {} elevation attempts within {} minutes",
+                    technician_id,
+                    self.config.elev_frequency_threshold,
+                    self.config.elev_frequency_window_secs / 60
+                ),
+                "attempts": count,
+                "threshold": self.config.elev_frequency_threshold,
+                "window_secs": self.config.elev_frequency_window_secs,
+                "technician_id": technician_id,
+                "target_device": target_device,
+            });
+
+            let mut input = EventInput::new(
+                trace,
+                Source::Api,
+                Category::Alarm,
+                "alarm.elev_frequency",
+                actor,
+                Outcome::Denied,
+                details,
+            );
+            if let Some(subj) = subject {
+                input = input.with_subject(subj);
+            }
+
+            let event = self.audit.append(input).await?;
+            return Ok(Some(event));
+        }
+
+        Ok(None)
+    }
+
+    /// Records a rejected elevation request.
+    ///
+    /// If more than 2 consecutive rejections (> `elev_rejections_threshold`) occur for
+    /// the technician/device, automatically records an `alarm.elev_rejections` event
+    /// directly to `AuditStore` and returns `Some(event)`.
+    pub async fn record_elevation_rejection(
+        &self,
+        technician_id: &str,
+        target_device: Option<&str>,
+        actor_ip: Option<&str>,
+        trace_id: Option<&str>,
+        rejection_reason: Option<&str>,
+    ) -> Result<Option<AuditEvent>, AuditError> {
+        let key = if let Some(dev) = target_device {
+            format!("{}:{}", technician_id, dev)
+        } else {
+            technician_id.to_string()
+        };
+
+        let count = {
+            let mut lock = self.consecutive_rejections.lock().unwrap();
+            let entry = lock.entry(key).or_insert(0);
+            *entry += 1;
+            *entry
+        };
+
+        if count > self.config.elev_rejections_threshold {
+            let trace = trace_id
+                .map(String::from)
+                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+            let actor = Actor::with_details(
+                technician_id,
+                "user",
+                Some(technician_id.to_string()),
+                actor_ip.map(String::from),
+            );
+            let subject = target_device.map(|dev| Subject::with_details(dev, "device", None));
+
+            let details = json!({
+                "alarm_name": "alarm.elev_rejections",
+                "severity": "high",
+                "reason": format!(
+                    "Technician '{}' received {} consecutive elevation rejections",
+                    technician_id, count
+                ),
+                "consecutive_rejections": count,
+                "threshold": self.config.elev_rejections_threshold,
+                "technician_id": technician_id,
+                "target_device": target_device,
+                "rejection_reason": rejection_reason,
+            });
+
+            let mut input = EventInput::new(
+                trace,
+                Source::Api,
+                Category::Alarm,
+                "alarm.elev_rejections",
+                actor,
+                Outcome::Denied,
+                details,
+            );
+            if let Some(subj) = subject {
+                input = input.with_subject(subj);
+            }
+
+            let event = self.audit.append(input).await?;
+            return Ok(Some(event));
+        }
+
+        Ok(None)
+    }
+
+    /// Resets consecutive rejections for a technician when an elevation is approved.
+    pub fn record_elevation_approval(&self, technician_id: &str, target_device: Option<&str>) {
+        let mut lock = self.consecutive_rejections.lock().unwrap();
+        lock.remove(technician_id);
+        if let Some(dev) = target_device {
+            lock.remove(&format!("{}:{}", technician_id, dev));
+        }
+    }
+
+    /// Records an elevation attempts exhausted alarm (`alarm.elev_exhausted`).
+    ///
+    /// Triggered when the 3-attempt limit for elevation credentials in a session has been reached.
+    pub async fn record_elevation_exhausted(
+        &self,
+        technician_id: &str,
+        target_device: Option<&str>,
+        actor_ip: Option<&str>,
+        attempts: usize,
+        trace_id: Option<&str>,
+    ) -> Result<AuditEvent, AuditError> {
+        let trace = trace_id
+            .map(String::from)
+            .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+        let actor = Actor::with_details(
+            technician_id,
+            "user",
+            Some(technician_id.to_string()),
+            actor_ip.map(String::from),
+        );
+        let subject = target_device.map(|dev| Subject::with_details(dev, "device", None));
+
+        let details = json!({
+            "alarm_name": "alarm.elev_exhausted",
+            "severity": "critical",
+            "reason": format!(
+                "Session elevation attempts exhausted for technician '{}' (limit: {} attempts reached)",
+                technician_id, attempts
+            ),
+            "attempts": attempts,
+            "technician_id": technician_id,
+            "target_device": target_device,
+            "lockout_action": "session_elevation_disabled",
+        });
+
+        let mut input = EventInput::new(
+            trace,
+            Source::Api,
+            Category::Alarm,
+            "alarm.elev_exhausted",
+            actor,
+            Outcome::Denied,
+            details,
+        );
+        if let Some(subj) = subject {
+            input = input.with_subject(subj);
+        }
+
+        self.audit.append(input).await
+    }
+
+    /// Checks if an elevation action occurred outside configured business hours.
+    ///
+    /// If after hours, records an `alarm.elev_after_hours` event in `AuditStore`
+    /// and returns `Some(event)`.
+    pub async fn check_elevation_after_hours(
+        &self,
+        technician_id: &str,
+        action: &str,
+        target_device: Option<&str>,
+        actor_ip: Option<&str>,
+        timestamp: Option<DateTime<Utc>>,
+        trace_id: Option<&str>,
+    ) -> Result<Option<AuditEvent>, AuditError> {
+        let dt = timestamp.unwrap_or_else(Utc::now);
+        if !self.is_after_hours(&dt) {
+            return Ok(None);
+        }
+
+        let trace = trace_id
+            .map(String::from)
+            .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+        let actor = Actor::with_details(
+            technician_id,
+            "user",
+            Some(technician_id.to_string()),
+            actor_ip.map(String::from),
+        );
+        let subject = target_device.map(|dev| Subject::with_details(dev, "device", None));
+
+        let details = json!({
+            "alarm_name": "alarm.elev_after_hours",
+            "severity": "medium",
+            "reason": format!(
+                "Elevation operation '{}' requested or executed outside configured business hours",
+                action
+            ),
+            "action": action,
+            "timestamp": dt.to_rfc3339(),
+            "business_hours_start": self.config.elev_business_hours_start,
+            "business_hours_end": self.config.elev_business_hours_end,
+            "technician_id": technician_id,
+            "target_device": target_device,
+        });
+
+        let mut input = EventInput::new(
+            trace,
+            Source::Api,
+            Category::Alarm,
+            "alarm.elev_after_hours",
+            actor,
+            Outcome::Denied,
+            details,
+        );
+        if let Some(subj) = subject {
+            input = input.with_subject(subj);
+        }
+
+        let event = self.audit.append(input).await?;
+        Ok(Some(event))
+    }
+
     /// Evaluates an arbitrary ingested audit event against security alarm policies.
     pub async fn evaluate_event(&self, event: &AuditEvent) -> Result<Vec<AuditEvent>, AuditError> {
         let mut triggered = Vec::new();
@@ -530,6 +852,89 @@ impl AlarmEngine {
                 )
                 .await?
             {
+                triggered.push(alarm);
+            }
+        }
+
+        // 4. Elevation events evaluation (F3-17)
+        if event.category == Category::Elev {
+            let target_device = event.subject.as_ref().map(|s| s.id.as_str());
+            let technician_id = event.actor.id.as_str();
+            let actor_ip = event.actor.ip.as_deref();
+            let trace = Some(event.trace_id.as_str());
+            let event_dt = event.ts.parse::<DateTime<Utc>>().ok();
+
+            // A. After-hours check for requested or executed
+            if event.action == "elev.requested" || event.action == "elev.executed" {
+                if let Some(alarm) = self
+                    .check_elevation_after_hours(
+                        technician_id,
+                        &event.action,
+                        target_device,
+                        actor_ip,
+                        event_dt,
+                        trace,
+                    )
+                    .await?
+                {
+                    triggered.push(alarm);
+                }
+            }
+
+            // B. Frequency tracking on requests and executions
+            if event.action == "elev.requested" || event.action == "elev.executed" {
+                if let Some(alarm) = self
+                    .record_elevation_attempt(
+                        technician_id,
+                        target_device,
+                        actor_ip,
+                        trace,
+                        event_dt,
+                    )
+                    .await?
+                {
+                    triggered.push(alarm);
+                }
+            }
+
+            // C. Consecutive rejections vs approval reset
+            if event.action == "elev.rejected" {
+                let rejection_reason = event
+                    .details
+                    .get("rejection_reason")
+                    .and_then(|v| v.as_str());
+                if let Some(alarm) = self
+                    .record_elevation_rejection(
+                        technician_id,
+                        target_device,
+                        actor_ip,
+                        trace,
+                        rejection_reason,
+                    )
+                    .await?
+                {
+                    triggered.push(alarm);
+                }
+            } else if event.action == "elev.approved" {
+                self.record_elevation_approval(technician_id, target_device);
+            }
+
+            // D. Exhausted attempts
+            if event.action == "elev.exhausted" {
+                let attempts = event
+                    .details
+                    .get("attempts")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(3) as usize;
+                let alarm = self
+                    .record_elevation_exhausted(
+                        technician_id,
+                        target_device,
+                        actor_ip,
+                        attempts,
+                        trace,
+                    )
+                    .await?;
                 triggered.push(alarm);
             }
         }
@@ -598,5 +1003,43 @@ mod tests {
 
         // Empty whitelist means no restriction
         assert!(is_ip_in_whitelist("8.8.8.8", &[]));
+    }
+
+    #[test]
+    fn test_is_after_hours_evaluation() {
+        let config = AlarmConfig {
+            elev_after_hours_enabled: true,
+            elev_business_hours_start: 7,
+            elev_business_hours_end: 19,
+            elev_weekends_are_after_hours: true,
+            ..Default::default()
+        };
+
+        // Tuesday 10:00 UTC -> during business hours
+        let dt_workday_day: DateTime<Utc> = "2026-11-10T10:00:00Z".parse().unwrap();
+        // Tuesday 05:00 UTC -> before business hours (after-hours)
+        let dt_workday_early: DateTime<Utc> = "2026-11-10T05:00:00Z".parse().unwrap();
+        // Tuesday 21:00 UTC -> after business hours
+        let dt_workday_night: DateTime<Utc> = "2026-11-10T21:00:00Z".parse().unwrap();
+        // Saturday 12:00 UTC -> weekend (after-hours)
+        let dt_saturday: DateTime<Utc> = "2026-11-14T12:00:00Z".parse().unwrap();
+
+        // Helper mock engine
+        use chrono::{Datelike, Timelike, Weekday};
+        let is_after = |dt: &DateTime<Utc>| -> bool {
+            if config.elev_weekends_are_after_hours {
+                let weekday = dt.weekday();
+                if weekday == Weekday::Sat || weekday == Weekday::Sun {
+                    return true;
+                }
+            }
+            let hour = dt.hour();
+            hour < config.elev_business_hours_start || hour >= config.elev_business_hours_end
+        };
+
+        assert!(!is_after(&dt_workday_day));
+        assert!(is_after(&dt_workday_early));
+        assert!(is_after(&dt_workday_night));
+        assert!(is_after(&dt_saturday));
     }
 }

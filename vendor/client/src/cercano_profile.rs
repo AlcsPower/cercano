@@ -40,6 +40,216 @@ lazy_static::lazy_static! {
     pub static ref ACTIVE_PROFILE: RwLock<Option<VerifiedProfileInfo>> = RwLock::new(None);
     pub static ref TECHNICIAN_SESSION: RwLock<Option<TechnicianSession>> = RwLock::new(None);
     pub static ref PENDING_ELEVATION_REQUEST: RwLock<Option<ElevationRequestNotification>> = RwLock::new(None);
+    pub static ref ELEVATION_TRACKER: RwLock<ElevationSessionTracker> = RwLock::new(ElevationSessionTracker::new());
+}
+
+pub const MAX_FAILED_ELEVATION_ATTEMPTS: u32 = 3;
+pub const ELEVATION_CONSENT_TIMEOUT_SECS: i64 = 60;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveElevationConsent {
+    pub request_id: String,
+    pub response: ElevationConsentResponse,
+    pub granted_at_epoch_secs: i64,
+    pub consumed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ElevationSessionTracker {
+    failed_attempts: u32,
+    is_locked_out: bool,
+    active_consent: Option<ActiveElevationConsent>,
+}
+
+impl ElevationSessionTracker {
+    pub fn new() -> Self {
+        Self {
+            failed_attempts: 0,
+            is_locked_out: false,
+            active_consent: None,
+        }
+    }
+
+    pub fn is_locked_out(&self) -> bool {
+        self.is_locked_out
+    }
+
+    pub fn failed_attempts(&self) -> u32 {
+        self.failed_attempts
+    }
+
+    pub fn remaining_attempts(&self) -> u32 {
+        MAX_FAILED_ELEVATION_ATTEMPTS.saturating_sub(self.failed_attempts)
+    }
+
+    pub fn record_failure(&mut self) -> bool {
+        self.failed_attempts += 1;
+        if self.failed_attempts >= MAX_FAILED_ELEVATION_ATTEMPTS {
+            self.is_locked_out = true;
+            self.active_consent = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn record_success(&mut self) {
+        self.failed_attempts = 0;
+    }
+
+    pub fn record_consent(
+        &mut self,
+        request_id: String,
+        response: ElevationConsentResponse,
+        now_epoch: i64,
+    ) {
+        self.active_consent = Some(ActiveElevationConsent {
+            request_id,
+            response,
+            granted_at_epoch_secs: now_epoch,
+            consumed: false,
+        });
+    }
+
+    pub fn has_valid_consent(&self, request_id: &str, now_epoch: i64) -> bool {
+        if self.is_locked_out {
+            return false;
+        }
+        if let Some(consent) = &self.active_consent {
+            if consent.request_id == request_id
+                && consent.response == ElevationConsentResponse::Approved
+                && !consent.consumed
+                && (now_epoch - consent.granted_at_epoch_secs) <= ELEVATION_CONSENT_TIMEOUT_SECS
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn consume_consent(&mut self, request_id: &str, now_epoch: i64) -> ResultType<()> {
+        if self.is_locked_out {
+            return Err(anyhow!(
+                "Máximo de 3 intentos fallidos alcanzado. Sesión bloqueada para elevación."
+            ));
+        }
+        match &mut self.active_consent {
+            Some(consent) => {
+                if consent.request_id != request_id {
+                    return Err(anyhow!("Identificador de solicitud de elevación no coincide"));
+                }
+                if consent.response == ElevationConsentResponse::Denied {
+                    return Err(anyhow!(
+                        "Consentimiento de usuario requerido: la elevación fue rechazada"
+                    ));
+                }
+                if consent.consumed {
+                    return Err(anyhow!(
+                        "La elevación ya fue utilizada (mínimo privilegio: un solo uso permitido)"
+                    ));
+                }
+                if (now_epoch - consent.granted_at_epoch_secs) > ELEVATION_CONSENT_TIMEOUT_SECS {
+                    return Err(anyhow!("La solicitud de elevación ha caducado (> 60 s)"));
+                }
+                consent.consumed = true;
+                Ok(())
+            }
+            None => Err(anyhow!(
+                "Consentimiento de usuario requerido: no hay consentimiento registrado"
+            )),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.failed_attempts = 0;
+        self.is_locked_out = false;
+        self.active_consent = None;
+    }
+}
+
+pub struct SecureElevationCredential {
+    pub username: String,
+    pub domain: Option<String>,
+    password: Vec<u8>,
+}
+
+impl SecureElevationCredential {
+    pub fn new(account: impl Into<String>, password: impl AsRef<[u8]>) -> Self {
+        let raw_account = account.into();
+        let (username, domain) = Self::parse_account(&raw_account);
+        Self {
+            username,
+            domain,
+            password: password.as_ref().to_vec(),
+        }
+    }
+
+    pub fn parse_account(account: &str) -> (String, Option<String>) {
+        let trimmed = account.trim();
+        if let Some(pos) = trimmed.find('\\') {
+            let domain = &trimmed[..pos];
+            let user = &trimmed[pos + 1..];
+            (user.to_string(), Some(domain.to_string()))
+        } else if let Some(pos) = trimmed.find('@') {
+            let user = &trimmed[..pos];
+            let domain = &trimmed[pos + 1..];
+            (user.to_string(), Some(domain.to_string()))
+        } else {
+            (trimmed.to_string(), None)
+        }
+    }
+
+    pub fn password_bytes(&self) -> &[u8] {
+        &self.password
+    }
+
+    pub fn password_str(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.password)
+    }
+
+    pub fn is_zeroized(&self) -> bool {
+        self.password.is_empty() || self.password.iter().all(|&b| b == 0)
+    }
+
+    pub fn zeroize(&mut self) {
+        for b in self.password.iter_mut() {
+            unsafe {
+                std::ptr::write_volatile(b, 0);
+            }
+        }
+        std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+        self.password.clear();
+    }
+}
+
+impl Drop for SecureElevationCredential {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl std::fmt::Debug for SecureElevationCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecureElevationCredential")
+            .field("username", &self.username)
+            .field("domain", &self.domain)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
+}
+
+impl std::fmt::Display for SecureElevationCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SecureElevationCredential({}{})",
+            self.domain
+                .as_deref()
+                .map(|d| format!("{}\\", d))
+                .unwrap_or_default(),
+            self.username
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -695,6 +905,91 @@ pub fn respond_to_elevation_request(
         return Err(anyhow!("No hay ninguna solicitud de elevación pendiente"));
     }
     *pending = None;
+
+    if let Ok(mut tracker) = ELEVATION_TRACKER.write() {
+        tracker.record_consent(
+            request_id.to_string(),
+            response,
+            chrono::Utc::now().timestamp(),
+        );
+    }
+
+    Ok(response)
+}
+
+pub fn execute_elevation_action<F, R>(
+    request_id: &str,
+    mut credential: SecureElevationCredential,
+    action: F,
+) -> ResultType<R>
+where
+    F: FnOnce(&str, Option<&str>, &[u8]) -> ResultType<R>,
+{
+    let now = chrono::Utc::now().timestamp();
+    // 1. Validar y consumir consentimiento previo obligatorio
+    {
+        let mut tracker = ELEVATION_TRACKER
+            .write()
+            .map_err(|e| anyhow!("Lock error: {}", e))?;
+        if tracker.is_locked_out() {
+            credential.zeroize();
+            return Err(anyhow!(
+                "Máximo de 3 intentos fallidos alcanzado. Sesión bloqueada para elevación."
+            ));
+        }
+        if let Err(e) = tracker.consume_consent(request_id, now) {
+            credential.zeroize();
+            return Err(e);
+        }
+    }
+
+    // 2. Ejecutar la acción administrativa con credenciales en memoria protegida
+    let res = action(
+        &credential.username,
+        credential.domain.as_deref(),
+        credential.password_bytes(),
+    );
+
+    // 3. Borrado seguro de memoria RAM (zeroize) inmediato tras la invocación
+    credential.zeroize();
+
+    // 4. Actualizar contador de fallos/éxitos en el tracker de sesión
+    let mut tracker = ELEVATION_TRACKER
+        .write()
+        .map_err(|e| anyhow!("Lock error: {}", e))?;
+    match &res {
+        Ok(_) => {
+            tracker.record_success();
+        }
+        Err(err) => {
+            let locked = tracker.record_failure();
+            if locked {
+                return Err(anyhow!(
+                    "Fallo de elevación: {}. Máximo de 3 intentos fallidos alcanzado, sesión bloqueada.",
+                    err
+                ));
+            } else {
+                return Err(anyhow!(
+                    "Fallo de elevación: {}. Intentos restantes: {}",
+                    err,
+                    tracker.remaining_attempts()
+                ));
+            }
+        }
+    }
+
+    res
+}
+
+pub fn reset_elevation_tracker() {
+    if let Ok(mut tracker) = ELEVATION_TRACKER.write() {
+        tracker.reset();
+    }
+}
+    } else {
+        return Err(anyhow!("No hay ninguna solicitud de elevación pendiente"));
+    }
+    *pending = None;
     Ok(response)
 }
 
@@ -835,5 +1130,147 @@ mod tests {
         assert!(!can_initiate_outgoing_connections());
         assert!(!is_address_book_enabled());
         assert!(!can_request_elevation());
+    }
+
+    #[test]
+    fn test_elevation_user_denial_blocks_credential_use() {
+        reset_elevation_tracker();
+        set_active_profile(Some(sample_soporte_profile(false)));
+
+        let notif = ElevationRequestNotification::new(
+            "elev-deny-1",
+            "Tecnico Soporte",
+            "Mantenimiento programado",
+            None,
+        )
+        .unwrap();
+
+        handle_incoming_elevation_request(notif).unwrap();
+        let res = respond_to_elevation_request("elev-deny-1", ElevationConsentResponse::Denied).unwrap();
+        assert_eq!(res, ElevationConsentResponse::Denied);
+
+        let cred = SecureElevationCredential::new("Administrator", "SecretPassword123!");
+        let action_result = execute_elevation_action("elev-deny-1", cred, |_user, _dom, _pwd| {
+            Ok(())
+        });
+
+        assert!(action_result.is_err());
+        assert!(action_result
+            .unwrap_err()
+            .to_string()
+            .contains("la elevación fue rechazada"));
+    }
+
+    #[test]
+    fn test_elevation_credential_zeroize_on_drop_and_manual() {
+        let mut cred = SecureElevationCredential::new("CORP\\admin_user", "MyVerySecretPass!");
+        assert_eq!(cred.username, "admin_user");
+        assert_eq!(cred.domain, Some("CORP".to_string()));
+        assert!(!cred.is_zeroized());
+        assert_eq!(cred.password_str().unwrap(), "MyVerySecretPass!");
+
+        cred.zeroize();
+        assert!(cred.is_zeroized());
+        assert_eq!(cred.password_bytes().len(), 0);
+    }
+
+    #[test]
+    fn test_elevation_three_failed_attempts_locks_out_session() {
+        reset_elevation_tracker();
+        set_active_profile(Some(sample_soporte_profile(false)));
+
+        for i in 1..=3 {
+            let req_id = format!("elev-fail-{}", i);
+            let notif = ElevationRequestNotification::new(
+                &req_id,
+                "Tecnico",
+                "Reinicio servicio",
+                None,
+            )
+            .unwrap();
+            handle_incoming_elevation_request(notif).unwrap();
+            respond_to_elevation_request(&req_id, ElevationConsentResponse::Approved).unwrap();
+
+            let cred = SecureElevationCredential::new("Administrator", "WrongPassword");
+            let result = execute_elevation_action(&req_id, cred, |_u, _d, _p| {
+                Err(anyhow!("LogonUserW failed: ERROR_LOGON_FAILURE"))
+            });
+
+            assert!(result.is_err());
+            if i < 3 {
+                assert!(result.unwrap_err().to_string().contains("Intentos restantes"));
+            } else {
+                assert!(result.unwrap_err().to_string().contains("sesión bloqueada"));
+            }
+        }
+
+        let notif4 = ElevationRequestNotification::new("elev-fail-4", "Tecnico", "Otro intento", None).unwrap();
+        handle_incoming_elevation_request(notif4).unwrap();
+        respond_to_elevation_request("elev-fail-4", ElevationConsentResponse::Approved).unwrap();
+
+        let cred4 = SecureElevationCredential::new("Administrator", "AnyPassword");
+        let result4 = execute_elevation_action("elev-fail-4", cred4, |_u, _d, _p| Ok(()));
+        assert!(result4.is_err());
+        assert!(result4.unwrap_err().to_string().contains("Sesión bloqueada para elevación"));
+
+        reset_elevation_tracker();
+    }
+
+    #[test]
+    fn test_elevation_credential_debug_display_redaction() {
+        let cred = SecureElevationCredential::new("admin_root", "UltraSecret999!");
+        let debug_str = format!("{:?}", cred);
+        let display_str = format!("{}", cred);
+
+        assert!(!debug_str.contains("UltraSecret999!"));
+        assert!(!display_str.contains("UltraSecret999!"));
+        assert!(debug_str.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_elevation_account_parsing_local_and_domain() {
+        let (u1, d1) = SecureElevationCredential::parse_account("Administrator");
+        assert_eq!(u1, "Administrator");
+        assert_eq!(d1, None);
+
+        let (u2, d2) = SecureElevationCredential::parse_account(".\\LocalAdmin");
+        assert_eq!(u2, "LocalAdmin");
+        assert_eq!(d2, Some(".".to_string()));
+
+        let (u3, d3) = SecureElevationCredential::parse_account("CONTOSO\\admin_svc");
+        assert_eq!(u3, "admin_svc");
+        assert_eq!(d3, Some("CONTOSO".to_string()));
+
+        let (u4, d4) = SecureElevationCredential::parse_account("admin_svc@contoso.lan");
+        assert_eq!(u4, "admin_svc");
+        assert_eq!(d4, Some("contoso.lan".to_string()));
+    }
+
+    #[test]
+    fn test_elevation_single_use_enforcement() {
+        reset_elevation_tracker();
+        set_active_profile(Some(sample_soporte_profile(false)));
+
+        let notif = ElevationRequestNotification::new(
+            "elev-single-1",
+            "Tecnico Soporte",
+            "Ajustar cortafuegos",
+            Some("INC-888".to_string()),
+        )
+        .unwrap();
+
+        handle_incoming_elevation_request(notif).unwrap();
+        respond_to_elevation_request("elev-single-1", ElevationConsentResponse::Approved).unwrap();
+
+        let cred1 = SecureElevationCredential::new("Administrator", "GoodPass");
+        let res1 = execute_elevation_action("elev-single-1", cred1, |_u, _d, _p| Ok(()));
+        assert!(res1.is_ok());
+
+        let cred2 = SecureElevationCredential::new("Administrator", "GoodPass");
+        let res2 = execute_elevation_action("elev-single-1", cred2, |_u, _d, _p| Ok(()));
+        assert!(res2.is_err());
+        assert!(res2.unwrap_err().to_string().contains("un solo uso permitido"));
+
+        reset_elevation_tracker();
     }
 }

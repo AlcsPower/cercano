@@ -100,6 +100,8 @@ pub enum Category {
     Console,
     Auth,
     Build,
+    Chat,
+    Elev,
     Other(String),
 }
 
@@ -112,6 +114,8 @@ impl Category {
             Self::Console => "console",
             Self::Auth => "auth",
             Self::Build => "build",
+            Self::Chat => "chat",
+            Self::Elev => "elev",
             Self::Other(s) => s.as_str(),
         }
     }
@@ -134,6 +138,8 @@ impl FromStr for Category {
             "console" => Self::Console,
             "auth" => Self::Auth,
             "build" => Self::Build,
+            "chat" => Self::Chat,
+            "elev" => Self::Elev,
             other => Self::Other(other.to_string()),
         })
     }
