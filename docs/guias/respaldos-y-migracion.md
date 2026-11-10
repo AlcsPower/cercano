@@ -112,9 +112,9 @@ Si algo falla en 2–4, la base actual no se modifica. Un fallo en el intercambi
 
 **Qué no cambia:** adjuntos y claves siguen en `/opt/cercano/data`. **Qué se degrada durante la ventana:** chat, builds y latidos (los equipos pasan a `offline` tras 60 s y vuelven solos). Las sesiones remotas activas no dependen del control plane y continúan.
 
-## 8. Migración a SQL Server (condicionada)
+## 8. SQL Server (diferido)
 
-Solo si F8-01 aprueba el driver. El procedimiento es idéntico al §7 con `sqlserver://` como destino y estas diferencias: base y usuario creados de antemano, `BULK INSERT` disponible si la copia es lenta, y confirmación del orden de colación para las comparaciones de texto. Si F8-01 no lo aprueba, la operación no se ofrece en la consola y esta sección se retira.
+F8-01 cerró este frente: `sqlx 0.8` no tiene driver MSSQL, así que la migración a SQL Server **no se ofrece en la consola** y esta sección queda como referencia para una fase posterior. Si se retoma con una capa `tiberius`, el procedimiento será el del §7 cambiando el destino, con base y usuario creados de antemano, `BULK INSERT` si la copia es lenta y revisión del orden de colación para las comparaciones de texto. Ver [`docs/status/informes/F8-01.md`](../status/informes/F8-01.md).
 
 ## 9. Diagnóstico
 

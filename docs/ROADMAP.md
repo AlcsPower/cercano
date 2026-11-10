@@ -96,7 +96,7 @@ Una fase cierra solo si se cumple todo:
 | R9 | Cercano Chat expone conversaciones o adjuntos, o se usa para abuso | Media | Alto | TLS obligatorio, identidad por dispositivo con clave fijada, permisos, límites de tasa, retención, auditoría sin contenido y antivirus como extensión (F4.5) |
 | R10 | Deriva entre motores de base de datos (SQL distinto por dialecto) | Media | Alto | Fingerprint de esquema por motor en CI; matriz de pruebas con los motores soportados en cada PR que toque SQL (F8-03, F8-09) |
 | R11 | Restauración o migración destructiva con pérdida de datos | Baja | Crítico | Snapshot firmado previo obligatorio, verificación antes del corte, origen intacto como rollback, confirmación tipada y reautenticación (F8-06, F8-07) |
-| R12 | El driver MSSQL de `sqlx` no alcanza la madurez necesaria | Media | Medio | Spike F8-01 con criterio de salida; alternativa `tiberius`; SQL Server diferible sin afectar a PostgreSQL |
+| R12 | SQL Server queda fuera de F8: `sqlx 0.8` no tiene driver MSSQL (retirado en la 0.7) | Baja | Bajo | Cerrado en F8-01: SQL Server diferido, PostgreSQL no se ve afectado; si se retoma, capa `tiberius` con spike y decisión aparte |
 
 ## 7. Decisiones pendientes del dueño
 
@@ -106,14 +106,14 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 |---|---|---|
 | D1 | Nombre comercial y marca definitivos | «Cercano»; logo provisional en `branding/` (pendiente: contraste del cursor, ver `branding/README.md` §2) |
 | D2 | Plataforma prioritaria del instalador | Windows primero; Linux y macOS después |
-| D3 | Base de datos | SQLite por defecto (despliegues pequeños/LAN); PostgreSQL y SQL Server soportados como motores alternativos, con migración asistida desde la consola (F8) |
+| D3 | Base de datos | SQLite por defecto (despliegues pequeños/LAN); PostgreSQL soportado como motor alternativo con migración asistida desde la consola (F8); SQL Server **diferido** en F8-01 (no hay driver MSSQL en `sqlx 0.8`) |
 | D4 | Certificado de firma de código (Authenticode) | **Sin definir:** hasta tenerlo, los instaladores se firman con certificado de pruebas |
 | D5 | Acceso de los agentes al repositorio `AlcsPower/cercano` | **Resuelto** el 2026-11-05 |
 | D6 | Versión base de upstream | Última etiqueta estable de ambos repos en la fecha de F0-02 |
 | D7 | Texto de licencia | **Resuelto** el 2026-11-05: `LICENSE` contiene el texto oficial de AGPL-3.0 |
 | D8 | Origen de las credenciales de administrador para la elevación (ver `PLAN-F3-GENERADOR.md` §3) | Tecleo manual del técnico en cada solicitud, sin almacenar nada; Windows LAPS en F5; bóveda propia descartada |
 | D9 | Alcance y ubicación de Cercano Chat | **Resuelto 2026-11-09:** chat embebido en el cliente Cercano, gestión en `console-web`, adjuntos (imágenes/PDF), notificaciones y escalado remoto; fase F4.5 después de F4. Nombre y Apellido del contacto se piden la primera vez, se guardan localmente y como snapshot en la conversación. |
-| D10 | Motores de base de datos de F8 | PostgreSQL obligatorio; SQL Server condicionado a que F8-01 valide el driver; SQLite sigue siendo el motor de instalación por defecto |
+| D10 | Motores de base de datos de F8 | PostgreSQL obligatorio; SQL Server **diferido** en F8-01: `sqlx 0.8` no tiene driver MSSQL y no hay nada que validar; retomarlo exige una capa `tiberius` con decisión y spike propios. SQLite sigue siendo el motor de instalación por defecto |
 | D11 | Destino y retención de respaldos | `./data/backups`, 30 copias / 30 días; copia fuera del equipo cifrada por el operador; las claves se respaldan por el procedimiento aparte (`docs/guias/rotacion-claves.md`) |
 
 ## 8. Estado actual
@@ -124,5 +124,5 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 - **Marca:** logo, iconos y guía de uso en `branding/`.
 - **Cercano Chat (F4.5):** diseño, contrato y planificación en `PLAN-F4.5-CHAT.md`, `specs/chat.md` y `adr/010-cercano-chat.md`; la implementación queda encolada después de cerrar F4.
 - **F4:** plan detallado en `PLAN-F4-CONSOLA.md`; RBAC y 2FA pueden ir en paralelo con F3; solo el generador (F4-07) espera F3-07.
-- **F8 (extra post-v1):** plan en `PLAN-F8-PORTABILIDAD.md`, decisión en `adr/011-portabilidad-bd.md`, contrato en `specs/db-portabilidad.md` y operación en `guias/respaldos-y-migracion.md`, por petición del dueño (2026-11-10): respaldos gestionados y migración asistida a PostgreSQL/SQL Server desde la consola. Se detalla antes de tiempo respecto a la regla de olas de §2; no bloquea M4 y SQL Server queda condicionado al spike F8-01.
+- **F8 (extra post-v1):** plan en `PLAN-F8-PORTABILIDAD.md`, decisión en `adr/011-portabilidad-bd.md`, contrato en `specs/db-portabilidad.md` y operación en `guias/respaldos-y-migracion.md`, por petición del dueño (2026-11-10): respaldos gestionados y migración asistida a PostgreSQL desde la consola. Se detalla antes de tiempo respecto a la regla de olas de §2; no bloquea M4. **F8-01 (2026-11-10):** inventario de las 142 sentencias y SQL Server diferido porque `sqlx 0.8` no tiene driver MSSQL (ver `status/informes/F8-01.md`).
 - **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-F4-CONSOLA.md`, `PLAN-F4.5-CHAT.md`, `PLAN-F8-PORTABILIDAD.md`, `adr/011-portabilidad-bd.md`, `specs/db-portabilidad.md`, `guias/respaldos-y-migracion.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.
