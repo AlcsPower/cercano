@@ -1,6 +1,6 @@
 # Cercano — Roadmap
 
-**Versión:** 0.4 · **Fecha:** 2026-11-09 · **Coordinador:** Claude · **Dueño del producto:** AlcsPower
+**Versión:** 0.5 · **Fecha:** 2026-11-10 · **Coordinador:** Claude · **Dueño del producto:** AlcsPower
 **Repositorio:** `AlcsPower/cercano` · **Licencia prevista:** AGPL-3.0 (heredada de upstream; ver §8 sobre el archivo `LICENSE`)
 
 ---
@@ -35,7 +35,7 @@ Referencia: documentación pública y página de precios de RustDesk (nov. 2026)
 | Alarmas (whitelist IP, ráfagas de intentos, terminal, alcance de sesión) | Nuevo | F2 |
 | Logs de operaciones de consola | Nuevo | F2 |
 | Nota de sesión del lado controlador | Nuevo | F2 |
-| **Generador de clientes personalizados** | Nuevo: `cercano-builder` | F3 |
+| **Generador de clientes personalizados** | ✅ Implementado: `cercano-build` (.exe/.msi, Authenticode, SBOM, ADR-008) | F3 |
 | Consola web | Nuevo: `console-web` | F4 |
 | 2FA, roles de admin y de control | Nuevo | F4 |
 | Libreta de direcciones | Nuevo | F5 |
