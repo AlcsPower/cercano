@@ -173,4 +173,21 @@ Fuente: `docs/PLAN-F7-RELEASE.md`. Depende del cierre de F6.
 | F7-12 | Candidato beta (RC), pruebas y publicación de notas | F7-04…11 | Builder + QA | Dueño/Coordinador | Pendiente |
 | F7-13 | Informe de cierre, deuda y gate M4 | F7-12 | Coordinador | Dueño | Pendiente |
 
-_Total: 53 tareas F0–F3, 10 de F4, 16 de F4.5, 13 de F5, 10 de F6 y 13 de F7. Los planes F5–F7 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado._
+## F8 — Portabilidad y respaldos gestionados (extra post-v1)
+
+Fuente: `docs/PLAN-F8-PORTABILIDAD.md`. Después de F7; **no bloquea M4**. SQL Server condicionado al veredicto de F8-01.
+
+| ID | Tarea | Dep. | Rol | Verifica | Estado |
+|---|---|---|---|---|---|
+| F8-01 | ADR-011, inventario de SQL y spike de viabilidad MSSQL | — | ControlPlane + Seguridad | Coordinador | Pendiente |
+| F8-02 | Crate `db-core`: pool, dialecto, marcadores, timestamps, factoría y `AppState` | F8-01 | ControlPlane | QA | Pendiente |
+| F8-03 | Esquema y migraciones por motor, disparadores, fingerprint en CI | F8-02 | ControlPlane | Seguridad | Pendiente |
+| F8-04 | Portar consultas de `cercano-api` y `audit-core` a SQL portable | F8-03 | ControlPlane | QA | Pendiente |
+| F8-05 | Formato de archivo firmado y verificador | F8-02 | ControlPlane | Seguridad | Pendiente |
+| F8-06 | API de respaldo y restauración; programación y retención; auditoría `db.backup_*`/`db.restore_*` | F8-04, F8-05 | ControlPlane | QA | Pendiente |
+| F8-07 | Asistente de migración: preflight, mantenimiento, copia, verificación, corte y rollback | F8-06 | ControlPlane | Seguridad | Pendiente |
+| F8-08 | Consola: pestaña «Mantenimiento», permiso `db:admin`, confirmaciones y progreso | F8-06, F8-07, F4-06 | Web | QA | Pendiente |
+| F8-09 | Matriz de pruebas SQLite/PostgreSQL/SQL Server y pruebas de fallo | F8-04…08 | QA | Coordinador | Pendiente |
+| F8-10 | Runbook `docs/guias/respaldos-y-migracion.md`, cierre e informe | F8-09 | Coordinador | Dueño | Pendiente |
+
+_Total: 53 tareas F0–F3, 10 de F4, 16 de F4.5, 13 de F5, 10 de F6, 13 de F7 y 10 de F8 (extra post-v1, no bloquea M4). Los planes F5–F8 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado._

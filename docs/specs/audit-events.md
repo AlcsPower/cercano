@@ -30,8 +30,8 @@ El archivo formal JSON Schema Draft-07 se encuentra publicado en:
 | `trace_id` | `string` | **Sí** | Identificador de correlación que asocia todos los eventos de una misma sesión o transacción de extremo a extremo. |
 | `ts` | `string` (ISO 8601) | **Sí** | Marca de tiempo UTC en formato RFC 3339 con milisegundos (`YYYY-MM-DDTHH:MM:SS.sssZ`). |
 | `source` | `string` (Enum) | **Sí** | Componente emisor: `client`, `hbbs`, `hbbr`, `api`, `console`, `builder`. |
-| `category` | `string` (Enum) | **Sí** | Categoría funcional: `conn`, `file`, `alarm`, `console`, `auth`, `build`, `chat`, `elev`. |
-| `action` | `string` (Pattern) | **Sí** | Acción auditada jerárquica: `^(conn\|file\|alarm\|console\|auth\|build\|chat\|elev)(\.[a-z0-9_]+)+$`. |
+| `category` | `string` (Enum) | **Sí** | Categoría funcional: `conn`, `file`, `alarm`, `console`, `auth`, `build`, `chat`, `elev`, `db`. |
+| `action` | `string` (Pattern) | **Sí** | Acción auditada jerárquica: `^(conn\|file\|alarm\|console\|auth\|build\|chat\|elev\|db)(\.[a-z0-9_]+)+$`. |
 | `actor` | `object` | **Sí** | Entidad que inicia o ejecuta la acción (usuario, dispositivo o sistema). |
 | `subject` | `object` | No | Entidad receptora, recurso o dispositivo sobre el que recae la acción. |
 | `outcome` | `string` (Enum) | **Sí** | Resultado: `success` (éxito), `failure` (fallo funcional/error), `denied` (denegado por política o falta de privilegios). |
@@ -53,7 +53,7 @@ El archivo formal JSON Schema Draft-07 se encuentra publicado en:
 | Propiedad | Tipo | Requerido | Descripción |
 |---|---|:---:|---|
 | `id` | `string` | **Sí** | Identificador único del recurso o entidad afectada. |
-| `subject_type` | `string` (Enum) | **Sí** | Clasificación del sujeto: `device`, `user`, `group`, `session`, `installer`, `setting`, `conversation`, `system`. |
+| `subject_type` | `string` (Enum) | **Sí** | Clasificación del sujeto: `device`, `user`, `group`, `session`, `installer`, `setting`, `conversation`, `backup`, `migration`, `system`. |
 | `name` | `string` | No | Nombre o denominación representativa del recurso afectado. |
 
 ---
@@ -781,6 +781,31 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 > [!IMPORTANT]
 > La regla de oro del subsistema de auditoría (*Zero Secret Leaks*) se aplica con plenitud a `auth.2fa_*`: ningún secreto, ni código TOTP en claro, ni hash SHA-256 de recovery codes en claro puede aparecer en el objeto `details`. Solo metadatos contextuales (IP, índices, métodos) están permitidos. El esquema JSON ya acepta la familia `auth.*`; estos eventos se encadenan con `prev_hash`/`hash` RFC 8785 (JCS) igual que `auth.login`, `auth.fail`, `auth.logout`.
+
+### 6.18 `db.*` — Respaldo, restauración y migración de base de datos (F8)
+
+- **Emisor (`source`):** `api` (el control plane ejecuta la operación sobre su propia base).
+- **Categoría (`category`):** `db`.
+- **Condición:** toda operación de respaldo, verificación, descarga, borrado, restauración, reautenticación para operaciones destructivas y migración de motor. Contrato completo en [`docs/specs/db-portabilidad.md`](db-portabilidad.md) §6.
+- **`trace_id`:** UUIDv7 del trabajo (`backup_id` o `migration_id` como prefijo lógico).
+- **`action`:** uno de `db.backup_created`, `db.backup_verified`, `db.backup_downloaded`, `db.backup_deleted`, `db.restore_started`, `db.restore_completed`, `db.restore_failed`, `db.migration_preflight`, `db.migration_started`, `db.migration_verified`, `db.migration_completed`, `db.migration_failed`, `db.migration_rollback`, `db.reauth_denied`.
+- **`subject_type`:** `backup` para respaldos, `migration` para migraciones, `system` para la propia base.
+- **`outcome`:** `success`, `failure` o `denied`.
+- **Campos esperados en `details`:** identificadores, motor, versión de esquema, conteos, tamaño, códigos de error y resultado de las comprobaciones. **Prohibido**: contenido de filas o mensajes, contraseñas, cadenas de conexión (`target_url`), rutas absolutas y material de claves.
+
+| `action` | Descripción | `details` permitidos | `details` prohibidos |
+|---|---|---|---|
+| `db.backup_created` | Respaldo firmado creado. | `{ "backup_id", "engine", "schema_version", "rows_total", "size_bytes", "attachments_included" }` | contenido, rutas absolutas, claves |
+| `db.backup_verified` | Verificación de firma, hashes y conteos. | `{ "backup_id", "valid", "tables": [{ "name", "rows", "ok" }] }` | contenido |
+| `db.backup_downloaded` | Descarga autenticada del archivo. | `{ "backup_id", "ip" }` | URL firmada, token de sesión |
+| `db.backup_deleted` | Borrado por retención o manual. | `{ "backup_id", "reason" }` | ruta absoluta |
+| `db.restore_started` / `_completed` / `_failed` | Restauración verificada de un respaldo. | `{ "backup_id", "engine", "schema_version", "error_code"? }` | contenido, contraseña, `target_url` |
+| `db.migration_preflight` | Comprobaciones previas del destino. | `{ "source_engine", "target_engine", "checks": [{ "name", "ok" }] }` | `target_url`, credenciales |
+| `db.migration_started` / `_verified` / `_completed` / `_failed` / `_rollback` | Copia, verificación, corte y rollback. | `{ "migration_id", "source_engine", "target_engine", "rows_total", "error_code"? }` | contenido, credenciales |
+| `db.reauth_denied` | Operación destructiva sin reautenticación válida. | `{ "reason": "reauth_required\|reauth_failed" }` | contraseña intentada |
+
+> [!IMPORTANT]
+> El archivo de respaldo contiene datos personales y mensajes de chat en claro; su identificador y sus conteos pueden auditarse, su contenido no. Las operaciones `db.*` no se pueden desactivar por política y se encadenan con `prev_hash`/`hash` RFC 8785 como el resto.
 
 ---
 

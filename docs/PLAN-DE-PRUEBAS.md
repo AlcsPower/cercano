@@ -1,6 +1,6 @@
 # Cercano — Plan de pruebas
 
-**Versión:** 0.4 · **Fecha:** 2026-11-09 · Aplica a todas las fases. Roles y reglas: `AGENTS.md`.
+**Versión:** 0.5 · **Fecha:** 2026-11-10 · Aplica a todas las fases. Roles y reglas: `AGENTS.md`.
 
 ## 1. Principios
 
@@ -202,6 +202,53 @@ Los casos detallados viven en `tests/cases/TC-F4.5-*.md` durante la implementaci
 | TC-F4.5-096 | GET /api/chat/branding devuelve defaults/config | Sin auth devuelve objeto con defaults o config guardada; estructura correcta |
 | TC-F4.5-097 | PUT /api/chat/branding con `chat:manage` | 200 y objeto actualizado; 403 sin permiso; validación color `#RRGGBB`, URL https, longitudes |
 | TC-F4.5-098 | Cliente refleja cambio de marca y fallback | Al reabrir/refrescar la ventana usa la nueva marca; si la API falla usa fallback (perfil/built-in) |
+
+### F8 (portabilidad y respaldos)
+
+Fuente: [`PLAN-F8-PORTABILIDAD.md`](PLAN-F8-PORTABILIDAD.md) y [`specs/db-portabilidad.md`](specs/db-portabilidad.md). La columna «Motores» indica dónde debe correr el caso; SQL Server solo si F8-01 lo aprueba.
+
+| ID | Caso | Resultado esperado | Motores |
+|---|---|---|---|
+| TC-F8-001 | Migrar una base vacía y una con 001–008 | Esquema aplicado sin errores y `schema_migrations` correcta | SQLite, PG, MSSQL |
+| TC-F8-002 | Fingerprint de esquema por motor | Coincide con el archivo versionado; una columna de más lo hace fallar | idem |
+| TC-F8-003 | `UPDATE audit_events` | Falla; la fila no cambia; el error es claro | idem |
+| TC-F8-004 | `DELETE audit_events` | Falla; la fila no cambia | idem |
+| TC-F8-005 | Suite completa de la API sobre PostgreSQL | Todo en verde; sin consultas con sintaxis SQLite | PG |
+| TC-F8-006 | Suite completa de la API sobre SQL Server | Todo en verde | MSSQL (si aplica) |
+| TC-F8-007 | Migración de datos legados de timestamps | Formato canónico; `audit_events` intacta; idempotente | SQLite, PG |
+| TC-F8-008 | Consulta con `?` dentro de un literal | El reescritor no toca el literal | unitaria |
+| TC-F8-010 | Crear respaldo | Archivo firmado, manifiesto con conteos y hashes por tabla | idem |
+| TC-F8-011 | Verificar el respaldo recién creado | Válido, con la tabla y el número de filas esperados | idem |
+| TC-F8-012 | Alterar una fila del archivo | Rechazado con la tabla y la fila señaladas | idem |
+| TC-F8-013 | Alterar el manifiesto o `archive_sha256` | Rechazado por firma/hash | idem |
+| TC-F8-014 | Archivo con `format: 2` | Rechazado con mensaje explícito | idem |
+| TC-F8-015 | Archivo con `schema_version` mayor | Rechazado antes de leer datos | idem |
+| TC-F8-016 | Respaldo con y sin adjuntos | Manifiesto refleja `included`; el compañero de adjuntos existe solo cuando corresponde | idem |
+| TC-F8-017 | Descargar respaldo con `operator` o `auditor` | 403 y evento; la pestaña no se muestra | consola |
+| TC-F8-018 | Nombre de archivo con `../` o caracteres fuera de `[A-Za-z0-9._-]` | Rechazado; sin escritura fuera del directorio | idem |
+| TC-F8-019 | Retención con más copias que el límite | Borra las más antiguas verificadas; conserva la más reciente; audita | idem |
+| TC-F8-020 | Disco lleno a mitad de respaldo | Error `db.storage_full`; `.tmp` identificable; la BD intacta | idem |
+| TC-F8-021 | Programación: esperar un intervalo y reiniciar el proceso | La copia se ejecuta; el estado persiste; no se duplica | idem |
+| TC-F8-030 | Restaurar en una instalación limpia | Conteos coinciden; `cercano-audit verify` en verde | idem |
+| TC-F8-031 | Restaurar con firma inválida | Aborta antes de escribir; la base actual no se toca | idem |
+| TC-F8-032 | Restaurar sin snapshot previo posible | Se rechaza la operación | idem |
+| TC-F8-033 | Restaurar con un build en curso | 409 `db.job_in_progress` | idem |
+| TC-F8-034 | Restaurar con contraseña incorrecta o confirmación de motor errónea | 403/422; nada cambia | idem |
+| TC-F8-035 | Restaurar con adjuntos ausentes | BD restaurada; aviso explícito de adjuntos fuera | idem |
+| TC-F8-040 | Preflight contra destino no vacío | `ok: false` con el chequeo fallido; no se escribe | PG, MSSQL |
+| TC-F8-041 | Migración SQLite → PostgreSQL | Sin pérdida; conteos y cadena verificados; reinicio en el destino | PG |
+| TC-F8-042 | Interrumpir el proceso durante `copying` | Estado incompleto informado; el origen sigue siendo la fuente; no se reanuda solo | PG |
+| TC-F8-043 | Rollback tras `verifying` fallido | Destino descartado; servicio en el origen; evento | PG |
+| TC-F8-044 | Corte | `requires_restart: true`; tras reiniciar, `status` informa el motor destino | PG |
+| TC-F8-045 | Fallo al escribir el TOML | `db.migration_cutover_failed`; servicio en el origen; sale de mantenimiento | PG |
+| TC-F8-046 | Escrituras y latidos durante mantenimiento | 503 con `Retry-After`; lecturas OK; equipos `offline` tras la gracia | PG |
+| TC-F8-050 | Cadena de eventos `db.*` | Presentes, verificables y sin contenido de datos | idem |
+| TC-F8-051 | Buscar secretos, `target_url` y credenciales en archivo, logs y auditoría | Ninguno encontrado | idem |
+| TC-F8-052 | Archivo de respaldo y claves | El archivo no contiene `id_ed25519` ni `audit_signing_key`; la consola avisa | idem |
+| TC-F8-060 | Consola: ciclo completo con `admin` | Respaldo, verificación, descarga, restauración y migración guiadas | consola |
+| TC-F8-061 | Consola con `operator` y `auditor` | Sin pestaña «Mantenimiento»; 403 en la API | consola |
+| TC-F8-062 | Progreso y error en la consola | Barra y tabla avanzan; tras un fallo inyectado se muestra el código | consola |
+| TC-F8-063 | Accesibilidad, modo oscuro y `prefers-reduced-motion` en la pestaña | Foco visible, `aria-live` en el progreso, sin regresiones | consola |
 
 ## 7. Pruebas de seguridad por fase
 

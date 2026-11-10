@@ -46,6 +46,9 @@ Los servicios comparten el volumen de datos persistente montado en `/opt/cercano
    - Consérvela junto con los respaldos: sin esta clave no se pueden verificar los checkpoints emitidos.
 4. **Seguridad y permisos:**
    - Todos los contenedores de backend se ejecutan sin privilegios de `root`, bajo el usuario del sistema `cercano` (UID `1000:1000`).
+5. **Respaldos (`CERCANO_BACKUPS_DIR`, por defecto `./data/backups`, permisos `0700`):**
+   - Copiar la BD con `sqlite3 .backup` (nunca `cp`/`tar` en caliente) y los adjuntos por separado; procedimiento completo en `docs/guias/respaldos-y-migracion.md`.
+   - El directorio debe estar en disco local y, preferiblemente, en un montaje distinto del volumen de datos.
 
 ---
 

@@ -1,6 +1,6 @@
 # Cercano — Roadmap
 
-**Versión:** 0.5 · **Fecha:** 2026-11-10 · **Coordinador:** Claude · **Dueño del producto:** AlcsPower
+**Versión:** 0.6 · **Fecha:** 2026-11-10 · **Coordinador:** Claude · **Dueño del producto:** AlcsPower
 **Repositorio:** `AlcsPower/cercano` · **Licencia prevista:** AGPL-3.0 (heredada de upstream; ver §8 sobre el archivo `LICENSE`)
 
 ---
@@ -47,8 +47,10 @@ Referencia: documentación pública y página de precios de RustDesk (nov. 2026)
 | Soporte WebSocket | Evaluar | F6 |
 | Cliente web integrado | **Fuera de alcance v1** | — |
 | **Cercano Chat** (chat de soporte con el técnico) | Nuevo: `cercano-api` + cliente + `console-web` | F4.5 |
+| Respaldo, restauración y verificación desde la consola | Nuevo: `cercano-api` + `console-web` | F8 |
+| Migración asistida de motor (PostgreSQL, SQL Server) | Nuevo | F8 |
 
-**Extras sobre Pro (diferenciadores):** cadena de hashes con checkpoints firmados, verificador offline (`cercano-audit verify`), `trace_id` extremo a extremo, exportación a SIEM (syslog/CEF/JSONL/webhook), auditoría de la propia generación de instaladores, revocación de instaladores, **dos tipos de instalador (soporte y técnico) con el rol aplicado también en el servidor**, **elevación con credenciales de administrador de Windows**, con consentimiento de la persona usuaria y auditoría completa (su activación en producción queda condicionada a la 2FA de F4), y **Cercano Chat** para resolver problemas pequeños sin sesión remota, con nombre natural del contacto, adjuntos, notificaciones y escalado auditado a la sesión remota.
+**Extras sobre Pro (diferenciadores):** cadena de hashes con checkpoints firmados, verificador offline (`cercano-audit verify`), `trace_id` extremo a extremo, exportación a SIEM (syslog/CEF/JSONL/webhook), auditoría de la propia generación de instaladores, revocación de instaladores, **dos tipos de instalador (soporte y técnico) con el rol aplicado también en el servidor**, **elevación con credenciales de administrador de Windows**, con consentimiento de la persona usuaria y auditoría completa (su activación en producción queda condicionada a la 2FA de F4), y **Cercano Chat** para resolver problemas pequeños sin sesión remota, con nombre natural del contacto, adjuntos, notificaciones y escalado auditado a la sesión remota; y **respaldo, restauración y migración de motor gestionados desde la consola**, con PostgreSQL y SQL Server (F8).
 
 ## 4. Fases e hitos
 
@@ -65,8 +67,9 @@ Duraciones orientativas, a ajustar tras F0 (suponen 3–5 agentes en paralelo).
 | **F5** | Identidad y control de acceso | 4–5 sem | Libreta, estrategias, OIDC/LDAP, acceso entre grupos |
 | **F6** | Optimización LAN y relays | 3 sem | Descubrimiento LAN, multi-relay, pruebas con pérdida/latencia |
 | **F7** | Endurecimiento y release | 3 sem | **M4:** beta pública: pentest interno, SBOM, firma, documentación, guía de migración |
+| **F8** | Portabilidad y respaldos gestionados (extra post-v1) | 4–6 sem | **M5:** un administrador crea, verifica y restaura respaldos y migra el control plane de SQLite a PostgreSQL (y a SQL Server si el spike lo valida) desde la consola, sin pérdida de datos y con auditoría completa |
 
-Total estimado: 27–35 semanas (F3 pasa de 3 a 4–5 por los roles de instalador y la elevación con credenciales; F4.5 añade 2–3).
+Total estimado: 27–35 semanas (F3 pasa de 3 a 4–5 por los roles de instalador y la elevación con credenciales; F4.5 añade 2–3). **F8 añade 4–6 semanas después de v1 y no bloquea M4.**
 
 ## 5. Criterios de salida (gates)
 
@@ -91,6 +94,9 @@ Una fase cierra solo si se cumple todo:
 | R7 | Alcance excesivo | Media | Medio | Paridad por fases; cliente web fuera de v1 |
 | R8 | La elevación con credenciales de administrador amplía el daño de un técnico o un instalador `tecnico` comprometido | Media | Alto | Consentimiento por solicitud, sin persistencia, un solo uso, auditoría `elev.*`, desactivada por defecto hasta tener 2FA (F4), revisión F3-18 |
 | R9 | Cercano Chat expone conversaciones o adjuntos, o se usa para abuso | Media | Alto | TLS obligatorio, identidad por dispositivo con clave fijada, permisos, límites de tasa, retención, auditoría sin contenido y antivirus como extensión (F4.5) |
+| R10 | Deriva entre motores de base de datos (SQL distinto por dialecto) | Media | Alto | Fingerprint de esquema por motor en CI; matriz de pruebas con los motores soportados en cada PR que toque SQL (F8-03, F8-09) |
+| R11 | Restauración o migración destructiva con pérdida de datos | Baja | Crítico | Snapshot firmado previo obligatorio, verificación antes del corte, origen intacto como rollback, confirmación tipada y reautenticación (F8-06, F8-07) |
+| R12 | El driver MSSQL de `sqlx` no alcanza la madurez necesaria | Media | Medio | Spike F8-01 con criterio de salida; alternativa `tiberius`; SQL Server diferible sin afectar a PostgreSQL |
 
 ## 7. Decisiones pendientes del dueño
 
@@ -100,13 +106,15 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 |---|---|---|
 | D1 | Nombre comercial y marca definitivos | «Cercano»; logo provisional en `branding/` (pendiente: contraste del cursor, ver `branding/README.md` §2) |
 | D2 | Plataforma prioritaria del instalador | Windows primero; Linux y macOS después |
-| D3 | Base de datos | SQLite por defecto (despliegues pequeños/LAN), PostgreSQL opcional |
+| D3 | Base de datos | SQLite por defecto (despliegues pequeños/LAN); PostgreSQL y SQL Server soportados como motores alternativos, con migración asistida desde la consola (F8) |
 | D4 | Certificado de firma de código (Authenticode) | **Sin definir:** hasta tenerlo, los instaladores se firman con certificado de pruebas |
 | D5 | Acceso de los agentes al repositorio `AlcsPower/cercano` | **Resuelto** el 2026-11-05 |
 | D6 | Versión base de upstream | Última etiqueta estable de ambos repos en la fecha de F0-02 |
 | D7 | Texto de licencia | **Resuelto** el 2026-11-05: `LICENSE` contiene el texto oficial de AGPL-3.0 |
 | D8 | Origen de las credenciales de administrador para la elevación (ver `PLAN-F3-GENERADOR.md` §3) | Tecleo manual del técnico en cada solicitud, sin almacenar nada; Windows LAPS en F5; bóveda propia descartada |
 | D9 | Alcance y ubicación de Cercano Chat | **Resuelto 2026-11-09:** chat embebido en el cliente Cercano, gestión en `console-web`, adjuntos (imágenes/PDF), notificaciones y escalado remoto; fase F4.5 después de F4. Nombre y Apellido del contacto se piden la primera vez, se guardan localmente y como snapshot en la conversación. |
+| D10 | Motores de base de datos de F8 | PostgreSQL obligatorio; SQL Server condicionado a que F8-01 valide el driver; SQLite sigue siendo el motor de instalación por defecto |
+| D11 | Destino y retención de respaldos | `./data/backups`, 30 copias / 30 días; copia fuera del equipo cifrada por el operador; las claves se respaldan por el procedimiento aparte (`docs/guias/rotacion-claves.md`) |
 
 ## 8. Estado actual
 
@@ -116,4 +124,5 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 - **Marca:** logo, iconos y guía de uso en `branding/`.
 - **Cercano Chat (F4.5):** diseño, contrato y planificación en `PLAN-F4.5-CHAT.md`, `specs/chat.md` y `adr/010-cercano-chat.md`; la implementación queda encolada después de cerrar F4.
 - **F4:** plan detallado en `PLAN-F4-CONSOLA.md`; RBAC y 2FA pueden ir en paralelo con F3; solo el generador (F4-07) espera F3-07.
-- **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-F4-CONSOLA.md`, `PLAN-F4.5-CHAT.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.
+- **F8 (extra post-v1):** plan en `PLAN-F8-PORTABILIDAD.md`, decisión en `adr/011-portabilidad-bd.md`, contrato en `specs/db-portabilidad.md` y operación en `guias/respaldos-y-migracion.md`, por petición del dueño (2026-11-10): respaldos gestionados y migración asistida a PostgreSQL/SQL Server desde la consola. Se detalla antes de tiempo respecto a la regla de olas de §2; no bloquea M4 y SQL Server queda condicionado al spike F8-01.
+- **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-F4-CONSOLA.md`, `PLAN-F4.5-CHAT.md`, `PLAN-F8-PORTABILIDAD.md`, `adr/011-portabilidad-bd.md`, `specs/db-portabilidad.md`, `guias/respaldos-y-migracion.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.
