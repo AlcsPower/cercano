@@ -170,6 +170,14 @@ pub const MIGRATIONS: &[Migration] = &[
         CREATE INDEX IF NOT EXISTS idx_devices_installer_id ON devices(installer_id);
         "#,
     },
+    Migration {
+        version: 6,
+        name: "006_device_roles_schema",
+        sql: r#"
+        ALTER TABLE devices ADD COLUMN role TEXT NOT NULL DEFAULT 'soporte';
+        CREATE INDEX IF NOT EXISTS idx_devices_role ON devices(role);
+        "#,
+    },
 ];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
@@ -333,7 +341,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 5);
+        assert_eq!(rows.len(), 6);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
         assert_eq!(rows[1].get::<i64, _>("version"), 2);
@@ -344,6 +352,8 @@ mod tests {
         assert_eq!(rows[3].get::<String, _>("name"), "004_build_jobs_schema");
         assert_eq!(rows[4].get::<i64, _>("version"), 5);
         assert_eq!(rows[4].get::<String, _>("name"), "005_revocations_schema");
+        assert_eq!(rows[5].get::<i64, _>("version"), 6);
+        assert_eq!(rows[5].get::<String, _>("name"), "006_device_roles_schema");
 
         // Verify build_jobs table exists
         let build_jobs = sqlx::query("SELECT count(*) as cnt FROM build_jobs")
@@ -398,7 +408,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 5);
+        assert_eq!(rows.len(), 6);
     }
     #[tokio::test]
     async fn test_purge_stale_records() {

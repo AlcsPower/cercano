@@ -44,6 +44,8 @@ pub enum DeviceError {
     NotFound(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
+    #[error("Role violation: {0}")]
+    RoleViolation(String),
     #[error("Installer revoked: {0}")]
     InstallerRevoked(String),
     #[error("Installer expired: {0}")]
@@ -64,6 +66,9 @@ impl IntoResponse for DeviceError {
             }
             DeviceError::NotFound(msg) => (StatusCode::NOT_FOUND, "device_not_found", msg.clone()),
             DeviceError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
+            DeviceError::RoleViolation(msg) => {
+                (StatusCode::FORBIDDEN, "role_violation", msg.clone())
+            }
             DeviceError::InstallerRevoked(msg) => {
                 (StatusCode::FORBIDDEN, "installer_revoked", msg.clone())
             }
@@ -120,6 +125,12 @@ pub struct HeartbeatRequest {
     pub installer_id: Option<String>,
     #[serde(default)]
     pub profile_id: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+pub fn default_device_role() -> String {
+    "soporte".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -137,6 +148,8 @@ pub struct DeviceResponse {
     pub installer_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile_id: Option<String>,
+    #[serde(default = "default_device_role")]
+    pub role: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -191,6 +204,14 @@ pub fn validate_heartbeat_input(req: &HeartbeatRequest) -> Result<(), DeviceErro
         if ip.len() > 64 {
             return Err(DeviceError::Validation(
                 "La dirección IP no puede exceder 64 caracteres.".to_string(),
+            ));
+        }
+    }
+    if let Some(ref role) = req.role {
+        let r = role.trim().to_lowercase();
+        if r != "soporte" && r != "tecnico" {
+            return Err(DeviceError::Validation(
+                "El rol debe ser 'soporte' o 'tecnico'.".to_string(),
             ));
         }
     }
@@ -279,7 +300,7 @@ pub async fn heartbeat_handler(
         }
     }
 
-    // Resolver installer_id y profile_id de payload o cabeceras
+    // Resolver installer_id, profile_id y role de payload o cabeceras
     let incoming_installer_id = payload
         .installer_id
         .as_deref()
@@ -310,21 +331,231 @@ pub async fn heartbeat_handler(
                 .map(ToString::to_string)
         });
 
-    // Consultar si el dispositivo ya tenía un instalador asociado en base de datos
+    let incoming_role = payload
+        .role
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_lowercase)
+        .or_else(|| {
+            headers
+                .get("x-client-role")
+                .or_else(|| headers.get("x-role"))
+                .and_then(|h| h.to_str().ok())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_lowercase)
+        });
+
+    // Consultar si el dispositivo ya tenía un instalador o rol asociado en base de datos
     let existing_device_row =
-        sqlx::query("SELECT installer_id, profile_id FROM devices WHERE id = ?")
+        sqlx::query("SELECT installer_id, profile_id, role FROM devices WHERE id = ?")
             .bind(&trimmed_id)
             .fetch_optional(&state.db)
             .await?;
 
-    let (existing_installer_id, existing_profile_id): (Option<String>, Option<String>) =
-        match existing_device_row {
-            Some(ref r) => (r.get("installer_id"), r.get("profile_id")),
-            None => (None, None),
-        };
+    let (existing_installer_id, existing_profile_id, existing_role): (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) = match existing_device_row {
+        Some(ref r) => (r.get("installer_id"), r.get("profile_id"), r.get("role")),
+        None => (None, None, None),
+    };
+
+    let mut installer_profile_id: Option<String> = None;
+
+    let assigned_role = if let Some(ref exist_role) = existing_role {
+        // Dispositivo ya registrado: inmutabilidad estricta de installer_id y role (ADR-008)
+        if let Some(ref exist_inst) = existing_installer_id {
+            if let Some(ref inc_inst) = incoming_installer_id {
+                if inc_inst != exist_inst {
+                    return Err(DeviceError::Forbidden(format!(
+                        "No se puede modificar el installer_id '{}' de un dispositivo ya registrado",
+                        exist_inst
+                    )));
+                }
+            }
+        }
+
+        if exist_role == "soporte" && incoming_role.as_deref() == Some("tecnico") {
+            let trace_id = extract_trace_id(&headers);
+            let reason_str = format!(
+                "Dispositivo '{}' registrado con rol 'soporte' intentó identificarse como 'tecnico' (suplantación de rol)",
+                trimmed_id
+            );
+            let _ = state
+                .alarms
+                .record_role_violation(
+                    &trimmed_id,
+                    Some(&client_ip),
+                    existing_installer_id
+                        .as_deref()
+                        .or(incoming_installer_id.as_deref()),
+                    "soporte",
+                    "tecnico",
+                    &reason_str,
+                    Some(&trace_id),
+                )
+                .await;
+
+            let actor = Actor::with_details(
+                &trimmed_id,
+                "device",
+                provided_name.clone(),
+                Some(client_ip.clone()),
+            );
+            let subject = Subject::with_details(
+                existing_installer_id.as_deref().unwrap_or(&trimmed_id),
+                "installer",
+                Some("soporte".to_string()),
+            );
+            let audit_input = EventInput::new(
+                trace_id.clone(),
+                Source::Api,
+                Category::Auth,
+                "auth.denied",
+                actor,
+                Outcome::Denied,
+                json!({
+                    "reason": "role_violation",
+                    "device_id": trimmed_id,
+                    "registered_role": "soporte",
+                    "claimed_role": "tecnico",
+                    "installer_id": existing_installer_id
+                }),
+            )
+            .with_subject(subject);
+            let _ = state.audit.append(audit_input).await;
+
+            return Err(DeviceError::RoleViolation(
+                "Dispositivo registrado con rol 'soporte' no puede operar con rol 'tecnico'"
+                    .to_string(),
+            ));
+        }
+
+        exist_role.clone()
+    } else {
+        // Dispositivo nuevo: derivar rol canónico a partir del instalador firmado en build_jobs
+        if let Some(ref inst_id) = incoming_installer_id {
+            let job_row = sqlx::query("SELECT role, profile_id FROM build_jobs WHERE id = ?")
+                .bind(inst_id)
+                .fetch_optional(&state.db)
+                .await?;
+
+            if let Some(j) = job_row {
+                let canonical_role: String = j.get("role");
+                let p_id: String = j.get("profile_id");
+                installer_profile_id = Some(p_id);
+
+                if canonical_role == "soporte" && incoming_role.as_deref() == Some("tecnico") {
+                    let trace_id = extract_trace_id(&headers);
+                    let reason_str = format!(
+                        "Instalador '{}' registrado como 'soporte' intentó reportar o registrarse con capacidades/rol de 'tecnico'",
+                        inst_id
+                    );
+                    let _ = state
+                        .alarms
+                        .record_role_violation(
+                            &trimmed_id,
+                            Some(&client_ip),
+                            Some(inst_id),
+                            "soporte",
+                            "tecnico",
+                            &reason_str,
+                            Some(&trace_id),
+                        )
+                        .await;
+
+                    let actor = Actor::with_details(
+                        &trimmed_id,
+                        "device",
+                        provided_name.clone(),
+                        Some(client_ip.clone()),
+                    );
+                    let subject =
+                        Subject::with_details(inst_id, "installer", Some("soporte".to_string()));
+                    let audit_input = EventInput::new(
+                        trace_id.clone(),
+                        Source::Api,
+                        Category::Auth,
+                        "auth.denied",
+                        actor,
+                        Outcome::Denied,
+                        json!({
+                            "reason": "role_violation",
+                            "device_id": trimmed_id,
+                            "installer_id": inst_id,
+                            "canonical_role": "soporte",
+                            "claimed_role": "tecnico"
+                        }),
+                    )
+                    .with_subject(subject);
+                    let _ = state.audit.append(audit_input).await;
+
+                    return Err(DeviceError::RoleViolation(format!(
+                        "El instalador '{}' está registrado como 'soporte' y no puede operar con rol 'tecnico'",
+                        inst_id
+                    )));
+                }
+
+                canonical_role
+            } else {
+                if incoming_role.as_deref() == Some("tecnico") {
+                    let trace_id = extract_trace_id(&headers);
+                    let reason_str = format!(
+                        "Intento no autorizado de registrar rol 'tecnico' con instalador no reconocido '{}'",
+                        inst_id
+                    );
+                    let _ = state
+                        .alarms
+                        .record_role_violation(
+                            &trimmed_id,
+                            Some(&client_ip),
+                            Some(inst_id),
+                            "soporte",
+                            "tecnico",
+                            &reason_str,
+                            Some(&trace_id),
+                        )
+                        .await;
+
+                    return Err(DeviceError::RoleViolation(
+                        "No se permite registrar rol 'tecnico' sin un instalador autorizado correspondiente".to_string(),
+                    ));
+                }
+                incoming_role.unwrap_or_else(|| "soporte".to_string())
+            }
+        } else {
+            if incoming_role.as_deref() == Some("tecnico") {
+                let trace_id = extract_trace_id(&headers);
+                let reason_str = "Intento no autorizado de registrar dispositivo con rol 'tecnico' sin instalador firmado".to_string();
+                let _ = state
+                    .alarms
+                    .record_role_violation(
+                        &trimmed_id,
+                        Some(&client_ip),
+                        None,
+                        "soporte",
+                        "tecnico",
+                        &reason_str,
+                        Some(&trace_id),
+                    )
+                    .await;
+
+                return Err(DeviceError::RoleViolation(
+                    "No se permite registrar rol 'tecnico' sin un instalador autorizado"
+                        .to_string(),
+                ));
+            }
+            incoming_role.unwrap_or_else(|| "soporte".to_string())
+        }
+    };
 
     let resolved_installer_id = incoming_installer_id.or(existing_installer_id);
-    let resolved_profile_id = incoming_profile_id.or(existing_profile_id);
+    let resolved_profile_id = incoming_profile_id
+        .or(existing_profile_id)
+        .or(installer_profile_id);
 
     // Validación de revocación y caducidad del instalador
     if let Some(ref inst_id) = resolved_installer_id {
@@ -499,8 +730,8 @@ pub async fn heartbeat_handler(
     // On UPDATE (conflict), preserve devices.name if provided_name is NULL or empty.
     sqlx::query(
         r#"
-        INSERT INTO devices (id, name, hostname, os, version, ip_address, status, last_seen_at, installer_id, profile_id)
-        VALUES (?1, COALESCE(?2, ?3, ?1), ?3, ?4, ?5, ?6, 'online', datetime('now'), ?7, ?8)
+        INSERT INTO devices (id, name, hostname, os, version, ip_address, status, last_seen_at, installer_id, profile_id, role)
+        VALUES (?1, COALESCE(?2, ?3, ?1), ?3, ?4, ?5, ?6, 'online', datetime('now'), ?7, ?8, ?9)
         ON CONFLICT(id) DO UPDATE SET
             name = CASE WHEN ?2 IS NOT NULL AND ?2 != '' THEN ?2 ELSE devices.name END,
             hostname = COALESCE(?3, devices.hostname),
@@ -509,8 +740,9 @@ pub async fn heartbeat_handler(
             ip_address = ?6,
             status = 'online',
             last_seen_at = datetime('now'),
-            installer_id = COALESCE(?7, devices.installer_id),
-            profile_id = COALESCE(?8, devices.profile_id);
+            installer_id = COALESCE(devices.installer_id, ?7),
+            profile_id = COALESCE(devices.profile_id, ?8),
+            role = devices.role;
         "#,
     )
     .bind(&trimmed_id)
@@ -521,12 +753,13 @@ pub async fn heartbeat_handler(
     .bind(&client_ip)
     .bind(&resolved_installer_id)
     .bind(&resolved_profile_id)
+    .bind(&assigned_role)
     .execute(&state.db)
     .await?;
 
     let row = sqlx::query(
         r#"
-        SELECT id, name, hostname, os, version, ip_address, status, last_seen_at, created_at, installer_id, profile_id
+        SELECT id, name, hostname, os, version, ip_address, status, last_seen_at, created_at, installer_id, profile_id, role
         FROM devices
         WHERE id = ?
         "#,
@@ -547,6 +780,7 @@ pub async fn heartbeat_handler(
         created_at: row.get("created_at"),
         installer_id: row.get("installer_id"),
         profile_id: row.get("profile_id"),
+        role: row.get("role"),
     };
 
     if is_new_device {
@@ -572,6 +806,8 @@ pub async fn heartbeat_handler(
                 "os": resolved_os,
                 "version": resolved_version,
                 "client_ip": client_ip,
+                "role": device.role,
+                "installer_id": device.installer_id,
             }),
         )
         .with_subject(Subject::with_details(&trimmed_id, "device", Some(dev_name)));
@@ -605,7 +841,8 @@ pub async fn list_devices_handler(
             last_seen_at,
             created_at,
             installer_id,
-            profile_id
+            profile_id,
+            role
         FROM devices
         ORDER BY created_at DESC
         "#,
@@ -631,6 +868,7 @@ pub async fn list_devices_handler(
             created_at: row.get("created_at"),
             installer_id: row.get("installer_id"),
             profile_id: row.get("profile_id"),
+            role: row.get("role"),
         })
         .collect();
 
@@ -660,7 +898,8 @@ pub async fn get_device_handler(
             last_seen_at,
             created_at,
             installer_id,
-            profile_id
+            profile_id,
+            role
         FROM devices
         WHERE id = ?
         "#,
@@ -686,6 +925,7 @@ pub async fn get_device_handler(
             created_at: row.get("created_at"),
             installer_id: row.get("installer_id"),
             profile_id: row.get("profile_id"),
+            role: row.get("role"),
         })),
         None => Err(DeviceError::NotFound(format!(
             "Dispositivo con ID '{}' no encontrado",
@@ -790,6 +1030,7 @@ mod tests {
             ip: Some("192.168.1.50".to_string()),
             installer_id: None,
             profile_id: None,
+            role: None,
         };
         assert!(validate_heartbeat_input(&req).is_ok());
     }
@@ -805,6 +1046,7 @@ mod tests {
             ip: None,
             installer_id: None,
             profile_id: None,
+            role: None,
         };
         assert!(validate_heartbeat_input(&req).is_err());
     }
@@ -820,6 +1062,7 @@ mod tests {
             ip: None,
             installer_id: None,
             profile_id: None,
+            role: None,
         };
         assert!(validate_heartbeat_input(&req).is_err());
     }
@@ -835,6 +1078,7 @@ mod tests {
             ip: None,
             installer_id: None,
             profile_id: None,
+            role: None,
         };
         assert!(validate_heartbeat_input(&req).is_err());
 

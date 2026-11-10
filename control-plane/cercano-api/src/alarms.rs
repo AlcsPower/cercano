@@ -442,6 +442,56 @@ impl AlarmEngine {
         Ok(Some(event))
     }
 
+    /// Records a role enforcement violation alarm (`alarm.role_violation`).
+    ///
+    /// Triggered when an installer or device attempts an operation unauthorized for its role
+    /// (e.g. `soporte` attempting remote connection initiation or privilege elevation),
+    /// or when a client attempts role spoofing / tampering.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn record_role_violation(
+        &self,
+        actor_id: &str,
+        actor_ip: Option<&str>,
+        installer_id: Option<&str>,
+        actual_role: &str,
+        attempted_role_or_op: &str,
+        reason: &str,
+        trace_id: Option<&str>,
+    ) -> Result<AuditEvent, AuditError> {
+        let trace = trace_id
+            .map(String::from)
+            .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+        let actor = Actor::with_details(actor_id, "device", None, actor_ip.map(String::from));
+        let subject = Subject::with_details(
+            installer_id.unwrap_or(actor_id),
+            "installer",
+            Some(actual_role.to_string()),
+        );
+
+        let details = json!({
+            "alarm_name": "alarm.role_violation",
+            "severity": "critical",
+            "reason": reason,
+            "installer_id": installer_id,
+            "actual_role": actual_role,
+            "attempted_role_or_operation": attempted_role_or_op,
+            "ip": actor_ip,
+        });
+
+        let input = EventInput::new(
+            trace,
+            Source::Api,
+            Category::Alarm,
+            "alarm.role_violation",
+            actor,
+            Outcome::Denied,
+            details,
+        )
+        .with_subject(subject);
+
+        self.audit.append(input).await
+    }
+
     /// Evaluates an arbitrary ingested audit event against security alarm policies.
     pub async fn evaluate_event(&self, event: &AuditEvent) -> Result<Vec<AuditEvent>, AuditError> {
         let mut triggered = Vec::new();

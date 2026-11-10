@@ -169,6 +169,18 @@ pub fn create_app(state: AppState) -> Router {
             "/api/builds/:id/revoke",
             post(routes::builds::revoke_build_handler),
         )
+        .route(
+            "/api/sessions/initiate",
+            post(routes::sessions::initiate_session_handler),
+        )
+        .route(
+            "/api/elevation/request",
+            post(routes::sessions::request_elevation_handler),
+        )
+        .route(
+            "/api/policies/apply",
+            post(routes::sessions::apply_policy_handler),
+        )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .with_state(state)
