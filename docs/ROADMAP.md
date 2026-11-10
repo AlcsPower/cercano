@@ -113,7 +113,7 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 | D7 | Texto de licencia | **Resuelto** el 2026-11-05: `LICENSE` contiene el texto oficial de AGPL-3.0 |
 | D8 | Origen de las credenciales de administrador para la elevación (ver `PLAN-F3-GENERADOR.md` §3) | Tecleo manual del técnico en cada solicitud, sin almacenar nada; Windows LAPS en F5; bóveda propia descartada |
 | D9 | Alcance y ubicación de Cercano Chat | **Resuelto 2026-11-09:** chat embebido en el cliente Cercano, gestión en `console-web`, adjuntos (imágenes/PDF), notificaciones y escalado remoto; fase F4.5 después de F4. Nombre y Apellido del contacto se piden la primera vez, se guardan localmente y como snapshot en la conversación. |
-| D10 | Motores de base de datos de F8 | PostgreSQL obligatorio; SQL Server **diferido** en F8-01: `sqlx 0.8` no tiene driver MSSQL y no hay nada que validar; retomarlo exige una capa `tiberius` con decisión y spike propios. SQLite sigue siendo el motor de instalación por defecto |
+| D10 | Motores de base de datos de F8 | PostgreSQL obligatorio; SQL Server **diferido** en F8-01: `sqlx 0.8`/`0.9` no tienen driver MSSQL y no hay nada que validar; retomarlo exige una capa `tiberius` con decisión y spike propios (guía de arranque en `adr/011-portabilidad-bd.md` §7). SQLite sigue siendo el motor de instalación por defecto |
 | D11 | Destino y retención de respaldos | `./data/backups`, 30 copias / 30 días; copia fuera del equipo cifrada por el operador; las claves se respaldan por el procedimiento aparte (`docs/guias/rotacion-claves.md`) |
 
 ## 8. Estado actual

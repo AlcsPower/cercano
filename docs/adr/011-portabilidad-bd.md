@@ -84,3 +84,35 @@ La alternativa viva es **`tiberius` 0.13** (septiembre 2026, MIT/Apache): TLS co
 **Eventos ante `503`.** El cliente reintenta 5xx/408/429 con esperas de 10 s y 30 s hasta un límite de **120 s** y después descarta el evento (`vendor/client/src/server/connection.rs:1733`); el ingest deduplica por `nonce` como `event_id` (`routes/audit.rs:1126–1130`). hbbs/hbbr no emiten auditoría al control plane, así que su cola no aplica. F8-07 debe acotar la ventana de mantenimiento por debajo de ese límite o parchear el cliente para respetar `Retry-After`; de lo contrario el criterio «ningún evento se pierde» no se cumple.
 
 **Estimación revisada.** F8 sin SQL Server: **3–4 semanas** (la tabla de §9 del plan ya contempla ese escenario). F8-01 queda cerrado salvo la verificación del Coordinador.
+
+## 7. Trabajo futuro: SQL Server con `tiberius` (diferido, no descartado)
+
+**Estado:** fuera de alcance (diferido); **no es una tarea del roadmap ni del backlog**. Se retoma solo por decisión explícita del dueño, si aparece un cliente o una licitación que exija SQL Server. No bloquea la v1 ni M4. Esta sección es la guía de arranque para quien lo retome; no hay código que escribir hasta entonces.
+
+### 7.1 Qué habría que construir
+
+- **Capa.** Una rama `Mssql` en `db_core::Db` y `Dialect::Mssql`; no hace falta tocar las 142 consultas, que ya pasan por el enum. El pool es propio (`deadpool` o `mobc`): `tiberius` no lo trae.
+- **Adaptador de filas.** El código lee por nombre (`row.get("col")`, 136 usos). `tiberius::Row::columns()` da el nombre→índice y el adaptador conserva esa firma; no se reescriben consultas.
+- **Marcadores.** `?` → `@P1`, `@P2`…, con la misma omisión de literales y comentarios que ya necesita PostgreSQL.
+- **Identidad.** `OUTPUT INSERTED.<col>` donde hoy hay `RETURNING`/`last_insert_rowid` (solo `login_attempts` y `mfa_challenges`).
+- **Errores.** Mapear `tiberius::error::TokenError` (número y clase) a `db_core::Error`: unicidad 2627/2601, clave foránea 547, conexión. El resto puede quedar como error genérico con número.
+- **SQL específico.** Paginación `ORDER BY … OFFSET @P1 ROWS FETCH NEXT @P2 ROWS ONLY`; upsert `UPDATE …; IF @@ROWCOUNT = 0 INSERT …` (no `MERGE`); JSON con `JSON_VALUE`; comparación insensible con `LOWER()` o collation; `BIT` para booleanos.
+- **DDL.** `NVARCHAR(n)` acotado en columnas con índice único (clave de 900 bytes), `BIGINT IDENTITY(1,1)`, disparadores `INSTEAD OF UPDATE, DELETE … THROW` para `audit_events` y `audit_checkpoints`. `audit_events.ts` no se toca.
+- **Autenticación.** Contraseña o integrada de Windows (SSPI); nunca credenciales en el TOML ni en logs.
+
+### 7.2 Spike obligatorio antes de estimar (1–2 días)
+
+1. Conexión TLS a SQL Server 2022 con certificado validado.
+2. Transacción `begin`/`commit`/`rollback` verificada en la base.
+3. Upsert con `UPDATE…IF @@ROWCOUNT` y dos escritores concurrentes.
+4. Identidad con `OUTPUT INSERTED` sobre `login_attempts`.
+5. Lectura de `DATETIME2` y `NVARCHAR` con acentos y emoji.
+6. Violación de unicidad distinguible y mapeada.
+7. Pool: 50 conexiones concurrentes con *timeouts*.
+8. Lote de 1.000 filas y paginación `OFFSET/FETCH`.
+
+Si fallan 1–3, no se sigue: el veredicto es «diferido» otra vez y se documenta el motivo. Prerrequisito material: un **SQL Server 2022 accesible** (contenedor con Docker funcionando o VM en la LAN). En la estación de desarrollo actual no lo hay.
+
+### 7.3 Estimación y riesgos
+
+**+3–4 semanas** sobre F8: adaptador ≈1, DDL y disparadores ≈1, SQL específico ≈1, matriz de pruebas por motor ≈1. Riesgos: tercer esquema que mantener (R10), licencia y administración de SQL Server para el cliente, dependencia de un driver que mantiene un tercero (Prisma), y autenticación integrada que exige dominio y configuración de Kerberos/SSPI. Mitigación: no prometerlo en la beta; comunicarlo solo cuando el spike esté en verde y la matriz de pruebas cubra los tres motores.

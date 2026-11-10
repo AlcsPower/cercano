@@ -187,3 +187,5 @@ SQL Server quedó fuera en F8-01 (§3): la columna se conserva solo como diseño
 | F8-09 | 4–6 días |
 | F8-10 | 2–3 días |
 | **Total** | **3–4 semanas** (SQL Server fuera de alcance) |
+
+SQL Server con `tiberius` no forma parte de F8: queda como trabajo futuro documentado en [`adr/011-portabilidad-bd.md`](adr/011-portabilidad-bd.md) §7, con el spike y la estimación que exige retomarlo.
