@@ -3,7 +3,7 @@
 **Versión:** 0.2 · **Fecha:** 2026-11-10 · **Estado:** revisado por el Coordinador el 2026-11-10; pendiente de aprobación del dueño · **Duración estimada:** 4–5 semanas  
 **Objetivo:** habilitar directorio de dispositivos, grupos, políticas centralizadas y federación de identidad, manteniendo el control de acceso en el servidor y la auditoría verificable.  
 **Depende de:** cierre de F4 y F4.5; F1-04, F1-05, F2-02, F2-08, F3-01/02/09/13 y F4 (RBAC/2FA) disponibles. La integración con Windows LAPS queda sujeta al análisis de seguridad de F5-01/F5-10.  
-**Referencias:** `docs/ROADMAP.md`, `docs/ARQUITECTURA.md`, `docs/PLAN-F4-CONSOLA.md`, `docs/PLAN-F3-GENERADOR.md`, `docs/PLAN-F4.5-CHAT.md`, `docs/specs/api.yaml`, `docs/specs/cercano-profile.md` y `docs/PLAN-DE-PRUEBAS.md`.
+**Referencias:** `docs/ROADMAP.md`, `docs/ARQUITECTURA.md`, `docs/adr/012-identidad-grupos-federacion.md` (decisiones), `docs/specs/identidad.md` (contrato), `docs/PLAN-F4-CONSOLA.md`, `docs/PLAN-F3-GENERADOR.md`, `docs/PLAN-F4.5-CHAT.md`, `docs/specs/api.yaml`, `docs/specs/cercano-profile.md` y `docs/PLAN-DE-PRUEBAS.md`.
 
 ## 1. Alcance y límites
 

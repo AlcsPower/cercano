@@ -203,6 +203,40 @@ Los casos detallados viven en `tests/cases/TC-F4.5-*.md` durante la implementaci
 | TC-F4.5-097 | PUT /api/chat/branding con `chat:manage` | 200 y objeto actualizado; 403 sin permiso; validación color `#RRGGBB`, URL https, longitudes |
 | TC-F4.5-098 | Cliente refleja cambio de marca y fallback | Al reabrir/refrescar la ventana usa la nueva marca; si la API falla usa fallback (perfil/built-in) |
 
+### F5 (identidad, grupos y federación)
+
+Fuente: [`PLAN-F5-IDENTIDAD.md`](PLAN-F5-IDENTIDAD.md) y [`specs/identidad.md`](specs/identidad.md). Los detalles viven en `tests/cases/TC-F5-*.md` y se escriben con la tarea que implementa cada caso.
+
+| ID | Caso | Resultado esperado |
+|---|---|---|
+| TC-F5-001 | Migración 009 sobre base vacía | Siete tablas, índices y constraints creados; `schema_migrations` = 9 |
+| TC-F5-002 | Migración 009 sobre base con 001–008 | Sin pérdida de datos; constraints e índices válidos |
+| TC-F5-003 | Reversión documentada de 009 | Tablas nuevas eliminadas; ninguna tabla previa alterada |
+| TC-F5-010 | Matriz rol × operación × grupo (admin/operator/auditor/legacy) | Permitido o 403 auditado; nunca 200 sin permiso |
+| TC-F5-011 | IDOR: grupo ajeno (leer, editar, borrar, añadir miembro) | 404 sin cambios y `authz.denied` |
+| TC-F5-012 | Detalle de dispositivo y política efectiva fuera de alcance | 404; sin fuga de nombre ni estado |
+| TC-F5-013 | Concesión `read`/`operate` entre grupos | Con concesión: lectura/operación; sin ella: denegado |
+| TC-F5-014 | Pertenencia a grupo no eleva rol | `operator` en grupo no obtiene `groups:manage` |
+| TC-F5-020 | Conflicto global/grupo/dispositivo | Gana el valor más restrictivo; explicación por clave correcta |
+| TC-F5-021 | Dos grupos con valores opuestos | Resultado determinista (restrictivo; empate por `group_id` menor) |
+| TC-F5-022 | Política caducada, revocada, malformada o con hash alterado | No participa; no concede; evento registrado |
+| TC-F5-023 | Política intenta ampliar el perfil firmado | `unattended_access`/elevación siguen en `false` |
+| TC-F5-024 | Cliente sin red: caché vigente y caché caducada | Vigente: aplica copia; caducada: falla cerrado para conexiones nuevas |
+| TC-F5-025 | Cliente edita la política localmente | Sin efecto; el servidor y el perfil mandan |
+| TC-F5-030 | OIDC: `state`/`nonce` ausente, reutilizado o caducado | 401; sin sesión; sin consumo del código |
+| TC-F5-031 | OIDC: emisor/audiencia/firma incorrectos; `kid` rotado | Rechazo; recarga de JWKS solo con `kid` desconocido |
+| TC-F5-032 | OIDC: correo coincide con otra cuenta | `identity_exists`; sin vinculación automática |
+| TC-F5-033 | Proveedor OIDC caído | 503 con `Retry-After`; sesiones vigentes intactas; admin local funciona |
+| TC-F5-040 | LDAP sin TLS | Configuración rechazada; no se guarda |
+| TC-F5-041 | LDAP: credencial inválida y cuenta inexistente | Mismo error genérico; sin enumeración |
+| TC-F5-042 | LDAP caído o timeout | 503; sin sesión; sin escalada de rol |
+| TC-F5-043 | LDAP: grupo fuera de allowlist y entrada explícita de admin | Sin allowlist: rol por defecto o denegación; entrada explícita: rol concedido |
+| TC-F5-044 | Login LDAP correcto sin TOTP | 202 y TOTP exigido antes de la sesión |
+| TC-F5-050 | Cambio de ID de dispositivo (diferido) | ADR de diferimiento presente; sin rutas ni permisos nuevos |
+| TC-F5-051 | LAPS (diferido) | Sin tabla, endpoint ni secreto en logs; ADR de diferimiento |
+| TC-F5-060 | Consola F5: carga, vacío, error, permisos y accesibilidad | Coherente con el API; 403 no se presenta como permitido |
+| TC-F5-061 | Diagnóstico de política efectiva en consola | Coincide con el API; sin datos secretos |
+
 ### F8 (portabilidad y respaldos)
 
 Fuente: [`PLAN-F8-PORTABILIDAD.md`](PLAN-F8-PORTABILIDAD.md) y [`specs/db-portabilidad.md`](specs/db-portabilidad.md). La columna «Motores» indica dónde debe correr el caso; SQL Server solo si F8-01 lo aprueba.
