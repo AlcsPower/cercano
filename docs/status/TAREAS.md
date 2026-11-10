@@ -83,9 +83,9 @@ Fuente: `docs/PLAN-F4-CONSOLA.md`. F4 puede ir en paralelo con F3; solo F4-07 (g
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F4-01 | Especificar matriz RBAC, flujo 2FA y eventos `auth.2fa_*` | F1-04, F2-08 | Coordinador + Seguridad | Seguridad | En verificación |
-| F4-02 | Migración 007: campos 2FA y `mfa_challenges` | F4-01 | ControlPlane | QA | En verificación |
-| F4-03 | API de usuarios, roles y ajustes con permisos | F4-02 | ControlPlane | QA | En verificación |
+| F4-01 | Especificar matriz RBAC, flujo 2FA y eventos `auth.2fa_*` | F1-04, F2-08 | Coordinador + Seguridad | Seguridad | Hecho |
+| F4-02 | Migración 007: campos 2FA y `mfa_challenges` | F4-01 | ControlPlane | QA | Hecho |
+| F4-03 | API de usuarios, roles y ajustes con permisos | F4-02 | ControlPlane | QA | Hecho |
 | F4-04 | 2FA TOTP: enrolar, login en dos pasos, recovery, revocación | F4-02, F4-03 | ControlPlane | Seguridad | Pendiente |
 | F4-05 | Middleware RBAC y permisos `chat:*` | F4-03 | ControlPlane | QA | Pendiente |
 | F4-06 | Consola: usuarios, roles, auditoría, ajustes y 2FA; login 2FA | F4-03, F4-04, F4-05 | Web | QA | Pendiente |
@@ -102,14 +102,14 @@ Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA | En verificación |
-| F4.5-02 | Migración 008 y modelos | F4.5-01, F4-02 | ControlPlane | QA | En curso |
+| F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA | Hecho |
+| F4.5-02 | Migración 008 y modelos | F4.5-01, F4-02 | ControlPlane | QA | Hecho |
 | F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad | Pendiente |
 | F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4 cerrado | ControlPlane | QA | Pendiente |
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad | Pendiente |
 | F4.5-06 | SSE, `ChatHub`, lecturas y resumen | F4.5-04 | ControlPlane | QA | Pendiente |
 | F4.5-07 | Auditoría, límites y retención | F4.5-02…06, F2-02 | ControlPlane | Seguridad | Pendiente |
-| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4 cerrado | Web | QA | En curso |
+| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4 cerrado | Web | QA | Hecho (mock-first) |
 | F4.5-09 | Consola: badge, notificaciones, reconexión, accesibilidad | F4.5-08 | Web | QA | Pendiente |
 | F4.5-10 | Cliente: módulo Rust y parche 006 | F4.5-03/04/06, F3-02 | Cliente | Seguridad | Pendiente |
 | F4.5-11 | Cliente: UI Flutter, nombre del contacto, adjuntos, i18n | F4.5-10, F4.5-13 | Cliente | QA | Pendiente |
