@@ -77,7 +77,7 @@ Guardar la frase de paso **fuera** del servidor (gestor de secretos) y el archiv
 
 ## 6. Restauración desde la consola (F8-06)
 
-Requisitos: rol `admin`, reautenticación (contraseña) y confirmación tipada del motor de origen.
+Requisitos: rol `admin`, reautenticación (contraseña y, si tienes 2FA, código TOTP) y confirmación tipada del motor de origen.
 
 1. Subir el archivo (y el de adjuntos si existe).
 2. La consola verifica firma, hashes, versión de esquema y correspondencia de tablas **antes** de escribir.

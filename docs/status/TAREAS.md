@@ -130,7 +130,7 @@ Fuente: `docs/PLAN-F8-PORTABILIDAD.md`. Después de F7; **no bloquea M4**. SQL S
 | F8-03 | Esquema y migraciones por motor, disparadores, fingerprint en CI | F8-02 | ControlPlane | Seguridad | Pendiente |
 | F8-04 | Portar consultas de `cercano-api` y `audit-core` a SQL portable | F8-03 | ControlPlane | QA | Pendiente |
 | F8-05 | Formato de archivo firmado y verificador | F8-02 | ControlPlane | Seguridad | Pendiente |
-| F8-06 | API de respaldo y restauración; programación y retención; auditoría `db.backup.*`/`db.restore.*` | F8-04, F8-05 | ControlPlane | QA | Pendiente |
+| F8-06 | API de respaldo y restauración; programación y retención; auditoría `db.backup_*`/`db.restore_*` | F8-04, F8-05 | ControlPlane | QA | Pendiente |
 | F8-07 | Asistente de migración: preflight, mantenimiento, copia, verificación, corte y rollback | F8-06 | ControlPlane | Seguridad | Pendiente |
 | F8-08 | Consola: pestaña «Mantenimiento», permiso `db:admin`, confirmaciones y progreso | F8-06, F8-07, F4-06 | Web | QA | Pendiente |
 | F8-09 | Matriz de pruebas SQLite/PostgreSQL/SQL Server y pruebas de fallo | F8-04…08 | QA | Coordinador | Pendiente |

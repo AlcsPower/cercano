@@ -98,7 +98,7 @@ cercano-backup-20261110T182000Z.jsonl.gz
 preimagen = manifiesto_canónico_sin(archive_sha256, signature) || "\n"
             || línea_2 || "\n" || … || línea_n || "\n"
 archive_sha256 = SHA-256(preimagen)
-signature      = Ed25519_sign(audit_signing_key, archive_sha256_bytes)
+signature      = Ed25519_sign(audit_signing_key, "cercano-backup-v1\0" || archive_sha256_bytes)
 sha256(tabla)  = SHA-256(concat(canonical_json(fila) para cada fila de la tabla))
 ```
 
@@ -119,7 +119,7 @@ Cuando `attachments.included = true`, el mismo trabajo produce `cercano-attachme
 Pasos, en orden, sin escribir nada:
 
 1. Descomprimir en streaming y validar que la línea 1 es un manifiesto `format: 1`.
-2. Recalcular `archive_sha256` y verificar la firma con la clave pública de `audit_signing_key`.
+2. Recalcular `archive_sha256` y verificar la firma (con el prefijo de dominio `cercano-backup-v1\0`) con la clave pública de `audit_signing_key`. El prefijo impide que una firma de respaldo se reutilice como firma de checkpoint.
 3. Validar que `schema_version` no es mayor que la soportada por el binario.
 4. Recalcular el hash de cada tabla y comparar con el manifiesto.
 5. Comprobar que el conjunto de tablas del manifiesto coincide con el esquema del binario.
@@ -138,7 +138,7 @@ Cualquier fallo aborta con un código de la tabla §4.4 y **no modifica** la bas
 
 - Todas las rutas exigen `db:admin`, que **solo** tiene el rol `admin`; `operator` y `auditor` reciben `403`.
 - Crear respaldo, descargar y listar: sesión válida.
-- **Restaurar y migrar** exigen además reautenticación: `POST /api/db/reauth` con usuario y contraseña devuelve un token de 60 s, ligado a la sesión y a la IP, que va en `X-DB-Reauth`. Sin él, `403 db.reauth_required`.
+- **Restaurar y migrar** exigen además reautenticación: `POST /api/db/reauth` con la contraseña y, si la cuenta tiene 2FA activo, un `totp_code` válido, devuelve un token de 60 s, ligado a la sesión y a la IP, que va en `X-DB-Reauth`. Sin él, `403 db.reauth_required`.
 - Toda operación deja evento `db.*` (§6). Los datos del archivo nunca se registran.
 
 ### 4.2 Endpoints
@@ -146,7 +146,7 @@ Cualquier fallo aborta con un código de la tabla §4.4 y **no modifica** la bas
 | Método | Ruta | Cuerpo / parámetros | Respuesta |
 |---|---|---|---|
 | GET | `/api/db/status` | — | Motor, versión, ruta o host, tamaño, `schema_version`, último respaldo, modo mantenimiento, migración en curso |
-| POST | `/api/db/reauth` | `{ "password" }` | `{ "token", "expires_at" }` (60 s) |
+| POST | `/api/db/reauth` | `{ "password", "totp_code"? }` | `{ "token", "expires_at" }` (60 s) |
 | POST | `/api/db/backups` | `{ "include_attachments": bool }` | `202 { "id", "status": "running" }` |
 | GET | `/api/db/backups` | `?limit=` | Lista con `id`, `created_at`, `engine`, `schema_version`, `size_bytes`, `verified_at`, `attachments_included` |
 | GET | `/api/db/backups/{id}/download` | — | Archivo con `Content-Disposition: attachment`, `Content-Type: application/gzip`, `Cache-Control: no-store` |
@@ -177,7 +177,7 @@ preflight → ready → maintenance → snapshot → copying → verifying → c
 | Código | HTTP | Cuándo |
 |---|---:|---|
 | `db.not_admin` | 403 | Rol distinto de `admin`. |
-| `db.reauth_required` / `db.reauth_failed` | 403 | Falta el token de reautenticación o expiró / contraseña incorrecta. |
+| `db.reauth_required` / `db.reauth_failed` | 403 | Falta el token de reautenticación o expiró / contraseña o código 2FA incorrectos. |
 | `db.job_in_progress` | 409 | Ya hay un respaldo, restauración o migración en curso. |
 | `db.backup_invalid_signature` | 422 | Firma o `archive_sha256` no verifican. |
 | `db.backup_schema_newer` | 422 | `schema_version` del archivo mayor que la del binario. |
@@ -194,6 +194,7 @@ preflight → ready → maintenance → snapshot → copying → verifying → c
 - **Escrituras** (`POST`/`PUT`/`PATCH`/`DELETE`) → `503` con `Retry-After: 30` y `{ "error": "db.maintenance" }`.
 - **Lecturas** (`GET`) permitidas, incluida la consola, para poder observar el progreso.
 - Excepciones: `/healthz`, `/api/auth/login|logout|me`, `/api/db/*` (solo `admin`).
+- La ingestión de auditoría también recibe `503` (no se exceptúa: la cadena no debe crecer mientras se copia). Los emisores deben reintentar o encolar; F8-01 lo verifica y F8-07 lo garantiza.
 - Los latidos de dispositivo (`POST /api/devices/heartbeat`) reciben `503`; tras el periodo de gracia (60 s por defecto) los equipos aparecen `offline`. Es esperado y se documenta en la guía; no afecta a las sesiones remotas activas, que no dependen del control plane.
 - Al salir de mantenimiento se restablece el servicio sin reinicio; el **corte** sí exige reinicio (`requires_restart: true`).
 

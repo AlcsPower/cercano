@@ -20,16 +20,16 @@ Hoy el respaldo es un `tar` manual que ni siquiera incluye `cercano.db` ([`guias
 
 ## 3. Decisiones
 
-| # | Decisión |
+| ID | Decisión de diseño de F8 (no son las D1–D11 del roadmap) |
 |---|---|
-| D1 | **SQL Server está condicionado a F8-01.** Si el driver MSSQL de `sqlx 0.8` no alcanza (tipos, transacciones, `RETURNING`/identidad, errores), se evalúa `tiberius` detrás de la misma interfaz o se difiere SQL Server; PostgreSQL no se ve afectado. |
-| D2 | Capa de datos nueva `control-plane/db-core`: enum de pool (`Sqlite`/`Pg`/`Mssql`) y `Dialect` con reescritura de marcadores (`?` → `$n` en PostgreSQL, `@pN` en T-SQL), omitiendo literales y comentarios. Sin ORM y sin duplicar el SQL por motor. |
-| D3 | El SQL se escribe **una vez**; lo que cambia por motor son los fragmentos que no son portables: DDL de migraciones, plantilla de *upsert* (`ON CONFLICT` / patrón `UPDATE` + `INSERT`) y disparadores. |
-| D4 | **Los timestamps se generan en Rust** en formato canónico `%Y-%m-%dT%H:%M:%S%.3fZ`, no con `datetime('now')`. Se eliminan los 36 usos en `cercano-api` y los 4 `strftime`. **`audit_events.ts` no se reescribe**: cambiaría el hash de la cadena. |
-| D5 | Booleanos como entero pequeño (`0`/`1`): `INTEGER` en SQLite, `SMALLINT` en PostgreSQL, `BIT`/`TINYINT` en SQL Server. Evita un conversor de tipos por consulta. |
-| D6 | **Un solo formato de archivo** sirve para respaldo, restauración y migración: cabecera de manifiesto + una línea JSON por fila, comprimido con gzip, con SHA-256 por tabla y firma Ed25519 con `audit_signing_key`. Reutiliza el patrón de sobre de `audit-core/src/retention.rs`. Una dependencia nueva: `flate2` (ya usada por `audit-core`). |
-| D7 | El respaldo **no incluye** `id_ed25519` ni `audit_signing_key`. La consola avisa y el runbook mantiene la copia de claves como paso aparte: un archivo descargable por HTTP con secretos multiplica el riesgo, y sin claves el servidor restaurado no puede verificar checkpoints. |
-| D8 | Migración con **modo mantenimiento** y corte por configuración: snapshot previo, copia por lotes con checksums, verificación de conteos y de la cadena, escritura atómica de `database_url` en el TOML y respuesta `requires_restart: true` (patrón ya usado por la rotación de claves en F1-06). El origen no se toca: es el rollback. |
+| F8-D1 | **SQL Server está condicionado a F8-01.** Si el driver MSSQL de `sqlx 0.8` no alcanza (tipos, transacciones, `RETURNING`/identidad, errores), se evalúa `tiberius` detrás de la misma interfaz o se difiere SQL Server; PostgreSQL no se ve afectado. |
+| F8-D2 | Capa de datos nueva `control-plane/db-core`: enum de pool (`Sqlite`/`Pg`/`Mssql`) y `Dialect` con reescritura de marcadores (`?` → `$n` en PostgreSQL, `@pN` en T-SQL), omitiendo literales y comentarios. Sin ORM y sin duplicar el SQL por motor. |
+| F8-D3 | El SQL se escribe **una vez**; lo que cambia por motor son los fragmentos que no son portables: DDL de migraciones, plantilla de *upsert* (`ON CONFLICT` / patrón `UPDATE` + `INSERT`) y disparadores. |
+| F8-D4 | **Los timestamps se generan en Rust** en formato canónico `%Y-%m-%dT%H:%M:%S%.3fZ`, no con `datetime('now')`. Se eliminan los 36 usos en `cercano-api` y los 4 `strftime`. **`audit_events.ts` no se reescribe**: cambiaría el hash de la cadena. |
+| F8-D5 | Booleanos como entero pequeño (`0`/`1`): `INTEGER` en SQLite, `SMALLINT` en PostgreSQL, `BIT`/`TINYINT` en SQL Server. Evita un conversor de tipos por consulta. |
+| F8-D6 | **Un solo formato de archivo** sirve para respaldo, restauración y migración: cabecera de manifiesto + una línea JSON por fila, comprimido con gzip, con SHA-256 por tabla y firma Ed25519 con `audit_signing_key` sobre un mensaje con prefijo de dominio (`cercano-backup-v1\0`), para que una firma de respaldo nunca valga como firma de checkpoint; F8-01 puede decidir una clave dedicada. Reutiliza el patrón de sobre de `audit-core/src/retention.rs`. Una dependencia nueva: `flate2` (ya usada por `audit-core`). |
+| F8-D7 | El respaldo **no incluye** `id_ed25519` ni `audit_signing_key`. La consola avisa y el runbook mantiene la copia de claves como paso aparte: un archivo descargable por HTTP con secretos multiplica el riesgo, y sin claves el servidor restaurado no puede verificar checkpoints. |
+| F8-D8 | Migración con **modo mantenimiento** y corte por configuración: snapshot previo, copia por lotes con checksums, verificación de conteos y de la cadena, escritura atómica de `database_url` en el TOML y respuesta `requires_restart: true` (patrón ya usado por la rotación de claves en F1-06). El origen no se toca: es el rollback. |
 
 ## 4. Arquitectura
 
@@ -50,7 +50,7 @@ cercano-api ──► db-core::Db (enum de pool)
 
 ### 4.2 Esquema y migraciones
 
-- `migrations/<motor>/NNN_nombre.sql`, embebidas con `include_str!`; `MIGRATIONS` enumera versión y nombre y `sql_for(engine)` devuelve el texto. Las 8 migraciones actuales (001–008) existen en los tres motores.
+- `migrations/<motor>/NNN_nombre.sql`, embebidas con `include_str!`; `MIGRATIONS` enumera versión y nombre y `sql_for(engine)` devuelve el texto. Todas las migraciones que existan al empezar F8 (hoy 001–008; F3, F5 y F6 pueden añadir más antes) existen en los tres motores.
 - Disparadores de inmutabilidad de auditoría equivalentes al `RAISE(ABORT)` de SQLite: `BEFORE UPDATE OR DELETE … RAISE EXCEPTION` en PL/pgSQL e `INSTEAD OF UPDATE, DELETE … THROW` en T-SQL.
 - *Fingerprint* de esquema por motor (introspección normalizada: `PRAGMA table_info`, `information_schema`, `INFORMATION_SCHEMA`) comparado con un archivo versionado en CI: detecta deriva entre motores.
 - Migraciones de datos (normalización de timestamps legados) idempotentes y en transacción; nunca tocan `audit_events`.
@@ -76,7 +76,7 @@ cercano-backup-20261110T182000Z.jsonl.gz
 2. Snapshot automático del estado actual (respaldo firmado) antes de tocar nada.
 3. Aplicar a un esquema *scratch* (`cercano_restore_<uuid>` en PostgreSQL; archivo temporal en SQLite) y comparar conteos.
 4. Intercambio y verificación de cadena con `cercano-audit verify`; si algo falla, se descarta *scratch* y no se tocó producción.
-- Requisitos: permiso `db:admin`, reautenticación con contraseña, confirmación tipada del nombre del motor, y cero trabajos de build en curso.
+- Requisitos: permiso `db:admin`, reautenticación con contraseña y, si la cuenta tiene 2FA, código TOTP (F4-04), confirmación tipada del nombre del motor, y cero trabajos de build en curso.
 
 ### 4.5 Migración asistida
 
@@ -106,7 +106,7 @@ Nueva pestaña **«Mantenimiento»** (`ActiveTab` + `TabBar` + `MaintenanceView`
 ### Detalle y criterios de aceptación
 
 **F8-01 ADR-011, inventario y spike.**
-**Ratificar** `docs/adr/011-portabilidad-bd.md` (redactado el 2026-11-10) contra el spike, y completar el inventario: las 126 consultas de `cercano-api` y las 16 de `audit-core` con construcciones no portables (`datetime('now')`, `strftime`, `AUTOINCREMENT`, `ON CONFLICT`, `RETURNING`, disparadores); spike con `sqlx 0.8` contra SQL Server 2022 en el laboratorio: tipos, transacciones, identidad, errores, *pool*.
+**Ratificar** `docs/adr/011-portabilidad-bd.md` (redactado el 2026-11-10) contra el spike, y completar el inventario: las 126 consultas de `cercano-api` y las 16 de `audit-core` con construcciones no portables (`datetime('now')`, `strftime`, `AUTOINCREMENT`, `ON CONFLICT`, `RETURNING`, disparadores); spike con `sqlx 0.8` contra SQL Server 2022 en el laboratorio: tipos, transacciones, identidad, errores, *pool*. Comprobar también si el cliente (F2-05) y hbbs/hbbr reintentan o encolan los eventos de auditoría cuando el control plane responde `503` en modo mantenimiento.
 *CA:* ADR con alternativas descartadas (ORM, `sqlx::Any`, mantener SQLite, `pgloader`); veredicto explícito sobre SQL Server con criterio de salida; estimación revisada; si el veredicto es negativo, se actualizan D10 y R12 del roadmap antes de seguir.
 
 **F8-02 Crate `db-core`.**
@@ -115,7 +115,7 @@ Crear `control-plane/db-core` con `Db`, `Dialect`, `sql()`, helpers de tiempo ca
 
 **F8-03 Esquema y migraciones por motor.**
 Extraer las migraciones a archivos por motor; portar los 8 esquemas con sus índices; disparadores de inmutabilidad en PL/pgSQL y T-SQL; `schema_migrations` equivalente; fingerprint versionado.
-*CA:* base vacía y base con 001–008 migran en los tres motores; `UPDATE`/`DELETE` sobre `audit_events` falla en los tres; el fingerprint coincide entre motores tras migrar; idempotencia probada.
+*CA:* base vacía y base con todas las migraciones existentes migran en los tres motores; `UPDATE`/`DELETE` sobre `audit_events` falla en los tres; el fingerprint coincide entre motores tras migrar; idempotencia probada.
 
 **F8-04 Consultas portables.**
 Portar las consultas de `cercano-api` (dispositivos, sesiones, login, admin, builds, chat, alarmas, revocación, auditoría) y de `audit-core` (almacén, checkpoints, retención); timestamps en Rust; *upsert* por dialecto; sin `strftime` ni `datetime('now')`; `RETURNING`/`SCOPE_IDENTITY()` encapsulados en `db-core`.
@@ -131,14 +131,14 @@ Endpoints `/api/db/status`, `/api/db/backups` (POST, GET, DELETE, `{id}/download
 
 **F8-07 Asistente de migración.**
 Implementar §4.5: preflight, modo mantenimiento, marcador en `system_info`, copia por lotes con checksums, verificación, corte por TOML atómico y rollback; bloqueo con builds en curso.
-*CA:* SQLite→PostgreSQL en el laboratorio sin pérdida (conteos y cadena); rollback probado y auditado; corte responde `requires_restart: true` y el reinicio arranca en el destino; interrupción a mitad de copia no deja producción a medias y el estado se informa en la consola; escrituras durante mantenimiento devuelven `503` con `Retry-After`.
+*CA:* SQLite→PostgreSQL en el laboratorio sin pérdida (conteos y cadena); rollback probado y auditado; corte responde `requires_restart: true` y el reinicio arranca en el destino; interrupción a mitad de copia no deja producción a medias y el estado se informa en la consola; escrituras durante mantenimiento devuelven `503` con `Retry-After`; ningún evento de auditoría emitido durante el mantenimiento se pierde (reintento o cola verificados en F8-01; si no existen, los añade F8-07).
 
 **F8-08 Consola.**
 `MaintenanceView` + pestaña + `ActiveTab`; permiso `db:admin` en `permissions.rs`; formularios de respaldo/restauración/migración con confirmación tipada y reautenticación; progreso por sondeo; textos de riesgo y aviso de claves.
 *CA:* un `admin` completa el ciclo; `operator`/`auditor` no ven la pestaña ni obtienen datos por API (403); confirmación incorrecta no ejecuta; el progreso avanza y el error se muestra tras un fallo inyectado; sin regresiones de accesibilidad ni de modo oscuro.
 
 **F8-09 Matriz de pruebas.**
-Compose con PostgreSQL y SQL Server; CI por motor con `CERCANO_TEST_DATABASE_URL`; pruebas de fallo: disco lleno, firma inválida, esquema más nuevo, destino no vacío, copia interrumpida, fallo de escritura del TOML, contraseña incorrecta; prueba de restauración hecha por alguien que no escribió el código.
+Compose con PostgreSQL y SQL Server; CI por motor con `CERCANO_TEST_DATABASE_URL`; pruebas de fallo: disco lleno, firma inválida, esquema más nuevo, destino no vacío, copia interrumpida, fallo de escritura del TOML, contraseña incorrecta; prueba de restauración hecha por alguien que no escribió el código; repetición en cada motor de los casos de integridad de auditoría de F2 (TC-F2-001…005 y 031) sobre la cadena portada.
 *CA:* verde en los tres motores; restauración completa en < 30 min con el runbook; informe con evidencia y hallazgos.
 
 **F8-10 Runbook y cierre.**
