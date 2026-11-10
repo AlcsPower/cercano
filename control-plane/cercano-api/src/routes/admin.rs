@@ -26,7 +26,6 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::error::DatabaseError;
 use sqlx::{Row, SqlitePool};
 use thiserror::Error;
 use uuid::Uuid;
