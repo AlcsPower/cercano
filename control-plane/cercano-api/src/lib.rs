@@ -80,6 +80,22 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/auth/logout", post(auth::logout_handler))
         .route("/api/auth/me", get(auth::me_handler))
         .route(
+            "/api/auth/2fa/enroll",
+            post(auth::two_factor_enroll_handler),
+        )
+        .route(
+            "/api/auth/2fa/confirm",
+            post(auth::two_factor_confirm_handler),
+        )
+        .route(
+            "/api/auth/2fa/verify",
+            post(auth::two_factor_verify_handler),
+        )
+        .route(
+            "/api/auth/2fa/revoke",
+            post(auth::two_factor_revoke_handler),
+        )
+        .route(
             "/api/users",
             get(routes::admin::list_users_handler).post(routes::admin::create_user_handler),
         )

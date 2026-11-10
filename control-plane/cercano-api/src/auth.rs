@@ -29,6 +29,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use sqlx::{Row, SqlitePool};
 use std::net::SocketAddr;
 use thiserror::Error;
@@ -39,6 +40,85 @@ use crate::AppState;
 pub const MAX_FAILED_LOGIN_ATTEMPTS: i64 = 5;
 pub const LOCKOUT_DURATION_MINUTES: u32 = 15;
 pub const SESSION_EXPIRATION_HOURS: u32 = 24;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryCodeEntry {
+    pub hash: String,
+    pub used: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TwoFactorEnrollResponse {
+    pub otpauth_uri: String,
+    pub totp_secret_base32: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TwoFactorConfirmRequest {
+    pub totp_code: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TwoFactorConfirmResponse {
+    pub status: &'static str,
+    pub recovery_codes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TwoFactorVerifyRequest {
+    pub mfa_token: String,
+    pub totp_code: Option<String>,
+    pub recovery_code: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TwoFactorRevokeRequest {
+    pub user_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TwoFactorRevokeResponse {
+    pub status: &'static str,
+}
+
+pub fn generate_mfa_token() -> String {
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    let mut token = String::with_capacity(64);
+    for b in bytes {
+        use std::fmt::Write;
+        let _ = write!(token, "{:02x}", b);
+    }
+    token
+}
+
+pub fn generate_recovery_code() -> String {
+    const CHARSET: &[u8] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+    let mut bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut bytes);
+    let mut code = String::with_capacity(14);
+    for (i, b) in bytes.iter().enumerate() {
+        if i == 4 || i == 8 {
+            code.push('-');
+        }
+        let idx = (*b as usize) % CHARSET.len();
+        code.push(CHARSET[idx] as char);
+    }
+    code
+}
+
+pub fn hash_recovery_code(raw: &str) -> String {
+    let clean = raw.trim().replace('-', "").to_uppercase();
+    let mut hasher = Sha256::new();
+    hasher.update(clean.as_bytes());
+    let result = hasher.finalize();
+    let mut hex = String::with_capacity(64);
+    for b in result {
+        use std::fmt::Write;
+        let _ = write!(hex, "{:02x}", b);
+    }
+    hex
+}
 
 #[derive(Debug, Error)]
 pub enum AuthError {
@@ -527,13 +607,14 @@ pub async fn bootstrap_handler(
 }
 
 /// POST /api/auth/login
-/// Authenticates user credentials, enforces lockout, and issues a session token.
+/// Authenticates user credentials, enforces lockout, and issues a session token
+/// or a 2FA challenge if 2FA is required for the user account.
 pub async fn login_handler(
     State(state): State<AppState>,
     connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, AuthError> {
+) -> Result<Response, AuthError> {
     let client_ip = extract_client_ip(
         &headers,
         connect_info.map(|ci| ci.0),
@@ -598,7 +679,7 @@ pub async fn login_handler(
 
     // Lookup user
     let user_row = sqlx::query(
-        "SELECT id, username, password_hash, role, is_active FROM users WHERE username = ?",
+        "SELECT id, username, password_hash, role, is_active, is_2fa_required, totp_enabled FROM users WHERE username = ?",
     )
     .bind(username)
     .fetch_optional(&state.db)
@@ -712,13 +793,51 @@ pub async fn login_handler(
         return Err(AuthError::InvalidCredentials);
     }
 
-    // Login successful
-    record_login_attempt(&state.db, username, &client_ip, true).await?;
-
     let user_id: String = user.get("id");
     let user_role: String = user.get("role");
-    let token = generate_session_token();
+    let is_2fa_required: i64 = user.get("is_2fa_required");
 
+    // If 2FA is required, do NOT issue a session token. Issue a 5-minute mfa_challenge instead.
+    if is_2fa_required == 1 {
+        let mfa_token = generate_mfa_token();
+        sqlx::query(
+            r#"
+            INSERT INTO mfa_challenges (token, user_id, expires_at)
+            VALUES (?, ?, datetime('now', '+5 minutes'))
+            "#,
+        )
+        .bind(&mfa_token)
+        .bind(&user_id)
+        .execute(&state.db)
+        .await?;
+
+        let challenge_row = sqlx::query("SELECT expires_at FROM mfa_challenges WHERE token = ?")
+            .bind(&mfa_token)
+            .fetch_one(&state.db)
+            .await?;
+        let expires_at: String = challenge_row.get("expires_at");
+
+        tracing::info!(
+            username = %username,
+            user_id = %user_id,
+            "Credentials valid, 2FA challenge issued"
+        );
+
+        return Ok((
+            StatusCode::ACCEPTED,
+            Json(json!({
+                "mfa_required": true,
+                "mfa_token": mfa_token,
+                "expires_at": expires_at,
+            })),
+        )
+            .into_response());
+    }
+
+    // Login successful without 2FA
+    record_login_attempt(&state.db, username, &client_ip, true).await?;
+
+    let token = generate_session_token();
     let expiration_modifier = format!("+{} hours", SESSION_EXPIRATION_HOURS);
 
     sqlx::query(
@@ -771,15 +890,750 @@ pub async fn login_handler(
         "User authenticated successfully, session token issued"
     );
 
+    Ok((
+        StatusCode::OK,
+        Json(LoginResponse {
+            token,
+            expires_at,
+            user: UserInfo {
+                id: user_id,
+                username: username.to_string(),
+                role: user_role,
+            },
+        }),
+    )
+        .into_response())
+}
+
+/// POST /api/auth/2fa/enroll
+/// Authenticated handler that generates a new TOTP secret in base32 and otpauth:// URI,
+/// stores provisionally in users.totp_secret, returns { otpauth_uri, totp_secret_base32 }.
+pub async fn two_factor_enroll_handler(
+    State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: HeaderMap,
+    user: AuthenticatedUser,
+) -> Result<Json<TwoFactorEnrollResponse>, AuthError> {
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
+    let trace_id = extract_trace_id(&headers);
+
+    if !crate::permissions::has_permission(&user.role, crate::permissions::TWOFA_ENROLL) {
+        crate::permissions::audit_authz_denied(
+            &state.audit,
+            &user,
+            crate::permissions::TWOFA_ENROLL,
+            &client_ip,
+            &trace_id,
+        )
+        .await;
+        return Err(AuthError::Forbidden(
+            "Falta el permiso 2fa:enroll.".to_string(),
+        ));
+    }
+
+    let secret = totp_rs::Secret::generate_secret();
+    let secret_base32 = secret.to_encoded().to_string();
+    let secret_bytes = secret
+        .to_bytes()
+        .map_err(|e| AuthError::Hashing(e.to_string()))?;
+
+    let totp = totp_rs::TOTP::new(
+        totp_rs::Algorithm::SHA1,
+        6,
+        1,
+        30,
+        secret_bytes,
+        Some("Cercano".to_string()),
+        user.username.clone(),
+    )
+    .map_err(|e| AuthError::Hashing(e.to_string()))?;
+
+    let otpauth_uri = totp.get_url();
+
+    sqlx::query("UPDATE users SET totp_secret = ? WHERE id = ?")
+        .bind(&secret_base32)
+        .bind(&user.id)
+        .execute(&state.db)
+        .await?;
+
+    let audit_input = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Auth,
+        "auth.2fa_enroll",
+        Actor::with_details(
+            &user.id,
+            "user",
+            Some(user.username.clone()),
+            Some(client_ip.clone()),
+        ),
+        Outcome::Success,
+        json!({
+            "method": "totp",
+            "client_ip": client_ip,
+        }),
+    )
+    .with_subject(Subject::with_details(
+        &user.id,
+        "user",
+        Some(user.username.clone()),
+    ));
+
+    state.audit.append(audit_input).await?;
+
+    Ok(Json(TwoFactorEnrollResponse {
+        otpauth_uri,
+        totp_secret_base32: secret_base32,
+    }))
+}
+
+/// POST /api/auth/2fa/confirm
+/// Authenticated handler receiving { totp_code }. Validates against provisional secret.
+/// Upon success: generates 8 single-use recovery codes (XXXX-XXXX-XXXX), computes their SHA-256 hashes,
+/// stores JSON array in users.recovery_codes, sets totp_enabled = 1, is_2fa_required = 1,
+/// totp_confirmed_at = datetime('now'). Returns HTTP 200 with { status: "confirmed", recovery_codes: [...] }.
+pub async fn two_factor_confirm_handler(
+    State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: HeaderMap,
+    user: AuthenticatedUser,
+    Json(payload): Json<TwoFactorConfirmRequest>,
+) -> Result<Json<TwoFactorConfirmResponse>, AuthError> {
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
+    let trace_id = extract_trace_id(&headers);
+
+    if !crate::permissions::has_permission(&user.role, crate::permissions::TWOFA_ENROLL) {
+        crate::permissions::audit_authz_denied(
+            &state.audit,
+            &user,
+            crate::permissions::TWOFA_ENROLL,
+            &client_ip,
+            &trace_id,
+        )
+        .await;
+        return Err(AuthError::Forbidden(
+            "Falta el permiso 2fa:enroll.".to_string(),
+        ));
+    }
+
+    let user_row = sqlx::query("SELECT totp_secret FROM users WHERE id = ?")
+        .bind(&user.id)
+        .fetch_one(&state.db)
+        .await?;
+    let stored_secret: Option<String> = user_row.get("totp_secret");
+
+    let stored_secret = match stored_secret {
+        Some(s) if !s.trim().is_empty() => s,
+        _ => {
+            return Err(AuthError::Validation(
+                "No hay secreto 2FA provisional para confirmar. Llame a /api/auth/2fa/enroll primero."
+                    .to_string(),
+            ));
+        }
+    };
+
+    let secret = totp_rs::Secret::Encoded(stored_secret);
+    let secret_bytes = secret
+        .to_bytes()
+        .map_err(|e| AuthError::Hashing(e.to_string()))?;
+
+    let totp = totp_rs::TOTP::new(
+        totp_rs::Algorithm::SHA1,
+        6,
+        1,
+        30,
+        secret_bytes,
+        Some("Cercano".to_string()),
+        user.username.clone(),
+    )
+    .map_err(|e| AuthError::Hashing(e.to_string()))?;
+
+    let code = payload.totp_code.trim();
+    if code.len() != 6 || !totp.check_current(code).unwrap_or(false) {
+        return Err(AuthError::Validation(
+            "Código TOTP inválido o expirado.".to_string(),
+        ));
+    }
+
+    // Generate 8 single-use recovery codes: XXXX-XXXX-XXXX
+    let mut raw_codes: Vec<String> = Vec::with_capacity(8);
+    let mut hashed_entries: Vec<RecoveryCodeEntry> = Vec::with_capacity(8);
+
+    for _ in 0..8 {
+        let code = generate_recovery_code();
+        let hash = hash_recovery_code(&code);
+        hashed_entries.push(RecoveryCodeEntry { hash, used: false });
+        raw_codes.push(code);
+    }
+
+    let recovery_json = serde_json::to_string(&hashed_entries)
+        .map_err(|e| AuthError::Validation(format!("Error serializando recovery codes: {e}")))?;
+
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET totp_enabled = 1,
+            is_2fa_required = 1,
+            totp_confirmed_at = datetime('now'),
+            recovery_codes = ?
+        WHERE id = ?
+        "#,
+    )
+    .bind(&recovery_json)
+    .bind(&user.id)
+    .execute(&state.db)
+    .await?;
+
+    tracing::info!(
+        user_id = %user.id,
+        username = %user.username,
+        "2FA TOTP confirmed and activated"
+    );
+
+    Ok(Json(TwoFactorConfirmResponse {
+        status: "confirmed",
+        recovery_codes: raw_codes,
+    }))
+}
+
+/// POST /api/auth/2fa/verify
+/// Public verification handler receiving { mfa_token, totp_code?, recovery_code? }.
+/// Validates challenge in mfa_challenges. Checks TOTP code OR unused recovery code.
+/// Upon success: marks challenge used, marks recovery code used if applicable,
+/// creates full session, emits auth.2fa_verify, returns 200 with session token and user info.
+/// On failure: increments failure count, handles 5-failure lockout (429), emits auth.2fa_failed, returns 401.
+pub async fn two_factor_verify_handler(
+    State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: HeaderMap,
+    Json(payload): Json<TwoFactorVerifyRequest>,
+) -> Result<Json<LoginResponse>, AuthError> {
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
+    let trace_id = extract_trace_id(&headers);
+
+    let mfa_token = payload.mfa_token.trim();
+    if mfa_token.is_empty() {
+        return Err(AuthError::Validation("mfa_token es requerido.".to_string()));
+    }
+
+    // Look up challenge
+    let challenge_row = sqlx::query(
+        r#"
+        SELECT c.token, c.user_id, c.expires_at, c.used_at,
+               u.username, u.role, u.is_active, u.totp_secret, u.recovery_codes, u.totp_enabled
+        FROM mfa_challenges c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.token = ?
+        "#,
+    )
+    .bind(mfa_token)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let challenge = match challenge_row {
+        Some(row) => row,
+        None => {
+            let audit_input = EventInput::new(
+                trace_id.clone(),
+                Source::Api,
+                Category::Auth,
+                "auth.2fa_failed",
+                Actor::with_details(
+                    "unknown",
+                    "user",
+                    Some("unknown".to_string()),
+                    Some(client_ip.clone()),
+                ),
+                Outcome::Failure,
+                json!({
+                    "reason": "invalid_challenge",
+                    "client_ip": client_ip,
+                }),
+            );
+            let _ = state.audit.append(audit_input).await;
+            return Err(AuthError::Unauthorized(
+                "Desafío MFA no encontrado o inválido.".to_string(),
+            ));
+        }
+    };
+
+    let user_id: String = challenge.get("user_id");
+    let username: String = challenge.get("username");
+    let user_role: String = challenge.get("role");
+    let is_active: i64 = challenge.get("is_active");
+    let totp_enabled: i64 = challenge.get("totp_enabled");
+    let used_at: Option<String> = challenge.get("used_at");
+    let expires_at_str: String = challenge.get("expires_at");
+
+    if is_active == 0 {
+        return Err(AuthError::UserInactive);
+    }
+
+    if used_at.is_some() {
+        let audit_input = EventInput::new(
+            trace_id.clone(),
+            Source::Api,
+            Category::Auth,
+            "auth.2fa_failed",
+            Actor::with_details(
+                &user_id,
+                "user",
+                Some(username.clone()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Failure,
+            json!({
+                "reason": "challenge_already_used",
+                "client_ip": client_ip,
+            }),
+        );
+        let _ = state.audit.append(audit_input).await;
+        return Err(AuthError::Unauthorized(
+            "El desafío MFA ya fue utilizado.".to_string(),
+        ));
+    }
+
+    // Check expiration: compares against SQLite datetime('now')
+    let is_expired_row = sqlx::query("SELECT (? <= datetime('now')) as expired")
+        .bind(&expires_at_str)
+        .fetch_one(&state.db)
+        .await?;
+    let is_expired: i64 = is_expired_row.get("expired");
+
+    if is_expired != 0 {
+        let audit_input = EventInput::new(
+            trace_id.clone(),
+            Source::Api,
+            Category::Auth,
+            "auth.2fa_failed",
+            Actor::with_details(
+                &user_id,
+                "user",
+                Some(username.clone()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Failure,
+            json!({
+                "reason": "expired_challenge",
+                "client_ip": client_ip,
+            }),
+        );
+        let _ = state.audit.append(audit_input).await;
+        return Err(AuthError::Unauthorized(
+            "El desafío MFA ha expirado.".to_string(),
+        ));
+    }
+
+    // Check brute-force lockout
+    if is_locked_out(&state.db, &username, &client_ip).await? {
+        let audit_input = EventInput::new(
+            trace_id.clone(),
+            Source::Api,
+            Category::Auth,
+            "auth.2fa_failed",
+            Actor::with_details(
+                &user_id,
+                "user",
+                Some(username.clone()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Failure,
+            json!({
+                "target_username": username,
+                "reason": "account_locked",
+                "client_ip": client_ip,
+            }),
+        );
+        let _ = state.audit.append(audit_input).await;
+        return Err(AuthError::AccountLocked);
+    }
+
+    if totp_enabled == 0 {
+        return Err(AuthError::Unauthorized(
+            "2FA no está habilitado para esta cuenta.".to_string(),
+        ));
+    }
+
+    let stored_secret: Option<String> = challenge.get("totp_secret");
+    let recovery_codes_json: Option<String> = challenge.get("recovery_codes");
+
+    let mut verified = false;
+    let mut method = "totp";
+    let mut recovery_index_used: Option<usize> = None;
+    let mut updated_recovery_json: Option<String> = None;
+
+    // 1. Try TOTP code if provided
+    if let Some(ref code) = payload.totp_code {
+        let trimmed_code = code.trim();
+        if !trimmed_code.is_empty() {
+            if let Some(ref secret_str) = stored_secret {
+                if let Ok(secret_bytes) = totp_rs::Secret::Encoded(secret_str.clone()).to_bytes() {
+                    if let Ok(totp) = totp_rs::TOTP::new(
+                        totp_rs::Algorithm::SHA1,
+                        6,
+                        1,
+                        30,
+                        secret_bytes,
+                        Some("Cercano".to_string()),
+                        username.clone(),
+                    ) {
+                        if trimmed_code.len() == 6
+                            && totp.check_current(trimmed_code).unwrap_or(false)
+                        {
+                            verified = true;
+                            method = "totp";
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Try recovery code if not verified
+    if !verified {
+        if let Some(ref raw_code) = payload.recovery_code {
+            let trimmed = raw_code.trim();
+            if !trimmed.is_empty() {
+                if let Some(ref json_str) = recovery_codes_json {
+                    if let Ok(mut entries) =
+                        serde_json::from_str::<Vec<RecoveryCodeEntry>>(json_str)
+                    {
+                        let hash = hash_recovery_code(trimmed);
+                        for (idx, entry) in entries.iter_mut().enumerate() {
+                            if !entry.used && entry.hash == hash {
+                                entry.used = true;
+                                recovery_index_used = Some(idx + 1);
+                                updated_recovery_json = serde_json::to_string(&entries).ok();
+                                verified = true;
+                                method = "recovery";
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !verified {
+        record_login_attempt(&state.db, &username, &client_ip, false).await?;
+        let is_now_locked = is_locked_out(&state.db, &username, &client_ip).await?;
+
+        let reason = if is_now_locked {
+            "account_locked"
+        } else if payload.recovery_code.is_some() {
+            "invalid_recovery"
+        } else {
+            "invalid_code"
+        };
+
+        let audit_input = EventInput::new(
+            trace_id.clone(),
+            Source::Api,
+            Category::Auth,
+            "auth.2fa_failed",
+            Actor::with_details(
+                &user_id,
+                "user",
+                Some(username.clone()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Failure,
+            json!({
+                "target_username": username,
+                "reason": reason,
+                "client_ip": client_ip,
+            }),
+        );
+        let _ = state.audit.append(audit_input).await;
+
+        if is_now_locked {
+            return Err(AuthError::AccountLocked);
+        } else {
+            return Err(AuthError::Unauthorized(
+                "Código TOTP o de recuperación inválido.".to_string(),
+            ));
+        }
+    }
+
+    // Verification succeeded
+    sqlx::query("UPDATE mfa_challenges SET used_at = datetime('now') WHERE token = ?")
+        .bind(mfa_token)
+        .execute(&state.db)
+        .await?;
+
+    if let (Some(idx), Some(new_json)) = (recovery_index_used, updated_recovery_json) {
+        sqlx::query("UPDATE users SET recovery_codes = ? WHERE id = ?")
+            .bind(&new_json)
+            .bind(&user_id)
+            .execute(&state.db)
+            .await?;
+
+        let audit_input = EventInput::new(
+            trace_id.clone(),
+            Source::Api,
+            Category::Auth,
+            "auth.2fa_recovery_used",
+            Actor::with_details(
+                &user_id,
+                "user",
+                Some(username.clone()),
+                Some(client_ip.clone()),
+            ),
+            Outcome::Success,
+            json!({
+                "code_index": idx,
+                "client_ip": client_ip,
+            }),
+        )
+        .with_subject(Subject::with_details(
+            &user_id,
+            "user",
+            Some(username.clone()),
+        ));
+        let _ = state.audit.append(audit_input).await;
+    }
+
+    record_login_attempt(&state.db, &username, &client_ip, true).await?;
+
+    let token = generate_session_token();
+    let expiration_modifier = format!("+{} hours", SESSION_EXPIRATION_HOURS);
+
+    sqlx::query(
+        r#"
+        INSERT INTO sessions (token, user_id, expires_at)
+        VALUES (?, ?, datetime('now', ?))
+        "#,
+    )
+    .bind(&token)
+    .bind(&user_id)
+    .bind(&expiration_modifier)
+    .execute(&state.db)
+    .await?;
+
+    let session_row = sqlx::query("SELECT expires_at FROM sessions WHERE token = ?")
+        .bind(&token)
+        .fetch_one(&state.db)
+        .await?;
+    let expires_at: String = session_row.get("expires_at");
+
+    let audit_input = EventInput::new(
+        trace_id.clone(),
+        Source::Api,
+        Category::Auth,
+        "auth.2fa_verify",
+        Actor::with_details(
+            &user_id,
+            "user",
+            Some(username.clone()),
+            Some(client_ip.clone()),
+        ),
+        Outcome::Success,
+        json!({
+            "status": "success",
+            "method": method,
+            "client_ip": client_ip,
+        }),
+    )
+    .with_subject(Subject::with_details(
+        &user_id,
+        "user",
+        Some(username.clone()),
+    ));
+    state.audit.append(audit_input).await?;
+
+    let login_audit = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Auth,
+        "auth.login",
+        Actor::with_details(
+            &user_id,
+            "user",
+            Some(username.clone()),
+            Some(client_ip.clone()),
+        ),
+        Outcome::Success,
+        json!({
+            "username": username,
+            "role": user_role,
+            "client_ip": client_ip,
+            "2fa": true,
+        }),
+    )
+    .with_subject(Subject::with_details(
+        &user_id,
+        "user",
+        Some(username.clone()),
+    ));
+    let _ = state.audit.append(login_audit).await;
+
+    tracing::info!(
+        username = %username,
+        user_id = %user_id,
+        method = %method,
+        "2FA verification successful, session token issued"
+    );
+
     Ok(Json(LoginResponse {
         token,
         expires_at,
         user: UserInfo {
             id: user_id,
-            username: username.to_string(),
+            username,
             role: user_role,
         },
     }))
+}
+
+/// POST /api/auth/2fa/revoke
+/// Authenticated handler (user can revoke own, admin can revoke another).
+/// Clears totp_secret, totp_enabled = 0, is_2fa_required = 0, totp_confirmed_at = NULL, recovery_codes = NULL.
+/// Cancels open challenges and active sessions. Emits auth.2fa_revoked.
+pub async fn two_factor_revoke_handler(
+    State(state): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: HeaderMap,
+    caller: AuthenticatedUser,
+    payload: Option<Json<TwoFactorRevokeRequest>>,
+) -> Result<Json<TwoFactorRevokeResponse>, AuthError> {
+    let client_ip = extract_client_ip(
+        &headers,
+        connect_info.map(|ci| ci.0),
+        &state.config.trusted_proxies,
+    );
+    let trace_id = extract_trace_id(&headers);
+
+    let target_id = payload
+        .as_ref()
+        .and_then(|p| p.user_id.as_deref())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+
+    let (target_user_id, by) = match target_id {
+        Some(id) if id != caller.id => {
+            if !crate::permissions::is_admin(&caller.role) {
+                crate::permissions::audit_authz_denied(
+                    &state.audit,
+                    &caller,
+                    crate::permissions::TWOFA_REVOKE,
+                    &client_ip,
+                    &trace_id,
+                )
+                .await;
+                return Err(AuthError::Forbidden(
+                    "Solo administradores pueden revocar 2FA de otros usuarios.".to_string(),
+                ));
+            }
+            (id.to_string(), "admin")
+        }
+        _ => {
+            if !crate::permissions::has_permission(&caller.role, crate::permissions::TWOFA_REVOKE) {
+                crate::permissions::audit_authz_denied(
+                    &state.audit,
+                    &caller,
+                    crate::permissions::TWOFA_REVOKE,
+                    &client_ip,
+                    &trace_id,
+                )
+                .await;
+                return Err(AuthError::Forbidden(
+                    "Falta el permiso 2fa:revoke.".to_string(),
+                ));
+            }
+            (caller.id.clone(), "user")
+        }
+    };
+
+    // Verify target user exists
+    let user_row = sqlx::query("SELECT id, username FROM users WHERE id = ?")
+        .bind(&target_user_id)
+        .fetch_optional(&state.db)
+        .await?;
+
+    let (target_id, target_username) = match user_row {
+        Some(row) => (row.get::<String, _>("id"), row.get::<String, _>("username")),
+        None => return Err(AuthError::Validation("Usuario no encontrado.".to_string())),
+    };
+
+    // Clear 2FA fields
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET totp_secret = NULL,
+            totp_enabled = 0,
+            is_2fa_required = 0,
+            totp_confirmed_at = NULL,
+            recovery_codes = NULL
+        WHERE id = ?
+        "#,
+    )
+    .bind(&target_id)
+    .execute(&state.db)
+    .await?;
+
+    // Cancel open challenges
+    sqlx::query(
+        "UPDATE mfa_challenges SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL",
+    )
+    .bind(&target_id)
+    .execute(&state.db)
+    .await?;
+
+    // Invalidate active sessions
+    sqlx::query(
+        "UPDATE sessions SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL",
+    )
+    .bind(&target_id)
+    .execute(&state.db)
+    .await?;
+
+    let audit_input = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Auth,
+        "auth.2fa_revoked",
+        Actor::with_details(
+            &caller.id,
+            "user",
+            Some(caller.username.clone()),
+            Some(client_ip.clone()),
+        ),
+        Outcome::Success,
+        json!({
+            "by": by,
+            "target_user_id": target_id,
+            "target_username": target_username,
+            "client_ip": client_ip,
+        }),
+    )
+    .with_subject(Subject::with_details(
+        &target_id,
+        "user",
+        Some(target_username),
+    ));
+
+    state.audit.append(audit_input).await?;
+
+    tracing::info!(
+        target_user_id = %target_id,
+        by = %by,
+        "2FA factor revoked successfully"
+    );
+
+    Ok(Json(TwoFactorRevokeResponse { status: "revoked" }))
 }
 
 /// POST /api/auth/logout

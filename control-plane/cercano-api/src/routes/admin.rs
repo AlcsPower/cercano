@@ -135,6 +135,7 @@ pub struct UpdateUserRequest {
     pub password: Option<String>,
     pub role: Option<String>,
     pub is_active: Option<bool>,
+    pub is_2fa_required: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -149,20 +150,40 @@ pub struct UpdateSettingsRequest {
     pub support_email: Option<String>,
 }
 
-fn require_admin(user: &AuthenticatedUser) -> Result<(), AdminError> {
+async fn require_admin(
+    state: &AppState,
+    user: &AuthenticatedUser,
+    headers: Option<&HeaderMap>,
+) -> Result<(), AdminError> {
     if permissions::is_admin(&user.role) {
         Ok(())
     } else {
+        let empty_headers = HeaderMap::new();
+        let h = headers.unwrap_or(&empty_headers);
+        let client_ip = crate::auth::extract_client_ip(h, None, &state.config.trusted_proxies);
+        let trace_id = crate::auth::extract_trace_id(h);
+        permissions::audit_authz_denied(&state.audit, user, "admin", &client_ip, &trace_id).await;
         Err(AdminError::Forbidden(
             "Se requiere rol administrador.".to_string(),
         ))
     }
 }
 
-fn require_permission(user: &AuthenticatedUser, permission: &str) -> Result<(), AdminError> {
+async fn require_permission(
+    state: &AppState,
+    user: &AuthenticatedUser,
+    permission: &'static str,
+    headers: Option<&HeaderMap>,
+) -> Result<(), AdminError> {
     if permissions::has_permission(&user.role, permission) {
         Ok(())
     } else {
+        let empty_headers = HeaderMap::new();
+        let h = headers.unwrap_or(&empty_headers);
+        let client_ip = crate::auth::extract_client_ip(h, None, &state.config.trusted_proxies);
+        let trace_id = crate::auth::extract_trace_id(h);
+        permissions::audit_authz_denied(&state.audit, user, permission, &client_ip, &trace_id)
+            .await;
         Err(AdminError::Forbidden(format!(
             "Falta el permiso {permission}."
         )))
@@ -257,7 +278,7 @@ pub async fn list_users_handler(
     State(state): State<AppState>,
     user: AuthenticatedUser,
 ) -> Result<Json<Vec<UserView>>, AdminError> {
-    require_permission(&user, permissions::USERS_READ)?;
+    require_permission(&state, &user, permissions::USERS_READ, None).await?;
     let rows = if permissions::is_admin(&user.role) {
         sqlx::query("SELECT id, username, role, is_active, totp_enabled, is_2fa_required, created_at FROM users ORDER BY username")
             .fetch_all(&state.db)
@@ -276,7 +297,7 @@ pub async fn get_user_handler(
     user: AuthenticatedUser,
     Path(id): Path<String>,
 ) -> Result<Json<UserView>, AdminError> {
-    require_permission(&user, permissions::USERS_READ)?;
+    require_permission(&state, &user, permissions::USERS_READ, None).await?;
     if !permissions::is_admin(&user.role) && user.id != id {
         return Err(AdminError::Forbidden(
             "Solo puede consultar su propio usuario.".to_string(),
@@ -291,7 +312,8 @@ pub async fn create_user_handler(
     headers: HeaderMap,
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<UserView>), AdminError> {
-    require_admin(&user)?;
+    require_admin(&state, &user, Some(&headers)).await?;
+
     let username = validate_username(&payload.username)?;
     validate_password(&payload.password)?;
     let role = validate_role(&payload.role)?;
@@ -327,14 +349,18 @@ pub async fn update_user_handler(
     headers: HeaderMap,
     Json(payload): Json<UpdateUserRequest>,
 ) -> Result<Json<UserView>, AdminError> {
-    require_permission(&user, permissions::USERS_READ)?;
+    require_permission(&state, &user, permissions::USERS_READ, Some(&headers)).await?;
     let is_admin = permissions::is_admin(&user.role);
     if !is_admin && user.id != id {
         return Err(AdminError::Forbidden(
             "Solo puede modificar su propio usuario.".to_string(),
         ));
     }
-    if !is_admin && (payload.role.is_some() || payload.is_active.is_some()) {
+    if !is_admin
+        && (payload.role.is_some()
+            || payload.is_active.is_some()
+            || payload.is_2fa_required.is_some())
+    {
         return Err(AdminError::Forbidden(
             "Solo un administrador puede cambiar rol o estado.".to_string(),
         ));
@@ -387,6 +413,23 @@ pub async fn update_user_handler(
         }
     }
 
+    if let Some(is_2fa_required) = payload.is_2fa_required {
+        if is_2fa_required && !current.totp_enabled {
+            return Err(AdminError::Validation(
+                "No se puede requerir 2FA a un usuario que no tiene 2FA enrolado y confirmado."
+                    .to_string(),
+            ));
+        }
+        if is_2fa_required != current.is_2fa_required {
+            sqlx::query("UPDATE users SET is_2fa_required = ? WHERE id = ?")
+                .bind(if is_2fa_required { 1 } else { 0 })
+                .bind(&id)
+                .execute(&state.db)
+                .await?;
+            changed_fields.push("is_2fa_required");
+        }
+    }
+
     if let Some(password) = payload.password.as_deref() {
         validate_password(password)?;
         let password_hash = hash_password(password).map_err(|e| AdminError::Hash(e.to_string()))?;
@@ -420,7 +463,7 @@ pub async fn delete_user_handler(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Result<StatusCode, AdminError> {
-    require_admin(&user)?;
+    require_admin(&state, &user, Some(&headers)).await?;
     if user.id == id {
         return Err(AdminError::Conflict(
             "No puede eliminar su propio usuario.".to_string(),
@@ -450,10 +493,11 @@ pub async fn delete_user_handler(
 }
 
 pub async fn list_roles_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     user: AuthenticatedUser,
 ) -> Result<Json<Value>, AdminError> {
-    require_admin(&user)?;
+    require_admin(&state, &user, None).await?;
+
     let roles = [
         ("admin", vec!["*"]),
         (
@@ -503,7 +547,7 @@ pub async fn get_settings_handler(
     State(state): State<AppState>,
     user: AuthenticatedUser,
 ) -> Result<Json<SettingsResponse>, AdminError> {
-    require_permission(&user, permissions::SETTINGS_READ)?;
+    require_permission(&state, &user, permissions::SETTINGS_READ, None).await?;
     Ok(Json(load_settings(&state.db).await?))
 }
 
@@ -513,7 +557,7 @@ pub async fn update_settings_handler(
     headers: HeaderMap,
     Json(payload): Json<UpdateSettingsRequest>,
 ) -> Result<Json<SettingsResponse>, AdminError> {
-    require_permission(&user, permissions::SETTINGS_MANAGE)?;
+    require_permission(&state, &user, permissions::SETTINGS_MANAGE, Some(&headers)).await?;
     if let Some(value) = payload.organization_name.as_deref() {
         let value = value.trim();
         if value.len() > 128 {
