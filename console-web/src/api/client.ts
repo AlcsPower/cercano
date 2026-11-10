@@ -4,9 +4,15 @@
 import {
   AuthResponse,
   Device,
+  LoginResponse,
+  LoginResult,
+  MfaChallengeResponse,
   RotateKeysResponse,
   ServerPublicKeyResponse,
   SystemMetrics,
+  TwoFactorConfirmResponse,
+  TwoFactorEnrollResponse,
+  TwoFactorVerifyRequest,
   User,
 } from '../types';
 
@@ -176,7 +182,7 @@ class CercanoApiClient {
   }
 
   // Auth: Login
-  public async login(username: string, password: string): Promise<AuthResponse> {
+  public async login(username: string, password: string): Promise<LoginResult> {
     const userTrim = (username || '').trim();
     const passTrim = (password || '').trim();
 
@@ -199,7 +205,12 @@ class CercanoApiClient {
 
       this.setToken(mockResponse.token);
       this.notifyStatus(false);
-      return mockResponse;
+      return {
+        kind: 'success',
+        response: mockResponse,
+        user: mockResponse.user,
+        token: mockResponse.token,
+      };
     }
 
     let res: Response;
@@ -211,29 +222,57 @@ class CercanoApiClient {
         signal: AbortSignal.timeout(5000),
       });
     } catch {
-      throw new Error('Error de conexiÃ³n: No se pudo conectar con el servidor cercano-api.');
+      throw new Error('Error de conexión: No se pudo conectar con el servidor cercano-api.');
+    }
+
+    if (res.status === 202) {
+      const challengeData = (await res.json().catch(() => null)) as MfaChallengeResponse | null;
+      if (challengeData && challengeData.mfa_token) {
+        return {
+          kind: 'mfa_required',
+          challenge: challengeData,
+          user: null,
+          token: null,
+        };
+      }
+      throw new Error('Respuesta MFA inválida recibida del servidor cercano-api.');
     }
 
     if (res.ok) {
       const data = await res.json().catch(() => null);
-      if (data && typeof data === 'object' && 'token' in data && 'user' in data) {
-        const authData = data as AuthResponse;
-        this.setToken(authData.token);
-        this.notifyStatus(true);
-        return authData;
+      if (data && typeof data === 'object') {
+        if (data.mfa_required && data.mfa_token) {
+          return {
+            kind: 'mfa_required',
+            challenge: data as MfaChallengeResponse,
+            user: null,
+            token: null,
+          };
+        }
+        if ('token' in data && 'user' in data) {
+          const authData = data as AuthResponse;
+          this.setToken(authData.token);
+          this.notifyStatus(true);
+          return {
+            kind: 'success',
+            response: authData,
+            user: authData.user,
+            token: authData.token,
+          };
+        }
       }
-      throw new Error('Respuesta invÃ¡lida recibida del servidor cercano-api.');
+      throw new Error('Respuesta inválida recibida del servidor cercano-api.');
     }
 
     if (res.status === 401) {
-      throw new Error('Credenciales incorrectas. Verifique usuario y contraseÃ±a.');
+      throw new Error('Credenciales incorrectas. Verifique usuario y contraseña.');
     }
 
     if (res.status === 429) {
-      throw new Error('Demasiados intentos fallidos. Su acceso estÃ¡ temporalmente bloqueado (15 min).');
+      throw new Error('Demasiados intentos fallidos. Su acceso está temporalmente bloqueado (15 min).');
     }
 
-    let errorMessage = `Error del servidor (${res.status}): No se pudo procesar la autenticaciÃ³n.`;
+    let errorMessage = `Error del servidor (${res.status}): No se pudo procesar la autenticación.`;
     try {
       const errData = await res.json();
       if (errData && typeof errData === 'object') {
@@ -248,6 +287,123 @@ class CercanoApiClient {
     }
 
     throw new Error(errorMessage);
+  }
+
+  // Auth: Verify 2FA challenge
+  public async verify2fa(req: TwoFactorVerifyRequest): Promise<LoginResponse> {
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      const mockResponse: LoginResponse = {
+        token: 'cercano_sess_2fa_demo_' + Math.random().toString(36).substring(2),
+        expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+        user: {
+          id: 'usr-admin-demo',
+          username: 'admin',
+          role: 'admin',
+          created_at: '2026-01-01T00:00:00Z',
+        },
+      };
+      this.setToken(mockResponse.token);
+      return mockResponse;
+    }
+
+    let res: Response;
+    try {
+      res = await fetch('/api/auth/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      throw new Error('Error de conexión al verificar el segundo factor.');
+    }
+
+    if (res.ok) {
+      const data = await res.json();
+      const loginResp = data as LoginResponse;
+      this.setToken(loginResp.token);
+      this.notifyStatus(true);
+      return loginResp;
+    }
+
+    if (res.status === 401) {
+      throw new Error('Código TOTP o de recuperación inválido.');
+    }
+    if (res.status === 429) {
+      throw new Error('Demasiados intentos fallidos. Su acceso está temporalmente bloqueado (15 min).');
+    }
+
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.error || `Error del servidor (${res.status}) al verificar 2FA.`);
+  }
+
+  // 2FA: Enroll
+  public async enroll2fa(): Promise<TwoFactorEnrollResponse> {
+    if (import.meta.env.VITE_DEMO_MODE === 'true' || !this.isConnectedToLiveApi) {
+      return {
+        otpauth_uri: 'otpauth://totp/Cercano:admin?secret=JBSWY3DPEHPK3PXP&issuer=Cercano&algorithm=SHA1&digits=6&period=30',
+        totp_secret_base32: 'JBSWY3DPEHPK3PXP',
+      };
+    }
+
+    const res = await fetch('/api/auth/2fa/enroll', {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Error al iniciar enrolamiento 2FA');
+    }
+    return await res.json();
+  }
+
+  // 2FA: Confirm
+  public async confirm2fa(totp_code: string): Promise<TwoFactorConfirmResponse> {
+    if (import.meta.env.VITE_DEMO_MODE === 'true' || !this.isConnectedToLiveApi) {
+      return {
+        status: 'confirmed',
+        recovery_codes: [
+          'CRCN-8A2F-9K1M',
+          'CRCN-7B3E-2X4Y',
+          'CRCN-5D9W-1P0L',
+          'CRCN-4C8V-6R9T',
+          'CRCN-3E7U-8S2A',
+          'CRCN-2F6T-5M3B',
+          'CRCN-1G5S-4N7C',
+          'CRCN-9H4R-7V8D',
+        ],
+      };
+    }
+
+    const res = await fetch('/api/auth/2fa/confirm', {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ totp_code }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Código de confirmación inválido');
+    }
+    return await res.json();
+  }
+
+  // 2FA: Revoke
+  public async revoke2fa(user_id?: string): Promise<{ message: string }> {
+    if (import.meta.env.VITE_DEMO_MODE === 'true' || !this.isConnectedToLiveApi) {
+      return { message: '2FA revocado exitosamente' };
+    }
+
+    const res = await fetch('/api/auth/2fa/revoke', {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(user_id ? { user_id } : {}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Error al revocar segundo factor');
+    }
+    const data = await res.json().catch(() => ({ message: '2FA revocado' }));
+    return { message: data.message || data.status || '2FA revocado exitosamente' };
   }
 
   // Auth: Logout
@@ -438,6 +594,191 @@ class CercanoApiClient {
       rotated_at: new Date().toISOString(),
       backup_path: '/etc/cercano/backup/id_ed25519.' + Date.now() + '.bak',
     };
+  }
+
+  // Admin: Users management
+  public async getUsers(): Promise<import('../types').UserDetail[]> {
+    if (this.isConnectedToLiveApi) {
+      try {
+        const res = await fetch('/api/users', { headers: this.getHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          return data.users || data;
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    return [
+      {
+        id: 'u-admin-01',
+        username: 'admin',
+        role: 'admin',
+        is_active: true,
+        totp_enabled: true,
+        is_2fa_required: true,
+        created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+      },
+      {
+        id: 'u-op-01',
+        username: 'operador_soporte',
+        role: 'operator',
+        is_active: true,
+        totp_enabled: false,
+        is_2fa_required: false,
+        created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+      },
+      {
+        id: 'u-aud-01',
+        username: 'auditor_externo',
+        role: 'auditor',
+        is_active: true,
+        totp_enabled: true,
+        is_2fa_required: true,
+        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+      },
+    ];
+  }
+
+  public async createUser(user: { username: string; password?: string; role: string }): Promise<void> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(user),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al crear usuario');
+      }
+    }
+  }
+
+  public async updateUser(id: string, updates: Record<string, unknown>): Promise<void> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al actualizar usuario');
+      }
+    }
+  }
+
+  public async deleteUser(id: string): Promise<void> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al eliminar usuario');
+      }
+    }
+  }
+
+  // Admin: Roles
+  public async getRoles(): Promise<import('../types').RoleDetail[]> {
+    if (this.isConnectedToLiveApi) {
+      try {
+        const res = await fetch('/api/roles', { headers: this.getHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          return data.roles || data;
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    return [
+      {
+        role: 'admin',
+        description: 'Administrador integral con control total del sistema y seguridad',
+        permissions: ['users:*', 'roles:*', 'devices:*', 'audit:*', 'settings:*', 'builder:*', 'chat:*', 'server:keys:rotate'],
+      },
+      {
+        role: 'operator',
+        description: 'Técnico de soporte para asistencia remota y atención de chats',
+        permissions: ['devices:read', 'chat:attend', 'chat:read', 'builder:create:soporte', 'builder:download'],
+      },
+      {
+        role: 'auditor',
+        description: 'Auditor con permisos de solo lectura y exportación forense',
+        permissions: ['audit:read', 'audit:export', 'devices:read', 'settings:read', 'chat:read'],
+      },
+    ];
+  }
+
+  // Admin: Settings
+  public async getSettings(): Promise<import('../types').GeneralSettings> {
+    if (this.isConnectedToLiveApi) {
+      try {
+        const res = await fetch('/api/settings', { headers: this.getHeaders() });
+        if (res.ok) return await res.json();
+      } catch {
+        // Fallback
+      }
+    }
+    return {
+      organization_name: 'Cercano Soporte Remoto',
+      support_email: 'soporte@institucion.gob.ni',
+      session_timeout_minutes: 60,
+      enforce_2fa_all: false,
+      lan_discovery_enabled: true,
+      allow_registration: false,
+    };
+  }
+
+  public async updateSettings(settings: import('../types').GeneralSettings): Promise<void> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify(settings),
+      });
+      if (!res.ok) throw new Error('Error al guardar ajustes');
+    }
+  }
+
+  // Admin: Audit Log Query
+  public async getAuditEvents(limit = 50, offset = 0): Promise<import('../types').AuditEventItem[]> {
+    if (this.isConnectedToLiveApi) {
+      try {
+        const res = await fetch(`/api/audit/events?limit=${limit}&offset=${offset}`, {
+          headers: this.getHeaders(),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.events || data;
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    return [
+      {
+        event_id: 'ev-01',
+        timestamp: new Date().toISOString(),
+        category: 'auth',
+        action: 'auth.login',
+        outcome: 'success',
+        actor: { actor_id: 'admin', actor_type: 'user' },
+        details: { ip: '192.168.1.100', user_agent: 'ConsoleWeb/1.0' },
+      },
+      {
+        event_id: 'ev-02',
+        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        category: 'elev',
+        action: 'elev.requested',
+        outcome: 'success',
+        actor: { actor_id: 'cercano-dev-91820', actor_type: 'device' },
+        details: { reason: 'Instalación de controlador LAN', target_username: 'Administrator' },
+      },
+    ];
   }
 
   // System and Network Metrics

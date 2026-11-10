@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import { Navbar } from './components/layout/Navbar';
-import { TabBar } from './components/layout/TabBar';
+import { TabBar, isTabVisibleForRole } from './components/layout/TabBar';
 import { LoginView } from './components/views/LoginView';
 import { DashboardView } from './components/views/DashboardView';
 import { DevicesView } from './components/views/DevicesView';
@@ -12,6 +12,11 @@ import { ChatView } from './components/views/ChatView';
 import { BuilderView } from './components/views/BuilderView';
 import { SecurityView } from './components/views/SecurityView';
 import { NetworkView } from './components/views/NetworkView';
+import { UsersView } from './components/views/UsersView';
+import { RolesView } from './components/views/RolesView';
+import { AuditView } from './components/views/AuditView';
+import { SettingsView } from './components/views/SettingsView';
+import { TwoFAView } from './components/views/TwoFAView';
 import { ActiveTab } from './types';
 import { apiClient } from './api/client';
 import { chatApi } from './api/chat';
@@ -28,6 +33,7 @@ export const App: React.FC = () => {
   const [chatBadge, setChatBadge] = useState<number>(0);
 
   const handleTabChange = (tab: ActiveTab) => {
+    if (!isTabVisibleForRole(tab, user?.role)) return;
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
@@ -82,6 +88,13 @@ export const App: React.FC = () => {
     };
   }, [isAuthenticated, activeTab]);
 
+  // Tab accessibility fallback: if current user role cannot view activeTab, fall back to 'dashboard'
+  useEffect(() => {
+    if (!isTabVisibleForRole(activeTab, user?.role)) {
+      setActiveTab('dashboard');
+    }
+  }, [activeTab, user?.role]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-apple-canvas dark:bg-apple-canvas-dark">
@@ -108,6 +121,7 @@ export const App: React.FC = () => {
       <TabBar
         activeTab={activeTab}
         setActiveTab={handleTabChange}
+        userRole={user?.role}
         onlineCount={onlineCount}
         totalDevices={totalDevices}
         chatBadge={chatBadge}
@@ -119,13 +133,25 @@ export const App: React.FC = () => {
           <DashboardView
             setActiveTab={handleTabChange}
             openRotateKeyModal={() => {
-              handleTabChange('security');
-              setIsRotateModalOpen(true);
+              if (user?.role === 'admin') {
+                handleTabChange('security');
+                setIsRotateModalOpen(true);
+              }
             }}
           />
         )}
 
         {activeTab === 'devices' && <DevicesView />}
+
+        {activeTab === 'users' && <UsersView />}
+
+        {activeTab === 'roles' && <RolesView />}
+
+        {activeTab === 'audit' && <AuditView />}
+
+        {activeTab === 'twofa' && <TwoFAView />}
+
+        {activeTab === 'settings' && <SettingsView />}
 
         {activeTab === 'chat' && (
           <ChatView

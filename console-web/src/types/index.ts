@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Cercano Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-export type UserRole = 'admin' | 'operator' | 'auditor';
+export type UserRole = 'admin' | 'operator' | 'auditor' | 'user';
 
 export interface User {
   id: string;
@@ -14,6 +14,34 @@ export interface AuthResponse {
   token: string;
   expires_at: string;
   user: User;
+}
+
+export type LoginResponse = AuthResponse;
+
+export interface MfaChallengeResponse {
+  mfa_required: boolean;
+  mfa_token: string;
+  expires_at: string;
+}
+
+export type LoginResult =
+  | { kind: 'success'; response: LoginResponse; user: User; token: string }
+  | { kind: 'mfa_required'; challenge: MfaChallengeResponse; user: null; token: null };
+
+export interface TwoFactorVerifyRequest {
+  mfa_token: string;
+  totp_code?: string;
+  recovery_code?: string;
+}
+
+export interface TwoFactorEnrollResponse {
+  otpauth_uri: string;
+  totp_secret_base32: string;
+}
+
+export interface TwoFactorConfirmResponse {
+  status: string;
+  recovery_codes: string[];
 }
 
 export interface Device {
@@ -153,4 +181,44 @@ export interface ChatSummary {
   unread: number;
 }
 
-export type ActiveTab = 'dashboard' | 'devices' | 'chat' | 'builder' | 'security' | 'network';
+export type ActiveTab = 'dashboard' | 'devices' | 'chat' | 'builder' | 'users' | 'roles' | 'audit' | 'settings' | 'security' | 'network' | 'twofa';
+
+export interface UserDetail extends User {
+  is_active: boolean;
+  totp_enabled: boolean;
+  is_2fa_required: boolean;
+}
+
+export interface RoleDetail {
+  role: UserRole;
+  description: string;
+  permissions: string[];
+}
+
+export interface AuditEventItem {
+  event_id: string;
+  timestamp: string;
+  category: string;
+  action: string;
+  outcome: 'success' | 'failure' | 'denied';
+  actor?: {
+    actor_id: string;
+    actor_type: string;
+  };
+  details?: Record<string, unknown>;
+  prev_hash?: string;
+  hash?: string;
+}
+
+export interface Settings {
+  organization_name?: string;
+  support_email?: string;
+  allow_registration?: boolean;
+  default_role?: UserRole;
+  session_timeout_minutes?: number;
+  enforce_2fa_all?: boolean;
+  lan_discovery_enabled?: boolean;
+  [key: string]: unknown;
+}
+
+export interface GeneralSettings extends Settings {}
