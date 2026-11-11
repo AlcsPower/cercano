@@ -104,7 +104,7 @@ Fuente: `docs/PLAN-F4.5-CHAT.md` v1.1. Backend y consola dependen de F4-05/06; e
 |---|---|---|---|---|---|
 | F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA | Hecho |
 | F4.5-02 | Migración 008 y modelos | F4.5-01, F4-02 | ControlPlane | QA | Hecho |
-| F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad | Pendiente |
+| F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad | Hecho |
 | F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4-05 | ControlPlane | QA | Pendiente |
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad | Pendiente |
 | F4.5-06 | SSE, `ChatHub`, lecturas y resumen | F4.5-04 | ControlPlane | QA | Pendiente |

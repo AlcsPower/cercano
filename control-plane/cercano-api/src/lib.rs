@@ -214,6 +214,23 @@ pub fn create_app(state: AppState) -> Router {
             "/api/policies/apply",
             post(routes::sessions::apply_policy_handler),
         )
+        // Chat Device Authentication routes (F4.5-03)
+        .route(
+            "/api/chat/devices/register",
+            post(chat::auth::register_device_handler),
+        )
+        .route(
+            "/api/chat/auth/challenge",
+            post(chat::auth::request_challenge_handler),
+        )
+        .route(
+            "/api/chat/auth/verify",
+            post(chat::auth::verify_challenge_handler),
+        )
+        .route(
+            "/api/chat/devices/:id/reset",
+            post(chat::auth::reset_device_handler),
+        )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .with_state(state)

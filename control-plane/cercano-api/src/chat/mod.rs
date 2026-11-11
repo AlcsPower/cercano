@@ -23,6 +23,8 @@
 //! `chat::conversations` (F4.5-04). Keeping the schema-aligned structs and
 //! input validation here lets every handler share the same rules.
 
+pub mod auth;
+
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::Row;

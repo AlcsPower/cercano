@@ -74,6 +74,77 @@ pub struct Config {
     pub require_2fa_roles: Vec<String>,
     #[serde(default = "default_totp_encryption_key")]
     pub totp_encryption_key: String,
+    #[serde(default = "default_chat_enabled")]
+    pub chat_enabled: bool,
+    #[serde(default = "default_chat_attachment_dir")]
+    pub chat_attachment_dir: String,
+    #[serde(default = "default_chat_retention_days")]
+    pub chat_retention_days: i64,
+    #[serde(default = "default_chat_max_attachment_bytes")]
+    pub chat_max_attachment_bytes: usize,
+    #[serde(default = "default_chat_device_token_ttl_minutes")]
+    pub chat_device_token_ttl_minutes: i64,
+    #[serde(default = "default_chat_message_rate_per_minute")]
+    pub chat_message_rate_per_minute: u32,
+    #[serde(default = "default_chat_user_message_rate_per_minute")]
+    pub chat_user_message_rate_per_minute: u32,
+    #[serde(default = "default_chat_conversation_daily_limit")]
+    pub chat_conversation_daily_limit: u32,
+    #[serde(default = "default_chat_attachment_daily_limit")]
+    pub chat_attachment_daily_limit: u32,
+    #[serde(default = "default_chat_sse_heartbeat_secs")]
+    pub chat_sse_heartbeat_secs: u64,
+}
+
+pub const DEFAULT_CHAT_ENABLED: bool = true;
+pub const DEFAULT_CHAT_ATTACHMENT_DIR: &str = "/opt/cercano/data/chat-attachments";
+pub const DEFAULT_CHAT_RETENTION_DAYS: i64 = 90;
+pub const DEFAULT_CHAT_MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
+pub const DEFAULT_CHAT_DEVICE_TOKEN_TTL_MINUTES: i64 = 15;
+pub const DEFAULT_CHAT_MESSAGE_RATE_PER_MINUTE: u32 = 30;
+pub const DEFAULT_CHAT_USER_MESSAGE_RATE_PER_MINUTE: u32 = 60;
+pub const DEFAULT_CHAT_CONVERSATION_DAILY_LIMIT: u32 = 5;
+pub const DEFAULT_CHAT_ATTACHMENT_DAILY_LIMIT: u32 = 20;
+pub const DEFAULT_CHAT_SSE_HEARTBEAT_SECS: u64 = 15;
+
+fn default_chat_enabled() -> bool {
+    DEFAULT_CHAT_ENABLED
+}
+
+fn default_chat_attachment_dir() -> String {
+    DEFAULT_CHAT_ATTACHMENT_DIR.to_string()
+}
+
+fn default_chat_retention_days() -> i64 {
+    DEFAULT_CHAT_RETENTION_DAYS
+}
+
+fn default_chat_max_attachment_bytes() -> usize {
+    DEFAULT_CHAT_MAX_ATTACHMENT_BYTES
+}
+
+fn default_chat_device_token_ttl_minutes() -> i64 {
+    DEFAULT_CHAT_DEVICE_TOKEN_TTL_MINUTES
+}
+
+fn default_chat_message_rate_per_minute() -> u32 {
+    DEFAULT_CHAT_MESSAGE_RATE_PER_MINUTE
+}
+
+fn default_chat_user_message_rate_per_minute() -> u32 {
+    DEFAULT_CHAT_USER_MESSAGE_RATE_PER_MINUTE
+}
+
+fn default_chat_conversation_daily_limit() -> u32 {
+    DEFAULT_CHAT_CONVERSATION_DAILY_LIMIT
+}
+
+fn default_chat_attachment_daily_limit() -> u32 {
+    DEFAULT_CHAT_ATTACHMENT_DAILY_LIMIT
+}
+
+fn default_chat_sse_heartbeat_secs() -> u64 {
+    DEFAULT_CHAT_SSE_HEARTBEAT_SECS
 }
 
 fn default_require_2fa_roles() -> Vec<String> {
@@ -129,6 +200,16 @@ impl Default for Config {
             revocation_fail_closed: DEFAULT_REVOCATION_FAIL_CLOSED,
             require_2fa_roles: default_require_2fa_roles(),
             totp_encryption_key: default_totp_encryption_key(),
+            chat_enabled: DEFAULT_CHAT_ENABLED,
+            chat_attachment_dir: DEFAULT_CHAT_ATTACHMENT_DIR.to_string(),
+            chat_retention_days: DEFAULT_CHAT_RETENTION_DAYS,
+            chat_max_attachment_bytes: DEFAULT_CHAT_MAX_ATTACHMENT_BYTES,
+            chat_device_token_ttl_minutes: DEFAULT_CHAT_DEVICE_TOKEN_TTL_MINUTES,
+            chat_message_rate_per_minute: DEFAULT_CHAT_MESSAGE_RATE_PER_MINUTE,
+            chat_user_message_rate_per_minute: DEFAULT_CHAT_USER_MESSAGE_RATE_PER_MINUTE,
+            chat_conversation_daily_limit: DEFAULT_CHAT_CONVERSATION_DAILY_LIMIT,
+            chat_attachment_daily_limit: DEFAULT_CHAT_ATTACHMENT_DAILY_LIMIT,
+            chat_sse_heartbeat_secs: DEFAULT_CHAT_SSE_HEARTBEAT_SECS,
         }
     }
 }
@@ -157,6 +238,16 @@ struct FileConfig {
     require_2fa_roles: Option<Vec<String>>,
     totp_encryption_key: Option<String>,
     secrets_key: Option<String>,
+    chat_enabled: Option<bool>,
+    chat_attachment_dir: Option<String>,
+    chat_retention_days: Option<i64>,
+    chat_max_attachment_bytes: Option<usize>,
+    chat_device_token_ttl_minutes: Option<i64>,
+    chat_message_rate_per_minute: Option<u32>,
+    chat_user_message_rate_per_minute: Option<u32>,
+    chat_conversation_daily_limit: Option<u32>,
+    chat_attachment_daily_limit: Option<u32>,
+    chat_sse_heartbeat_secs: Option<u64>,
 }
 
 impl Config {
@@ -257,6 +348,36 @@ impl Config {
         }
         if let Some(key) = file_cfg.totp_encryption_key.or(file_cfg.secrets_key) {
             self.totp_encryption_key = key;
+        }
+        if let Some(enabled) = file_cfg.chat_enabled {
+            self.chat_enabled = enabled;
+        }
+        if let Some(dir) = file_cfg.chat_attachment_dir {
+            self.chat_attachment_dir = dir;
+        }
+        if let Some(days) = file_cfg.chat_retention_days {
+            self.chat_retention_days = days;
+        }
+        if let Some(bytes) = file_cfg.chat_max_attachment_bytes {
+            self.chat_max_attachment_bytes = bytes;
+        }
+        if let Some(mins) = file_cfg.chat_device_token_ttl_minutes {
+            self.chat_device_token_ttl_minutes = mins;
+        }
+        if let Some(rate) = file_cfg.chat_message_rate_per_minute {
+            self.chat_message_rate_per_minute = rate;
+        }
+        if let Some(rate) = file_cfg.chat_user_message_rate_per_minute {
+            self.chat_user_message_rate_per_minute = rate;
+        }
+        if let Some(limit) = file_cfg.chat_conversation_daily_limit {
+            self.chat_conversation_daily_limit = limit;
+        }
+        if let Some(limit) = file_cfg.chat_attachment_daily_limit {
+            self.chat_attachment_daily_limit = limit;
+        }
+        if let Some(heartbeat) = file_cfg.chat_sse_heartbeat_secs {
+            self.chat_sse_heartbeat_secs = heartbeat;
         }
 
         Ok(())
@@ -405,6 +526,68 @@ impl Config {
             if !key.trim().is_empty() {
                 self.totp_encryption_key = key.trim().to_string();
             }
+        }
+
+        if let Ok(enabled_str) = env::var("CERCANO_CHAT_ENABLED") {
+            self.chat_enabled = match enabled_str.trim().to_lowercase().as_str() {
+                "true" | "1" | "yes" => true,
+                "false" | "0" | "no" => false,
+                other => return Err(format!("Invalid CERCANO_CHAT_ENABLED: {}", other)),
+            };
+        }
+
+        if let Ok(dir) = env::var("CERCANO_CHAT_ATTACHMENT_DIR") {
+            if !dir.trim().is_empty() {
+                self.chat_attachment_dir = dir.trim().to_string();
+            }
+        }
+
+        if let Ok(days_str) = env::var("CERCANO_CHAT_RETENTION_DAYS") {
+            self.chat_retention_days = days_str
+                .parse::<i64>()
+                .map_err(|e| format!("Invalid CERCANO_CHAT_RETENTION_DAYS: {}", e))?;
+        }
+
+        if let Ok(bytes_str) = env::var("CERCANO_CHAT_MAX_ATTACHMENT_BYTES") {
+            self.chat_max_attachment_bytes = bytes_str
+                .parse::<usize>()
+                .map_err(|e| format!("Invalid CERCANO_CHAT_MAX_ATTACHMENT_BYTES: {}", e))?;
+        }
+
+        if let Ok(mins_str) = env::var("CERCANO_CHAT_DEVICE_TOKEN_TTL_MINUTES") {
+            self.chat_device_token_ttl_minutes = mins_str
+                .parse::<i64>()
+                .map_err(|e| format!("Invalid CERCANO_CHAT_DEVICE_TOKEN_TTL_MINUTES: {}", e))?;
+        }
+
+        if let Ok(rate_str) = env::var("CERCANO_CHAT_MESSAGE_RATE_PER_MINUTE") {
+            self.chat_message_rate_per_minute = rate_str
+                .parse::<u32>()
+                .map_err(|e| format!("Invalid CERCANO_CHAT_MESSAGE_RATE_PER_MINUTE: {}", e))?;
+        }
+
+        if let Ok(rate_str) = env::var("CERCANO_CHAT_USER_MESSAGE_RATE_PER_MINUTE") {
+            self.chat_user_message_rate_per_minute = rate_str
+                .parse::<u32>()
+                .map_err(|e| format!("Invalid CERCANO_CHAT_USER_MESSAGE_RATE_PER_MINUTE: {}", e))?;
+        }
+
+        if let Ok(limit_str) = env::var("CERCANO_CHAT_CONVERSATION_DAILY_LIMIT") {
+            self.chat_conversation_daily_limit = limit_str
+                .parse::<u32>()
+                .map_err(|e| format!("Invalid CERCANO_CHAT_CONVERSATION_DAILY_LIMIT: {}", e))?;
+        }
+
+        if let Ok(limit_str) = env::var("CERCANO_CHAT_ATTACHMENT_DAILY_LIMIT") {
+            self.chat_attachment_daily_limit = limit_str
+                .parse::<u32>()
+                .map_err(|e| format!("Invalid CERCANO_CHAT_ATTACHMENT_DAILY_LIMIT: {}", e))?;
+        }
+
+        if let Ok(heartbeat_str) = env::var("CERCANO_CHAT_SSE_HEARTBEAT_SECS") {
+            self.chat_sse_heartbeat_secs = heartbeat_str
+                .parse::<u64>()
+                .map_err(|e| format!("Invalid CERCANO_CHAT_SSE_HEARTBEAT_SECS: {}", e))?;
         }
 
         Ok(())
