@@ -24,6 +24,8 @@
 //! input validation here lets every handler share the same rules.
 
 pub mod auth;
+pub mod branding;
+pub mod conversations;
 
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;

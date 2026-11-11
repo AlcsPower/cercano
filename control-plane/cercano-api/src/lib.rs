@@ -231,6 +231,57 @@ pub fn create_app(state: AppState) -> Router {
             "/api/chat/devices/:id/reset",
             post(chat::auth::reset_device_handler),
         )
+        // Chat Branding routes (F4.5-16)
+        .route(
+            "/api/chat/branding",
+            get(chat::branding::get_branding_handler).put(chat::branding::update_branding_handler),
+        )
+        // Chat Conversation & Message routes (F4.5-04)
+        .route(
+            "/api/chat/conversations",
+            post(chat::conversations::create_or_join_conversation_handler)
+                .get(chat::conversations::list_conversations_handler),
+        )
+        .route(
+            "/api/chat/conversations/:id",
+            get(chat::conversations::get_conversation_handler),
+        )
+        .route(
+            "/api/chat/conversations/:id/messages",
+            post(chat::conversations::send_message_handler),
+        )
+        .route(
+            "/api/chat/conversations/:id/claim",
+            post(chat::conversations::claim_conversation_handler),
+        )
+        .route(
+            "/api/chat/conversations/:id/release",
+            post(chat::conversations::release_conversation_handler),
+        )
+        .route(
+            "/api/chat/conversations/:id/assign",
+            post(chat::conversations::assign_conversation_handler),
+        )
+        .route(
+            "/api/chat/conversations/:id/close",
+            post(chat::conversations::close_conversation_handler),
+        )
+        .route(
+            "/api/chat/conversations/:id/reopen",
+            post(chat::conversations::reopen_conversation_handler),
+        )
+        .route(
+            "/api/chat/conversations/:id/read",
+            post(chat::conversations::mark_as_read_handler),
+        )
+        .route(
+            "/api/chat/summary",
+            get(chat::conversations::get_chat_summary_handler),
+        )
+        .route(
+            "/api/chat/agents",
+            get(chat::conversations::list_chat_agents_handler),
+        )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .with_state(state)
