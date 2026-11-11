@@ -27,6 +27,7 @@ pub mod attachments;
 pub mod auth;
 pub mod branding;
 pub mod conversations;
+pub mod events;
 
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;

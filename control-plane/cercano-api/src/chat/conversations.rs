@@ -36,6 +36,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
 use crate::chat::auth::{AuthenticatedChatDevice, ChatAuthError};
+use crate::chat::events::ChatEvent;
 use crate::chat::{validate_contact_name, validate_message_body, ReaderType, SenderType};
 use crate::permissions;
 use crate::AppState;
@@ -339,7 +340,7 @@ pub async fn create_or_join_conversation_handler(
 
     // Check for open conversation for this device (waiting, assigned, active)
     let open_conv = sqlx::query(
-        "SELECT id, status, contact_first_name, contact_last_name FROM chat_conversations
+        "SELECT id, status, contact_first_name, contact_last_name, assigned_user_id FROM chat_conversations
          WHERE device_id = ? AND status IN ('waiting', 'assigned', 'active')
          ORDER BY created_at DESC LIMIT 1",
     )
@@ -350,6 +351,7 @@ pub async fn create_or_join_conversation_handler(
 
     if let Some(row) = open_conv {
         let conv_id: String = row.try_get("id").unwrap_or_default();
+        let assigned_user_id: Option<String> = row.try_get("assigned_user_id").ok();
         let trace_id = conv_id.clone();
 
         // Idempotency check with client_message_id
@@ -425,6 +427,15 @@ pub async fn create_or_join_conversation_handler(
         )
         .with_subject(subject);
         let _ = state.audit.append(audit_input).await;
+
+        let is_queue = assigned_user_id.is_none();
+        state.chat_hub.broadcast(ChatEvent::message(
+            &conv_id,
+            &msg_id,
+            Some(device.device_id.clone()),
+            assigned_user_id,
+            is_queue,
+        ));
 
         let detail =
             fetch_conversation_detail(&state.db, &conv_id, Some(&device.device_id), None, 50, None)
@@ -565,6 +576,17 @@ pub async fn create_or_join_conversation_handler(
     )
     .with_subject(subject);
     let _ = state.audit.append(msg_audit).await;
+
+    state
+        .chat_hub
+        .broadcast(ChatEvent::queue(&conv_id, "waiting"));
+    state.chat_hub.broadcast(ChatEvent::message(
+        &conv_id,
+        &msg_id,
+        Some(device.device_id.clone()),
+        None,
+        true,
+    ));
 
     let detail =
         fetch_conversation_detail(&state.db, &conv_id, Some(&device.device_id), None, 50, None)
@@ -776,6 +798,31 @@ pub async fn send_message_handler(
     .with_subject(subject);
     let _ = state.audit.append(audit_input).await;
 
+    let audience_device = Some(device_id.clone());
+    let audience_user = match sender_type {
+        SenderType::Client => assigned_user_id.clone(),
+        SenderType::Technician => Some(sender_id.clone()),
+        SenderType::System => assigned_user_id.clone(),
+    };
+    let is_queue = assigned_user_id.is_none();
+    state.chat_hub.broadcast(ChatEvent::message(
+        &conv_id,
+        &msg_id,
+        audience_device,
+        audience_user,
+        is_queue,
+    ));
+
+    if new_status != status_str {
+        state.chat_hub.broadcast(ChatEvent::status(
+            &conv_id,
+            new_status,
+            Some(device_id.clone()),
+            assigned_user_id.clone(),
+            is_queue,
+        ));
+    }
+
     let response_dto = MessageDto {
         id: msg_id,
         conversation_id: conv_id,
@@ -814,11 +861,13 @@ pub async fn claim_conversation_handler(
         ));
     }
 
-    let conv = sqlx::query("SELECT status, assigned_user_id FROM chat_conversations WHERE id = ?")
-        .bind(&conv_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| ChatConvError::Internal(e.to_string()))?;
+    let conv = sqlx::query(
+        "SELECT status, assigned_user_id, device_id FROM chat_conversations WHERE id = ?",
+    )
+    .bind(&conv_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| ChatConvError::Internal(e.to_string()))?;
 
     let Some(row) = conv else {
         return Err(ChatConvError::NotFound(
@@ -826,6 +875,7 @@ pub async fn claim_conversation_handler(
         ));
     };
 
+    let device_id: String = row.try_get("device_id").unwrap_or_default();
     let assigned: Option<String> = row.try_get("assigned_user_id").ok().flatten();
     if let Some(ref current) = assigned {
         if current != &user.id {
@@ -859,6 +909,14 @@ pub async fn claim_conversation_handler(
     .with_subject(subject);
     let _ = state.audit.append(audit_input).await;
 
+    state.chat_hub.broadcast(ChatEvent::status(
+        &conv_id,
+        "assigned",
+        Some(device_id),
+        Some(user.id.clone()),
+        true,
+    ));
+
     let summary = fetch_conversation_summary(&state.db, &conv_id).await?;
     Ok((StatusCode::OK, Json(summary)).into_response())
 }
@@ -877,11 +935,12 @@ pub async fn release_conversation_handler(
         ));
     }
 
-    let conv = sqlx::query("SELECT assigned_user_id FROM chat_conversations WHERE id = ?")
-        .bind(&conv_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| ChatConvError::Internal(e.to_string()))?;
+    let conv =
+        sqlx::query("SELECT assigned_user_id, device_id FROM chat_conversations WHERE id = ?")
+            .bind(&conv_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| ChatConvError::Internal(e.to_string()))?;
 
     let Some(row) = conv else {
         return Err(ChatConvError::NotFound(
@@ -889,6 +948,7 @@ pub async fn release_conversation_handler(
         ));
     };
 
+    let device_id: String = row.try_get("device_id").unwrap_or_default();
     let assigned: Option<String> = row.try_get("assigned_user_id").ok().flatten();
     let has_manage =
         permissions::user_has_permission(&state.db, &user.id, &user.role, permissions::CHAT_MANAGE)
@@ -924,6 +984,14 @@ pub async fn release_conversation_handler(
     )
     .with_subject(subject);
     let _ = state.audit.append(audit_input).await;
+
+    state.chat_hub.broadcast(ChatEvent::status(
+        &conv_id,
+        "waiting",
+        Some(device_id),
+        assigned.clone(),
+        true,
+    ));
 
     let summary = fetch_conversation_summary(&state.db, &conv_id).await?;
     Ok((StatusCode::OK, Json(summary)).into_response())
@@ -966,6 +1034,19 @@ pub async fn assign_conversation_handler(
         ));
     }
 
+    let conv = sqlx::query("SELECT device_id FROM chat_conversations WHERE id = ?")
+        .bind(&conv_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| ChatConvError::Internal(e.to_string()))?;
+
+    let Some(conv_row) = conv else {
+        return Err(ChatConvError::NotFound(
+            "Conversación no encontrada.".to_string(),
+        ));
+    };
+    let device_id: String = conv_row.try_get("device_id").unwrap_or_default();
+
     let now_str = Utc::now().to_rfc3339();
     sqlx::query("UPDATE chat_conversations SET assigned_user_id = ?, status = 'assigned', updated_at = ? WHERE id = ?")
         .bind(&payload.user_id)
@@ -992,6 +1073,14 @@ pub async fn assign_conversation_handler(
     )
     .with_subject(subject);
     let _ = state.audit.append(audit_input).await;
+
+    state.chat_hub.broadcast(ChatEvent::status(
+        &conv_id,
+        "assigned",
+        Some(device_id),
+        Some(payload.user_id.clone()),
+        true,
+    ));
 
     let summary = fetch_conversation_summary(&state.db, &conv_id).await?;
     Ok((StatusCode::OK, Json(summary)).into_response())
@@ -1112,6 +1201,14 @@ pub async fn close_conversation_handler(
     .with_subject(subject);
     let _ = state.audit.append(audit_input).await;
 
+    state.chat_hub.broadcast(ChatEvent::status(
+        &conv_id,
+        "closed",
+        Some(device_id),
+        assigned,
+        true,
+    ));
+
     let summary = fetch_conversation_summary(&state.db, &conv_id).await?;
     Ok((StatusCode::OK, Json(summary)).into_response())
 }
@@ -1140,6 +1237,19 @@ pub async fn reopen_conversation_handler(
         ));
     }
 
+    let conv = sqlx::query("SELECT device_id FROM chat_conversations WHERE id = ?")
+        .bind(&conv_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| ChatConvError::Internal(e.to_string()))?;
+
+    let Some(conv_row) = conv else {
+        return Err(ChatConvError::NotFound(
+            "Conversación no encontrada.".to_string(),
+        ));
+    };
+    let device_id: String = conv_row.try_get("device_id").unwrap_or_default();
+
     let now_str = Utc::now().to_rfc3339();
     sqlx::query(
         "UPDATE chat_conversations SET status = 'waiting', assigned_user_id = NULL, closed_at = NULL, closed_by = NULL, updated_at = ?
@@ -1164,6 +1274,14 @@ pub async fn reopen_conversation_handler(
     )
     .with_subject(subject);
     let _ = state.audit.append(audit_input).await;
+
+    state.chat_hub.broadcast(ChatEvent::status(
+        &conv_id,
+        "waiting",
+        Some(device_id),
+        None,
+        true,
+    ));
 
     let summary = fetch_conversation_summary(&state.db, &conv_id).await?;
     Ok((StatusCode::OK, Json(summary)).into_response())

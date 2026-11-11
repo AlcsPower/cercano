@@ -107,8 +107,8 @@ Fuente: `docs/PLAN-F4.5-CHAT.md` v1.1. Backend y consola dependen de F4-05/06; e
 | F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad | Hecho |
 | F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4-05 | ControlPlane | QA | Hecho |
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad | Hecho |
-| F4.5-06 | SSE, `ChatHub`, lecturas y resumen | F4.5-04 | ControlPlane | QA | En curso |
-| F4.5-07 | Auditoría, límites y retención | F4.5-02…06, F2-02 | ControlPlane | Seguridad | Pendiente |
+| F4.5-06 | SSE, `ChatHub`, lecturas y resumen | F4.5-04 | ControlPlane | QA | Hecho |
+| F4.5-07 | Auditoría, límites y retención | F4.5-02…06, F2-02 | ControlPlane | Seguridad | En curso |
 | F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4-06 | Web | QA | Hecho (mock-first) |
 | F4.5-09 | Consola: badge, notificaciones, reconexión, accesibilidad | F4.5-08 | Web | QA | Pendiente |
 | F4.5-10 | Cliente: módulo Rust y parche 006 | F4.5-03/04/06, F3-02 | Cliente | Seguridad | Pendiente |

@@ -44,6 +44,8 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::chat::events::ChatEvent;
+
 use crate::chat::conversations::{AttachmentDto, ChatCaller, MessageDto};
 use crate::chat::SenderType;
 use crate::permissions;
@@ -450,6 +452,12 @@ pub async fn upload_attachment_handler(
     let now_str = Utc::now().to_rfc3339();
     let size_bytes = body_bytes.len() as i64;
 
+    let new_status = if sender_type == SenderType::Technician && status == "assigned" {
+        "active"
+    } else {
+        &status
+    };
+
     let insert_result = async {
         let mut tx = state.db.begin().await?;
 
@@ -481,12 +489,6 @@ pub async fn upload_attachment_handler(
         .bind(&now_str)
         .execute(&mut *tx)
         .await?;
-
-        let new_status = if sender_type == SenderType::Technician && status == "assigned" {
-            "active"
-        } else {
-            &status
-        };
 
         sqlx::query("UPDATE chat_conversations SET status = ?, last_message_at = ?, updated_at = ? WHERE id = ?")
             .bind(new_status)
@@ -531,6 +533,31 @@ pub async fn upload_attachment_handler(
     )
     .with_subject(subject);
     let _ = state.audit.append(audit_input).await;
+
+    let audience_device = Some(conv_device_id.clone());
+    let audience_user = match sender_type {
+        SenderType::Client => assigned_user_id.clone(),
+        SenderType::Technician => Some(sender_id.clone()),
+        SenderType::System => assigned_user_id.clone(),
+    };
+    let is_queue = assigned_user_id.is_none();
+    state.chat_hub.broadcast(ChatEvent::message(
+        &conv_id,
+        &message_id,
+        audience_device,
+        audience_user,
+        is_queue,
+    ));
+
+    if new_status != status {
+        state.chat_hub.broadcast(ChatEvent::status(
+            &conv_id,
+            new_status,
+            Some(conv_device_id.clone()),
+            assigned_user_id.clone(),
+            is_queue,
+        ));
+    }
 
     let response_dto = MessageDto {
         id: message_id,

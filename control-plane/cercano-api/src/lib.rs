@@ -49,6 +49,7 @@ pub struct AppState {
     pub alarms: Arc<alarms::AlarmEngine>,
     pub build_queue: Arc<builder::BuildQueue>,
     pub revocation_checker: Arc<revocation::RevocationChecker>,
+    pub chat_hub: Arc<chat::events::ChatHub>,
 }
 
 impl AppState {
@@ -60,6 +61,7 @@ impl AppState {
             std::time::Duration::from_secs(config.revocation_cache_ttl_secs),
             config.revocation_fail_closed,
         ));
+        let chat_hub = Arc::new(chat::events::ChatHub::new());
         Self {
             config,
             db,
@@ -67,6 +69,7 @@ impl AppState {
             alarms,
             build_queue,
             revocation_checker,
+            chat_hub,
         }
     }
 }
@@ -236,6 +239,8 @@ pub fn create_app(state: AppState) -> Router {
             "/api/chat/branding",
             get(chat::branding::get_branding_handler).put(chat::branding::update_branding_handler),
         )
+        // Chat SSE real-time events (F4.5-06)
+        .route("/api/chat/events", get(chat::events::chat_events_handler))
         // Chat Conversation & Message routes (F4.5-04)
         .route(
             "/api/chat/conversations",
