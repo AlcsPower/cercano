@@ -447,7 +447,7 @@ Público, sin autenticación ni secretos. Devuelve el objeto de marca. Si no hay
 
 #### `PUT /api/chat/branding`
 
-Permiso: `chat:manage` (supervisor/admin). Valida y actualiza la fila singleton; audita `chat.branding.updated`.
+Permiso: `chat:manage_branding` (solo `admin`; ver `PLAN-F4-CONSOLA.md` §3). Valida y actualiza la fila singleton; audita `chat.branding.updated`.
 
 **Cuerpo:**
 

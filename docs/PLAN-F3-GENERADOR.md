@@ -64,7 +64,7 @@ El generador produce dos tipos, elegidos con el campo `role` del perfil. Los nom
 - **Límites:** máximo 3 intentos fallidos por solicitud, para no bloquear cuentas de dominio; limitación de tasa por técnico y por dispositivo.
 - **Permisos:** solo cuentas técnicas con `elev:use`, desde un instalador `tecnico`. Un instalador `soporte` nunca puede emitir una elevación.
 - **Cercano no captura lo que la persona usuaria escribe:** no hay registro de pulsaciones ni de contraseñas del usuario final.
-- **Habilitación por fases:** la función se entrega **desactivada por defecto**. Solo se activa en el laboratorio durante F3. Para activarla en producción hacen falta 2FA obligatoria para técnicos (F4) y la revisión de F3-18 sin hallazgos altos.
+- **Habilitación por fases:** la función se entrega **desactivada por defecto**. Solo se activa en el laboratorio durante F3. Para activarla en producción hacen falta 2FA obligatoria para técnicos (F4-11) y la revisión de F3-18 sin hallazgos altos. El servidor exige además `mfa_verified` en la sesión del técnico en cada solicitud de elevación (F4-11/F4-13, TC-F4-014).
 
 **Origen de las credenciales.**
 

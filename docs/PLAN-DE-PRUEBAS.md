@@ -130,6 +130,19 @@
 | TC-F3-083 | Elevación desatendida en un `soporte` con el perfil por defecto | Rechazada; solo se acepta si el perfil la habilita |
 | TC-F3-084 | Fuzzing del mensaje de elevación | Sin caídas ni fugas de información |
 
+
+### F4 — Consola, RBAC y 2FA (v0.2: F4-11…F4-13)
+
+Casos detallados en `tests/cases/TC-F4-*.md`; resumen en `docs/PLAN-F4-CONSOLA.md` §8.
+
+| ID | Caso | Resultado esperado |
+|---|---|---|
+| TC-F4-008 | Rol obligatorio sin factor | Sesión limitada; solo enrolar; resto 403 `mfa_enrollment_required` |
+| TC-F4-009 | Autorrevocación de 2FA | Denegada a admin/operator y auditada; un admin puede desvincular y la cuenta reenrola |
+| TC-F4-012 | Secreto TOTP en reposo | Cifrado en BD y respaldo; sin clave no arranca; clave errónea no abre el 2FA |
+| TC-F4-013 | Matriz vs código | `permissions.rs`, `GET /api/roles` y el plan coinciden; grants auditados |
+| TC-F4-014 | `mfa_verified` | Falso sin 2FA; elevación (F3) y reautenticación (F8) lo exigen |
+
 ### F4.5 (Cercano Chat)
 
 Los casos detallados viven en `tests/cases/TC-F4.5-*.md` durante la implementación. La suite se ejecuta en el laboratorio con TLS, un cliente Soporte, un cliente Técnico y dos cuentas técnicas.

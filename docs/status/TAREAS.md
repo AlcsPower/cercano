@@ -89,24 +89,27 @@ Fuente: `docs/PLAN-F4-CONSOLA.md`. F4 puede ir en paralelo con F3; solo F4-07 (g
 | F4-05 | Middleware RBAC y permisos `chat:*` | F4-03 | ControlPlane | QA | Hecho |
 | F4-06 | Consola: usuarios, roles, auditoría, ajustes y 2FA; login 2FA | F4-03, F4-04, F4-05 | Web | QA | Hecho |
 | F4-07 | Integración del generador en la consola (F3-07 hecho; espera F4-05/06) | F3-07, F4-05, F4-06 | Web | QA | Hecho |
-| F4-08 | Pruebas de permisos, IDOR, 2FA y sesiones | F4-03…07 | QA | Coordinador | Pendiente |
+| F4-11 | Política de 2FA obligatoria (`auth.require_2fa_roles`), `mfa_verified` en sesión | F4-04, F4-06 | ControlPlane + Web | Seguridad | Pendiente |
+| F4-12 | Cifrado en reposo del secreto TOTP | F4-04 | ControlPlane | Seguridad | Pendiente |
+| F4-13 | Matriz de permisos final (`chat:*`, `db:admin`, grants) probada contra el código | F4-05, F4-11 | ControlPlane | QA | Pendiente |
+| F4-08 | Pruebas de permisos, IDOR, 2FA y sesiones | F4-03…07, F4-11…13 | QA | Coordinador | Pendiente |
 | F4-09 | E2E y gate F4 | F4-08 | QA | Coordinador | Pendiente |
 | F4-10 | Cierre de F4, documentación e informe | F4-09 | Coordinador | Dueño | Pendiente |
 
 ## F4.5 — Cercano Chat (complemento, después de F4)
 
-Fuente: `docs/PLAN-F4.5-CHAT.md`. Depende de F4 cerrado, F3-13, F3-02, F3-05 y F2-02.
+Fuente: `docs/PLAN-F4.5-CHAT.md` v1.1. Backend y consola dependen de F4-05/06; el gate y el uso fuera del laboratorio exigen F4 cerrado (incl. F4-11), F3-13, F3-02, F3-05 y F2-02.
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
 | F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA | Hecho |
 | F4.5-02 | Migración 008 y modelos | F4.5-01, F4-02 | ControlPlane | QA | Hecho |
 | F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad | Pendiente |
-| F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4 cerrado | ControlPlane | QA | Pendiente |
+| F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4-05 | ControlPlane | QA | Pendiente |
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad | Pendiente |
 | F4.5-06 | SSE, `ChatHub`, lecturas y resumen | F4.5-04 | ControlPlane | QA | Pendiente |
 | F4.5-07 | Auditoría, límites y retención | F4.5-02…06, F2-02 | ControlPlane | Seguridad | Pendiente |
-| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4 | Web | QA | Hecho (mock-first) |
+| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4-06 | Web | QA | Hecho (mock-first) |
 | F4.5-09 | Consola: badge, notificaciones, reconexión, accesibilidad | F4.5-08 | Web | QA | Pendiente |
 | F4.5-10 | Cliente: módulo Rust y parche 006 | F4.5-03/04/06, F3-02 | Cliente | Seguridad | Pendiente |
 | F4.5-11 | Cliente: UI Flutter, nombre del contacto, adjuntos, i18n | F4.5-10, F4.5-13 | Cliente | QA | Pendiente |
@@ -190,4 +193,4 @@ Fuente: `docs/PLAN-F8-PORTABILIDAD.md`. Después de F7; **no bloquea M4**. SQL S
 | F8-09 | Matriz de pruebas SQLite/PostgreSQL/SQL Server y pruebas de fallo | F8-04…08 | QA | Coordinador | Pendiente |
 | F8-10 | Runbook `docs/guias/respaldos-y-migracion.md`, cierre e informe | F8-09 | Coordinador | Dueño | Pendiente |
 
-_Total: 53 tareas F0–F3, 10 de F4, 16 de F4.5, 13 de F5, 10 de F6, 13 de F7 y 10 de F8 (extra post-v1, no bloquea M4). Los planes F5–F8 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado. F8-01 arrancó el 2026-11-10 (análisis y ADR, sin código) y está en verificación; el resto de F8 sigue a la espera de esa aprobación. F5-01 quedó redactado el 2026-11-10 (ADR-012 y spec de identidad) y espera la aprobación del dueño y la revisión de Seguridad; no se ha escrito código de F5. F6-01 midió el laboratorio el 2026-11-10 (RTT, pérdida, throughput y consumo de relay; ver S7 e informe) y está en verificación: la medición de sesión queda para F6-05/F6-06._
+_Total: 53 tareas F0–F3, 13 de F4, 16 de F4.5, 13 de F5, 10 de F6, 13 de F7 y 10 de F8 (extra post-v1, no bloquea M4). Los planes F5–F8 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado. F8-01 arrancó el 2026-11-10 (análisis y ADR, sin código) y está en verificación; el resto de F8 sigue a la espera de esa aprobación. F5-01 quedó redactado el 2026-11-10 (ADR-012 y spec de identidad) y espera la aprobación del dueño y la revisión de Seguridad; no se ha escrito código de F5. F6-01 midió el laboratorio el 2026-11-10 (RTT, pérdida, throughput y consumo de relay; ver S7 e informe) y está en verificación: la medición de sesión queda para F6-05/F6-06._

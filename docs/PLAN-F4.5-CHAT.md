@@ -1,7 +1,7 @@
 # Plan de trabajo — F4.5: Cercano Chat
 
-**Versión:** 1.0 · **Fecha:** 2026-11-09 · **Fase:** F4.5 (complemento entre F4 y F5)
-**Depende de:** F4 cerrado (consola, RBAC, 2FA), F3-13 (rol de instalador), F3-02 (perfil firmado), F3-05 (empaquetado Windows) y F2-02 (auditoría encadenada).
+**Versión:** 1.1 · **Fecha:** 2026-11-11 · **Fase:** F4.5 (complemento entre F4 y F5) · v1.1: revisión del Coordinador (permisos, 2FA, DDL portable, respaldo)
+**Depende de:** F4-05 (RBAC) para el backend y la consola; **F4 cerrado** (consola, RBAC, 2FA obligatoria F4-11) para el gate y para uso fuera del laboratorio, F3-13 (rol de instalador), F3-02 (perfil firmado), F3-05 (empaquetado Windows) y F2-02 (auditoría encadenada).
 **Documentos:** [`docs/specs/chat.md`](specs/chat.md) es el contrato técnico; [`docs/adr/010-cercano-chat.md`](adr/010-cercano-chat.md) es la decisión.
 
 ## 1. Objetivo (hito M3.5)
@@ -53,11 +53,11 @@ La arquitectura, el modelo de datos, la API, la autenticación, la SSE, los adju
 | F4.5-01 | Especificación, ADR y planificación | — | Coordinador | Dueño/QA |
 | F4.5-02 | Migración 008 y modelos | F4.5-01, F4-02 | ControlPlane | QA |
 | F4.5-03 | Autenticación de dispositivo | F4.5-02, F3-13 | ControlPlane | Seguridad |
-| F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4 | ControlPlane | QA |
+| F4.5-04 | API REST de conversaciones y mensajes | F4.5-03, F4-05 | ControlPlane | QA |
 | F4.5-05 | Adjuntos | F4.5-04 | ControlPlane | Seguridad |
 | F4.5-06 | SSE, `ChatHub`, lecturas y resumen | F4.5-04 | ControlPlane | QA |
 | F4.5-07 | Auditoría, límites y retención | F4.5-02…06, F2-02 | ControlPlane | Seguridad |
-| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4 | Web | QA |
+| F4.5-08 | Consola: vista Conversaciones | F4.5-04/05/06, F4-06 | Web | QA |
 | F4.5-09 | Consola: badge, notificaciones, reconexión, accesibilidad | F4.5-08 | Web | QA |
 | F4.5-10 | Cliente: módulo Rust y parche 006 | F4.5-03/04/06, F3-02 | Cliente | Seguridad |
 | F4.5-11 | Cliente: UI Flutter, entrada, adjuntos, i18n | F4.5-10, F4.5-13 | Cliente | QA |
@@ -73,7 +73,7 @@ La arquitectura, el modelo de datos, la API, la autenticación, la SSE, los adju
 Crear `docs/specs/chat.md`, `docs/adr/010-cercano-chat.md` y este plan; actualizar `ARQUITECTURA.md`, `ROADMAP.md`, `TAREAS.md`, `PLAN-DE-PRUEBAS.md`, el esquema de auditoría y el informe F4.5-01. No se toca código.
 *CA:* documentos coherentes; esquema de auditoría válido en JSON; tareas y `TC-F4.5-*` registrados; `git diff` solo de documentación; F4.5-01 `En verificación`.
 
-**F4.5-02 Migración 008 y modelos.**
+**F4.5-02 Migración 008 y modelos.** *(Hecho; revisión v1.1: confirmar DDL portable para F8 —sin `datetime('now')`, `strftime` ni `AUTOINCREMENT` en las tablas nuevas o dejar su inventario en F8-01—, y que la 007 y la 008 queden en el orden 7 → 8.)*
 Añadir a `control-plane/cercano-api/src/db.rs` la migración `008_chat_schema` con las tablas e índices de `docs/specs/chat.md` §5, incluidos `contact_first_name` y `contact_last_name` en `chat_conversations` **y la tabla `chat_branding`**. Se aplica **después de la migración 007 de F4**; `schema_migrations` esperada: 8 filas (versiones 1–8). Crear `src/chat/mod.rs` con los structs/servicios base. Actualizar las pruebas de `db.rs`. **La rama existente `feat/F4.5-02-chat-schema` (`c6416fa`) está basada en F3-02 con la migración 004 y debe rebasarse sobre la base actual y renumerarse a 008 antes de mergear.**
 *CA:* migración sobre BD vacía y sobre BD con 001–007; sin pérdida de datos; índices presentes; `cargo test -p cercano-api` en verde; prueba de idempotencia de migraciones.
 
@@ -85,7 +85,7 @@ Crear `src/chat/auth.rs` y las rutas `POST /api/chat/devices/register`, `/auth/c
 Crear `src/chat/conversations.rs`, `src/routes/chat.rs` y el montaje en `lib.rs`. Implementar crear/listar/leer, mensajes, claim/release/assign/close/reopen, agentes y resumen; permisos `chat:attend`/`chat:manage`/`chat:read` de F4; transiciones de estado; idempotencia por `client_message_id`; paginación; límites de texto y conversaciones/día; validar y guardar `contact_first_name`/`contact_last_name` (obligatorios, 1–64, sin controles); incluir el nombre en la búsqueda de la cola; actualizar `docs/specs/api.yaml` con los endpoints y esquemas.
 *CA:* flujo completo por API; nombre/apellido obligatorios y validados; snapshot en la conversación; búsqueda por nombre y equipo; dos dispositivos y dos técnicos no se cruzan (IDOR); claim concurrente → 409; conversación cerrada → 409 al escribir; reintento no duplica; todo endpoint de escritura deja evento; OpenAPI válido; pruebas de integración.
 
-**F4.5-05 Adjuntos.**
+**F4.5-05 Adjuntos.** *(Los adjuntos viven en disco, fuera de la BD: F8 y F7-08 deben incluir el directorio en el respaldo; `docs/guias/chat.md` lo recoge en F4.5-15.)*
 Crear `src/chat/attachments.rs`: subida binaria, magic bytes, límites, SHA-256, almacenamiento atómico, descarga autenticada, limpieza de huérfanos y cuota por conversación. Ajustar `deploy/nginx.conf` y `deploy/README.md` (`client_max_body_size`, SSE) y `Config` con el directorio y topes.
 *CA:* PNG/JPEG/WebP/PDF aceptados; SVG/EXE/ZIP rechazados; >10 MiB → 413; nombre con ruta saneado; descarga ajena → 403; archivo huérfano no queda tras un fallo; `nosniff` y `no-store`; pruebas de integración y revisión de Seguridad.
 
@@ -141,7 +141,8 @@ Tabla `chat_branding`, endpoints `GET/PUT /api/chat/branding`, formulario en la 
 4. **Autorización en cada ruta:** dueño, asignación o permiso; pruebas de IDOR con dos dispositivos y dos técnicos.
 5. **Adjuntos:** solo imágenes/PDF, magic bytes, tamaño, sin ejecución, descarga autenticada, sin URL pública.
 6. **Límites de tasa** y `429` con `Retry-After`; el abuso se audita.
-7. **2FA** de F4 para técnicos en producción; sin F4, solo laboratorio.
+7. **2FA** de F4 para técnicos en producción, aplicada por el servidor (F4-11, `auth.require_2fa_roles`); sin ella, solo laboratorio.
+   - **Permisos (aclaración v1.1):** `chat:attend`/`chat:write`/`chat:close` → `operator` y `admin`; `chat:read` → también `auditor`; `chat:manage` (supervisión: asignar, reabrir, reset de identidad) y `chat:manage_branding` (marca, F4.5-16) → solo `admin`. Coinciden con `permissions.rs` y `PLAN-F4-CONSOLA.md` §3; F4-13 prueba la correspondencia. En esta tabla «Supervisor» es un `admin`, no un cuarto rol.
 8. **Retención** de mensajes/adjuntos independiente de la auditoría; el borrado no rompe la cadena.
 9. **Interruptor** `CERCANO_CHAT_ENABLED` para desactivar la función por política.
 10. **Sin E2E** en v1: se documenta la capacidad del servidor de leer los mensajes y se protege el volumen y los respaldos.
@@ -186,7 +187,7 @@ Aplicación separada, PWA, E2E, edición/borrado, búsqueda full-text, respuesta
 | Adjuntos maliciosos | Whitelist, magic bytes, tamaño, descarga como adjunto, antivirus como extensión. |
 | Notificaciones poco fiables | SSE + toast con la app abierta; badge e historial persistente. |
 | TLS/CA en LAN | Guía, CA de confianza, rechazo de HTTP; laboratorio con TLS. |
-| F4/F3 retrasados | F4.5 no empieza hasta F4 cerrado y F3-13/F3-05 hechos; el diseño queda listo. |
+| F4/F3 retrasados | El diseño, el esquema y la consola con datos simulados pueden avanzar ya; el backend real (F4.5-03/04) exige F4-05 y F3-13, y el cierre exige F4 cerrado y F3-05. Sin F4-11, el chat solo corre en laboratorio. |
 | SQLite bajo carga | WAL, índices, límites y paginación; PostgreSQL si crece. |
 | Pérdida de identidad al reinstalar | Reset administrativo auditado y mensaje claro. |
 
