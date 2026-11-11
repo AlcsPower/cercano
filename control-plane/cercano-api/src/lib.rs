@@ -271,6 +271,15 @@ pub fn create_app(state: AppState) -> Router {
             post(chat::conversations::reopen_conversation_handler),
         )
         .route(
+            "/api/chat/conversations/:id/attachments",
+            post(chat::attachments::upload_attachment_handler)
+                .layer(axum::extract::DefaultBodyLimit::max(12 * 1024 * 1024)),
+        )
+        .route(
+            "/api/chat/attachments/:id",
+            get(chat::attachments::download_attachment_handler),
+        )
+        .route(
             "/api/chat/conversations/:id/read",
             post(chat::conversations::mark_as_read_handler),
         )
