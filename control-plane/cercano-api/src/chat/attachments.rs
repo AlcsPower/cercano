@@ -64,7 +64,7 @@ pub enum AttachmentError {
     ConflictClosed,
     PayloadTooLarge,
     UnsupportedMediaType(String),
-    TooManyRequests,
+    TooManyRequests(u64),
     Internal(String),
 }
 
@@ -116,14 +116,19 @@ impl IntoResponse for AttachmentError {
                 })),
             )
                 .into_response(),
-            Self::TooManyRequests => (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(json!({
-                    "error": "rate_limit_exceeded",
-                    "message": "Límite de adjuntos excedido para este período."
-                })),
-            )
-                .into_response(),
+            Self::TooManyRequests(retry_after) => {
+                let mut resp = (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({
+                        "error": "rate_limit_exceeded",
+                        "message": "Límite de adjuntos excedido para este período."
+                    })),
+                )
+                    .into_response();
+                resp.headers_mut()
+                    .insert(header::RETRY_AFTER, header::HeaderValue::from(retry_after));
+                resp
+            }
             Self::Internal(msg) => {
                 tracing::error!("Attachment internal error: {msg}");
                 (
@@ -353,7 +358,7 @@ pub async fn upload_attachment_handler(
         }
     };
 
-    // 4. Rate limit check for attachments
+    // 4. Rate limit check for attachments (daily quota and per-minute burst)
     let count_today: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM chat_attachments a
          JOIN chat_messages m ON a.message_id = m.id
@@ -365,7 +370,58 @@ pub async fn upload_attachment_handler(
     .unwrap_or(0);
 
     if count_today >= state.config.chat_attachment_daily_limit as i64 {
-        return Err(AttachmentError::TooManyRequests);
+        let actor = Actor::with_type(&sender_id, sender_type.as_str());
+        let subject = Subject::with_type(&conv_id, "conversation");
+        let audit_input = EventInput::new(
+            conv_id.clone(),
+            Source::Api,
+            Category::Chat,
+            "chat.rate_limited",
+            actor,
+            Outcome::Denied,
+            json!({
+                "conversation_id": &conv_id,
+                "limit": "attachment_daily_limit",
+                "retry_after_secs": 3600
+            }),
+        )
+        .with_subject(subject);
+        let _ = state.audit.append(audit_input).await;
+
+        return Err(AttachmentError::TooManyRequests(3600));
+    }
+
+    let count_last_minute: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM chat_attachments a
+         JOIN chat_messages m ON a.message_id = m.id
+         WHERE m.sender_type = ? AND m.sender_id = ? AND a.created_at > datetime('now', '-60 seconds')",
+    )
+    .bind(sender_type.as_str())
+    .bind(&sender_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    if count_last_minute >= 3 {
+        let actor = Actor::with_type(&sender_id, sender_type.as_str());
+        let subject = Subject::with_type(&conv_id, "conversation");
+        let audit_input = EventInput::new(
+            conv_id.clone(),
+            Source::Api,
+            Category::Chat,
+            "chat.rate_limited",
+            actor,
+            Outcome::Denied,
+            json!({
+                "conversation_id": &conv_id,
+                "limit": "attachment_burst_rate",
+                "retry_after_secs": 60
+            }),
+        )
+        .with_subject(subject);
+        let _ = state.audit.append(audit_input).await;
+
+        return Err(AttachmentError::TooManyRequests(60));
     }
 
     // 5. Idempotency check with client_message_id

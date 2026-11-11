@@ -743,6 +743,51 @@ pub async fn send_message_handler(
         }
     }
 
+    // Message rate limit check (device: chat_message_rate_per_minute, tech: chat_user_message_rate_per_minute)
+    let (rate_limit, limit_name) = match sender_type {
+        SenderType::Client => (
+            state.config.chat_message_rate_per_minute as i64,
+            "device_message_rate",
+        ),
+        SenderType::Technician => (
+            state.config.chat_user_message_rate_per_minute as i64,
+            "user_message_rate",
+        ),
+        SenderType::System => (1000, "system_rate"),
+    };
+
+    let count_last_minute: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM chat_messages
+         WHERE sender_type = ? AND sender_id = ? AND created_at > datetime('now', '-60 seconds')",
+    )
+    .bind(sender_type.as_str())
+    .bind(&sender_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    if count_last_minute >= rate_limit {
+        let actor = Actor::with_type(&sender_id, sender_type.as_str());
+        let subject = Subject::with_type(&conv_id, "conversation");
+        let audit_input = EventInput::new(
+            conv_id.clone(),
+            Source::Api,
+            Category::Chat,
+            "chat.rate_limited",
+            actor,
+            Outcome::Denied,
+            json!({
+                "conversation_id": &conv_id,
+                "limit": limit_name,
+                "retry_after_secs": 60
+            }),
+        )
+        .with_subject(subject);
+        let _ = state.audit.append(audit_input).await;
+
+        return Err(ChatConvError::RateLimited(60));
+    }
+
     let msg_id = Uuid::now_v7().to_string();
     let now_str = Utc::now().to_rfc3339();
 
