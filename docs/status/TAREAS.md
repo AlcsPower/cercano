@@ -89,12 +89,12 @@ Fuente: `docs/PLAN-F4-CONSOLA.md`. F4 puede ir en paralelo con F3; solo F4-07 (g
 | F4-05 | Middleware RBAC y permisos `chat:*` | F4-03 | ControlPlane | QA | Hecho |
 | F4-06 | Consola: usuarios, roles, auditoría, ajustes y 2FA; login 2FA | F4-03, F4-04, F4-05 | Web | QA | Hecho |
 | F4-07 | Integración del generador en la consola (F3-07 hecho; espera F4-05/06) | F3-07, F4-05, F4-06 | Web | QA | Hecho |
-| F4-11 | Política de 2FA obligatoria (`auth.require_2fa_roles`), `mfa_verified` en sesión | F4-04, F4-06 | ControlPlane + Web | Seguridad | Pendiente |
-| F4-12 | Cifrado en reposo del secreto TOTP | F4-04 | ControlPlane | Seguridad | Pendiente |
-| F4-13 | Matriz de permisos final (`chat:*`, `db:admin`, grants) probada contra el código | F4-05, F4-11 | ControlPlane | QA | Pendiente |
-| F4-08 | Pruebas de permisos, IDOR, 2FA y sesiones | F4-03…07, F4-11…13 | QA | Coordinador | Pendiente |
-| F4-09 | E2E y gate F4 | F4-08 | QA | Coordinador | Pendiente |
-| F4-10 | Cierre de F4, documentación e informe | F4-09 | Coordinador | Dueño | Pendiente |
+| F4-11 | Política de 2FA obligatoria (`auth.require_2fa_roles`), `mfa_verified` en sesión | F4-04, F4-06 | ControlPlane + Web | Seguridad | Hecho |
+| F4-12 | Cifrado en reposo del secreto TOTP | F4-04 | ControlPlane | Seguridad | Hecho |
+| F4-13 | Matriz de permisos final (`chat:*`, `db:admin`, grants) probada contra el código | F4-05, F4-11 | ControlPlane | QA | Hecho |
+| F4-08 | Pruebas de permisos, IDOR, 2FA y sesiones | F4-03…07, F4-11…13 | QA | Coordinador | Hecho |
+| F4-09 | E2E y gate F4 | F4-08 | QA | Coordinador | Hecho |
+| F4-10 | Cierre de F4, documentación e informe | F4-09 | Coordinador | Dueño | Hecho |
 
 ## F4.5 — Cercano Chat (complemento, después de F4)
 

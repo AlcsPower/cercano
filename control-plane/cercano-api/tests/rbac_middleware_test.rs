@@ -78,6 +78,23 @@ async fn request(
     (status, json)
 }
 
+fn generate_valid_totp_code(secret_base32: &str, username: &str) -> String {
+    let secret_bytes = totp_rs::Secret::Encoded(secret_base32.to_string())
+        .to_bytes()
+        .unwrap();
+    let totp = totp_rs::TOTP::new(
+        totp_rs::Algorithm::SHA1,
+        6,
+        1,
+        30,
+        secret_bytes,
+        Some("Cercano".to_string()),
+        username.to_string(),
+    )
+    .unwrap();
+    totp.generate_current().unwrap()
+}
+
 async fn bootstrap_admin(env: &TestEnv) -> String {
     let (status, _) = request(
         &env.app,
@@ -98,7 +115,24 @@ async fn bootstrap_admin(env: &TestEnv) -> String {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    body["token"].as_str().unwrap().to_string()
+    let token = body["token"].as_str().unwrap().to_string();
+
+    if body["mfa_enrollment_required"].as_bool().unwrap_or(false) {
+        let (_, enroll_res) =
+            request(&env.app, "POST", "/api/auth/2fa/enroll", Some(&token), None).await;
+        let secret = enroll_res["totp_secret_base32"].as_str().unwrap();
+        let code = generate_valid_totp_code(secret, "admin");
+        let (_, _) = request(
+            &env.app,
+            "POST",
+            "/api/auth/2fa/confirm",
+            Some(&token),
+            Some(json!({ "totp_code": code })),
+        )
+        .await;
+    }
+
+    token
 }
 
 async fn create_user_and_login(
@@ -133,7 +167,24 @@ async fn create_user_and_login(
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    login["token"].as_str().unwrap().to_string()
+    let token = login["token"].as_str().unwrap().to_string();
+
+    if login["mfa_enrollment_required"].as_bool().unwrap_or(false) {
+        let (_, enroll_res) =
+            request(&env.app, "POST", "/api/auth/2fa/enroll", Some(&token), None).await;
+        let secret = enroll_res["totp_secret_base32"].as_str().unwrap();
+        let code = generate_valid_totp_code(secret, username);
+        let (_, _) = request(
+            &env.app,
+            "POST",
+            "/api/auth/2fa/confirm",
+            Some(&token),
+            Some(json!({ "totp_code": code })),
+        )
+        .await;
+    }
+
+    token
 }
 
 #[test]

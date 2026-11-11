@@ -290,7 +290,13 @@ mod tests {
         let res = app.oneshot(login_req).await.unwrap();
         let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
         let login_res: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-        login_res["token"].as_str().unwrap().to_string()
+        let token = login_res["token"].as_str().unwrap().to_string();
+        sqlx::query("UPDATE sessions SET mfa_verified = 1 WHERE token = ?")
+            .bind(&token)
+            .execute(&state.db)
+            .await
+            .unwrap();
+        token
     }
 
     #[tokio::test]

@@ -90,6 +90,11 @@ async fn setup_test_context(whitelist: Vec<String>) -> TestContext {
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     let login_json: Value = serde_json::from_slice(&bytes).unwrap();
     let admin_token = login_json["token"].as_str().unwrap().to_string();
+    sqlx::query("UPDATE sessions SET mfa_verified = 1 WHERE token = ?")
+        .bind(&admin_token)
+        .execute(&state.db)
+        .await
+        .unwrap();
 
     TestContext {
         app,

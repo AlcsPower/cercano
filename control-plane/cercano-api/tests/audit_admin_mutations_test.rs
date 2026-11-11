@@ -197,6 +197,11 @@ async fn test_f2_08_full_administrative_mutation_audit_lifecycle() {
     let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
     let login_res: Value = serde_json::from_slice(&body_bytes).unwrap();
     let admin_token = login_res["token"].as_str().unwrap().to_string();
+    sqlx::query("UPDATE sessions SET mfa_verified = 1 WHERE token = ?")
+        .bind(&admin_token)
+        .execute(&env.state.db)
+        .await
+        .unwrap();
 
     let login_events = env
         .state

@@ -44,3 +44,6 @@ Logo Cercano.*
 # TLS certificates (never commit private keys)
 deploy/certs/*
 !deploy/certs/.gitkeep
+
+# Agent teamwork workspace
+.agents/

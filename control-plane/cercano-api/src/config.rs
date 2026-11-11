@@ -70,6 +70,20 @@ pub struct Config {
     pub revocation_cache_ttl_secs: u64,
     #[serde(default = "default_revocation_fail_closed")]
     pub revocation_fail_closed: bool,
+    #[serde(default = "default_require_2fa_roles")]
+    pub require_2fa_roles: Vec<String>,
+    #[serde(default = "default_totp_encryption_key")]
+    pub totp_encryption_key: String,
+}
+
+fn default_require_2fa_roles() -> Vec<String> {
+    vec!["admin".to_string(), "operator".to_string()]
+}
+
+pub const DEFAULT_DEV_TOTP_KEY: &str = "cercano-dev-totp-encryption-key-32b!";
+
+fn default_totp_encryption_key() -> String {
+    DEFAULT_DEV_TOTP_KEY.to_string()
 }
 
 fn default_builds_dir() -> String {
@@ -113,6 +127,8 @@ impl Default for Config {
             build_signing_key_path: None,
             revocation_cache_ttl_secs: DEFAULT_REVOCATION_CACHE_TTL_SECS,
             revocation_fail_closed: DEFAULT_REVOCATION_FAIL_CLOSED,
+            require_2fa_roles: default_require_2fa_roles(),
+            totp_encryption_key: default_totp_encryption_key(),
         }
     }
 }
@@ -138,6 +154,9 @@ struct FileConfig {
     build_signing_key_path: Option<String>,
     revocation_cache_ttl_secs: Option<u64>,
     revocation_fail_closed: Option<bool>,
+    require_2fa_roles: Option<Vec<String>>,
+    totp_encryption_key: Option<String>,
+    secrets_key: Option<String>,
 }
 
 impl Config {
@@ -232,6 +251,12 @@ impl Config {
         }
         if let Some(fail_closed) = file_cfg.revocation_fail_closed {
             self.revocation_fail_closed = fail_closed;
+        }
+        if let Some(roles) = file_cfg.require_2fa_roles {
+            self.require_2fa_roles = roles;
+        }
+        if let Some(key) = file_cfg.totp_encryption_key.or(file_cfg.secrets_key) {
+            self.totp_encryption_key = key;
         }
 
         Ok(())
@@ -363,6 +388,23 @@ impl Config {
                 other => return Err(format!("Invalid CERCANO_REVOCATION_FAIL_CLOSED: {}", other)),
             };
             self.revocation_fail_closed = fc;
+        }
+
+        if let Ok(roles_str) = env::var("CERCANO_AUTH_REQUIRE_2FA_ROLES") {
+            self.require_2fa_roles = roles_str
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect();
+        }
+
+        if let Ok(key) =
+            env::var("CERCANO_SECRETS_KEY").or_else(|_| env::var("CERCANO_TOTP_ENCRYPTION_KEY"))
+        {
+            if !key.trim().is_empty() {
+                self.totp_encryption_key = key.trim().to_string();
+            }
         }
 
         Ok(())

@@ -187,6 +187,7 @@ pub const MIGRATIONS: &[Migration] = &[
         ALTER TABLE users ADD COLUMN is_2fa_required INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE users ADD COLUMN totp_confirmed_at TEXT;
         ALTER TABLE users ADD COLUMN recovery_codes TEXT;
+        ALTER TABLE sessions ADD COLUMN mfa_verified INTEGER NOT NULL DEFAULT 1;
 
         CREATE TABLE IF NOT EXISTS mfa_challenges (
             token      TEXT PRIMARY KEY,
@@ -417,6 +418,11 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), DbError> {
             );
         }
     }
+
+    // Ensure sessions table has mfa_verified even on existing pre-v0.2 databases
+    let _ = sqlx::query("ALTER TABLE sessions ADD COLUMN mfa_verified INTEGER NOT NULL DEFAULT 1")
+        .execute(pool)
+        .await;
 
     Ok(())
 }

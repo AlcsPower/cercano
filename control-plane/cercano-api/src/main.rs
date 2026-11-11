@@ -34,6 +34,11 @@ fn require_tokens(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
             "CERCANO_CLIENT_INGEST_TOKEN must be set to a random value of at least 32 bytes".into(),
         );
     }
+    if config.totp_encryption_key.trim().len() < 32
+        || config.totp_encryption_key == cercano_api::config::DEFAULT_DEV_TOTP_KEY
+    {
+        return Err("CERCANO_SECRETS_KEY must be set to a random key of at least 32 bytes".into());
+    }
     Ok(())
 }
 
@@ -150,6 +155,9 @@ mod tests {
         assert!(require_tokens(&config).is_err());
 
         config.client_ingest_token = "b".repeat(32);
+        assert!(require_tokens(&config).is_err());
+
+        config.totp_encryption_key = "c".repeat(32);
         assert!(require_tokens(&config).is_ok());
     }
 }

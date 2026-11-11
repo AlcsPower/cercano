@@ -638,6 +638,7 @@ mod tests {
             username: "admin".to_string(),
             role: "admin".to_string(),
             created_at: "2026-11-05 10:00:00".to_string(),
+            mfa_verified: true,
         };
 
         let rotate_res = rotate_keys(
@@ -676,6 +677,7 @@ mod tests {
             username: "operator".to_string(),
             role: "operator".to_string(),
             created_at: "2026-11-05 10:00:00".to_string(),
+            mfa_verified: true,
         };
 
         let res = rotate_keys(&pub_path, None, &operator_user, None, None, None).await;

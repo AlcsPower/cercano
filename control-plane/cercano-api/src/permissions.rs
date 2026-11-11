@@ -60,6 +60,7 @@ pub const CHAT_CLOSE: &str = "chat:close";
 pub const CHAT_MANAGE_BRANDING: &str = "chat:manage_branding";
 pub const TWOFA_ENROLL: &str = "2fa:enroll";
 pub const TWOFA_REVOKE: &str = "2fa:revoke";
+pub const DB_ADMIN: &str = "db:admin";
 
 const OPERATOR_PERMISSIONS: &[&str] = &[
     USERS_READ,
@@ -109,6 +110,24 @@ pub fn role_permissions(role: &str) -> &'static [&'static str] {
 
 pub fn has_permission(role: &str, permission: &str) -> bool {
     is_admin(role) || role_permissions(role).contains(&permission)
+}
+
+/// Checks whether a user has permission either via their role or via an explicit grant in `user_permissions`.
+pub async fn user_has_permission(
+    pool: &sqlx::SqlitePool,
+    user_id: &str,
+    role: &str,
+    permission: &str,
+) -> bool {
+    if has_permission(role, permission) {
+        return true;
+    }
+    let res = sqlx::query("SELECT 1 FROM user_permissions WHERE user_id = ? AND permission = ?")
+        .bind(user_id)
+        .bind(permission)
+        .fetch_optional(pool)
+        .await;
+    matches!(res, Ok(Some(_)))
 }
 
 pub fn valid_assignable_role(role: &str) -> bool {
@@ -190,7 +209,7 @@ pub async fn check_permission(
     client_ip: &str,
     trace_id: &str,
 ) -> Result<(), RbacError> {
-    if !has_permission(&user.role, permission) {
+    if !user_has_permission(&state.db, &user.id, &user.role, permission).await {
         audit_authz_denied(&state.audit, user, permission, client_ip, trace_id).await;
         return Err(RbacError::Forbidden {
             permission,
@@ -238,6 +257,7 @@ define_permission_tag!(PermChatAttend, CHAT_ATTEND);
 define_permission_tag!(PermChatManage, CHAT_MANAGE);
 define_permission_tag!(PermTwofaEnroll, TWOFA_ENROLL);
 define_permission_tag!(PermTwofaRevoke, TWOFA_REVOKE);
+define_permission_tag!(PermDbAdmin, DB_ADMIN);
 
 /// Axum extractor that authenticates the caller session AND validates the required permission.
 ///
@@ -263,7 +283,7 @@ impl<T: PermissionTag> FromRequestParts<AppState> for RequirePermission<T> {
         let user = AuthenticatedUser::from_request_parts(parts, state).await?;
         let permission = T::permission();
 
-        if !has_permission(&user.role, permission) {
+        if !user_has_permission(&state.db, &user.id, &user.role, permission).await {
             let client_ip = crate::auth::extract_client_ip(
                 &parts.headers,
                 parts
@@ -301,7 +321,7 @@ pub async fn enforce_permission_middleware(
         let (mut parts, body) = req.into_parts();
         let user = AuthenticatedUser::from_request_parts(&mut parts, &state).await?;
 
-        if !has_permission(&user.role, permission) {
+        if !user_has_permission(&state.db, &user.id, &user.role, permission).await {
             let client_ip = crate::auth::extract_client_ip(
                 &parts.headers,
                 parts

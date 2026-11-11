@@ -92,7 +92,24 @@ async fn bootstrap_admin(env: &TestEnv) -> String {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    body["token"].as_str().unwrap().to_string()
+    let token = body["token"].as_str().unwrap().to_string();
+
+    if body["mfa_enrollment_required"].as_bool().unwrap_or(false) {
+        let (_, enroll_res) =
+            request(env, "POST", "/api/auth/2fa/enroll", Some(&token), None).await;
+        let secret = enroll_res["totp_secret_base32"].as_str().unwrap();
+        let code = generate_valid_totp_code(secret, "admin");
+        let (_, _) = request(
+            env,
+            "POST",
+            "/api/auth/2fa/confirm",
+            Some(&token),
+            Some(json!({ "totp_code": code })),
+        )
+        .await;
+    }
+
+    token
 }
 
 fn generate_valid_totp_code(secret_base32: &str, username: &str) -> String {
@@ -147,7 +164,10 @@ async fn test_stress_challenge_expiration_5min() {
     let session = login_res["token"].as_str().unwrap();
 
     let (_, enroll_res) = request(&env, "POST", "/api/auth/2fa/enroll", Some(session), None).await;
-    let secret_base32 = enroll_res["totp_secret_base32"].as_str().unwrap().to_string();
+    let secret_base32 = enroll_res["totp_secret_base32"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let valid_code = generate_valid_totp_code(&secret_base32, "expired_chal_user");
     let (status, _) = request(
@@ -176,11 +196,13 @@ async fn test_stress_challenge_expiration_5min() {
     let mfa_token = chal_res["mfa_token"].as_str().unwrap().to_string();
 
     // Expire challenge by setting expires_at to past time
-    sqlx::query("UPDATE mfa_challenges SET expires_at = datetime('now', '-10 seconds') WHERE token = ?")
-        .bind(&mfa_token)
-        .execute(&env.state.db)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE mfa_challenges SET expires_at = datetime('now', '-10 seconds') WHERE token = ?",
+    )
+    .bind(&mfa_token)
+    .execute(&env.state.db)
+    .await
+    .unwrap();
 
     // Verification attempt with valid code MUST fail with 401 "El desafío MFA ha expirado."
     let fresh_code = generate_valid_totp_code(&secret_base32, "expired_chal_user");
@@ -241,7 +263,10 @@ async fn test_stress_recovery_code_format_insensitivity_and_exhaustion() {
     let session = login_res["token"].as_str().unwrap();
 
     let (_, enroll_res) = request(&env, "POST", "/api/auth/2fa/enroll", Some(session), None).await;
-    let secret = enroll_res["totp_secret_base32"].as_str().unwrap().to_string();
+    let secret = enroll_res["totp_secret_base32"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let code = generate_valid_totp_code(&secret, "rec_stress_user");
     let (_, conf_res) = request(
         &env,
@@ -283,7 +308,10 @@ async fn test_stress_recovery_code_format_insensitivity_and_exhaustion() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(ver_res["token"].as_str().unwrap().starts_with("cercano_sess_"));
+    assert!(ver_res["token"]
+        .as_str()
+        .unwrap()
+        .starts_with("cercano_sess_"));
 
     // Verify recovery code 0 is now consumed in DB
     let (_, chal2) = request(
@@ -345,7 +373,10 @@ async fn test_stress_lockout_and_auto_unlock_after_15min() {
     .await;
     let session = login_res["token"].as_str().unwrap();
     let (_, enroll_res) = request(&env, "POST", "/api/auth/2fa/enroll", Some(session), None).await;
-    let secret = enroll_res["totp_secret_base32"].as_str().unwrap().to_string();
+    let secret = enroll_res["totp_secret_base32"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let code = generate_valid_totp_code(&secret, "lockout_stress");
     let (_, _) = request(
         &env,
@@ -428,7 +459,7 @@ async fn test_stress_multiple_sessions_revocation_on_2fa_revoke() {
     let env = setup().await;
     let admin_token = bootstrap_admin(&env).await;
 
-    let (_, _) = request(
+    let (_, user_res) = request(
         &env,
         "POST",
         "/api/users",
@@ -436,10 +467,11 @@ async fn test_stress_multiple_sessions_revocation_on_2fa_revoke() {
         Some(json!({
             "username": "multi_sess_user",
             "password": "Password123!",
-            "role": "operator"
+            "role": "auditor"
         })),
     )
     .await;
+    let user_id = user_res["id"].as_str().unwrap().to_string();
 
     // Login 1
     let (_, l1) = request(
@@ -471,7 +503,10 @@ async fn test_stress_multiple_sessions_revocation_on_2fa_revoke() {
 
     // Enroll 2FA with s1
     let (_, enroll_res) = request(&env, "POST", "/api/auth/2fa/enroll", Some(&s1), None).await;
-    let secret = enroll_res["totp_secret_base32"].as_str().unwrap().to_string();
+    let secret = enroll_res["totp_secret_base32"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let code = generate_valid_totp_code(&secret, "multi_sess_user");
     let (_, _) = request(
         &env,
@@ -488,8 +523,15 @@ async fn test_stress_multiple_sessions_revocation_on_2fa_revoke() {
     let (s, _) = request(&env, "GET", "/api/auth/me", Some(&s2), None).await;
     assert_eq!(s, StatusCode::OK);
 
-    // Revoke 2FA using s1
-    let (status, rev_res) = request(&env, "POST", "/api/auth/2fa/revoke", Some(&s1), None).await;
+    // Revoke 2FA via Admin
+    let (status, rev_res) = request(
+        &env,
+        "POST",
+        "/api/auth/2fa/revoke",
+        Some(&admin_token),
+        Some(json!({ "user_id": user_id })),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(rev_res["status"], "revoked");
 

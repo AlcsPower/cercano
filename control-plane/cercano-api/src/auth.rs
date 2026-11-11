@@ -120,6 +120,92 @@ pub fn hash_recovery_code(raw: &str) -> String {
     hex
 }
 
+pub fn derive_totp_key(raw_key: &str) -> [u8; 32] {
+    let trimmed = raw_key.trim();
+    if trimmed.len() == 64 {
+        if let Ok(bytes) = (0..trimmed.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&trimmed[i..i + 2], 16))
+            .collect::<Result<Vec<u8>, _>>()
+        {
+            if bytes.len() == 32 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&bytes);
+                return key;
+            }
+        }
+    }
+    use sha2::Digest;
+    let mut hasher = Sha256::new();
+    hasher.update(trimmed.as_bytes());
+    let res = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&res);
+    key
+}
+
+pub fn encrypt_totp_secret(secret_base32: &str, key_str: &str) -> Result<String, AuthError> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Nonce};
+    use base64::engine::general_purpose::STANDARD as B64;
+    use base64::Engine;
+
+    let key_bytes = derive_totp_key(key_str);
+    let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+        .map_err(|e| AuthError::Hashing(format!("Invalid encryption key: {e}")))?;
+
+    let mut iv_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut iv_bytes);
+    let nonce = Nonce::from_slice(&iv_bytes);
+
+    let ciphertext = cipher
+        .encrypt(nonce, secret_base32.as_bytes())
+        .map_err(|e| AuthError::Hashing(format!("Encryption error: {e}")))?;
+
+    let mut combined = Vec::with_capacity(12 + ciphertext.len());
+    combined.extend_from_slice(&iv_bytes);
+    combined.extend_from_slice(&ciphertext);
+
+    let encoded = B64.encode(&combined);
+    Ok(format!("enc:v1:{}", encoded))
+}
+
+pub fn decrypt_totp_secret(stored_val: &str, key_str: &str) -> Result<String, AuthError> {
+    if !stored_val.starts_with("enc:v1:") {
+        // Plaintext legacy fallback for backwards compatibility
+        return Ok(stored_val.to_string());
+    }
+
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Nonce};
+    use base64::engine::general_purpose::STANDARD as B64;
+    use base64::Engine;
+
+    let encoded = &stored_val["enc:v1:".len()..];
+    let combined = B64
+        .decode(encoded)
+        .map_err(|e| AuthError::Validation(format!("Invalid base64 in encrypted secret: {e}")))?;
+
+    if combined.len() < 12 + 16 {
+        return Err(AuthError::Validation(
+            "Encrypted secret ciphertext too short".to_string(),
+        ));
+    }
+
+    let (iv_bytes, ciphertext) = combined.split_at(12);
+    let key_bytes = derive_totp_key(key_str);
+    let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+        .map_err(|e| AuthError::Hashing(format!("Invalid decryption key: {e}")))?;
+    let nonce = Nonce::from_slice(iv_bytes);
+
+    let plaintext_bytes = cipher.decrypt(nonce, ciphertext).map_err(|_| {
+        AuthError::Validation("Decryption failed: invalid key or corrupted ciphertext".to_string())
+    })?;
+
+    String::from_utf8(plaintext_bytes)
+        .map_err(|e| AuthError::Validation(format!("Decrypted secret is not valid utf-8: {e}")))
+}
+
 #[derive(Debug, Error)]
 pub enum AuthError {
     #[error("Database error: {0}")]
@@ -140,6 +226,8 @@ pub enum AuthError {
     Unauthorized(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
+    #[error("MFA enrollment required for this role")]
+    MfaEnrollmentRequired,
     #[error("Audit error: {0}")]
     Audit(#[from] audit_core::AuditError),
 }
@@ -147,6 +235,17 @@ pub enum AuthError {
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
         let (status, code, message) = match &self {
+            AuthError::MfaEnrollmentRequired => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "error": "forbidden",
+                        "code": "mfa_enrollment_required",
+                        "message": "Se requiere configurar autenticación de dos factores (2FA) antes de acceder a este recurso.",
+                    })),
+                )
+                    .into_response();
+            }
             AuthError::Validation(msg) => {
                 (StatusCode::BAD_REQUEST, "validation_error", msg.clone())
             }
@@ -256,6 +355,7 @@ pub struct AuthenticatedUser {
     pub username: String,
     pub role: String,
     pub created_at: String,
+    pub mfa_verified: bool,
 }
 
 #[async_trait]
@@ -285,7 +385,7 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
 
         let row = sqlx::query(
             r#"
-            SELECT u.id, u.username, u.role, u.is_active, u.created_at
+            SELECT u.id, u.username, u.role, u.is_active, u.created_at, s.mfa_verified
             FROM sessions s
             JOIN users u ON s.user_id = u.id
             WHERE s.token = ?
@@ -311,11 +411,61 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
             return Err(AuthError::UserInactive);
         }
 
+        let mfa_verified_val: i64 = row.try_get("mfa_verified").unwrap_or(0);
+        let mfa_verified = mfa_verified_val != 0;
+        let role: String = row.get("role");
+
+        // F4-11: Mandatory 2FA enforcement for required roles
+        if state.config.require_2fa_roles.contains(&role) && !mfa_verified {
+            let path = parts.uri.path();
+            let is_allowed = path == "/api/auth/2fa/enroll"
+                || path == "/api/auth/2fa/confirm"
+                || path == "/api/auth/logout"
+                || path == "/api/auth/me";
+
+            if !is_allowed {
+                let client_ip = extract_client_ip(
+                    &parts.headers,
+                    parts
+                        .extensions
+                        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+                        .map(|ci| ci.0),
+                    &state.config.trusted_proxies,
+                );
+                let trace_id = extract_trace_id(&parts.headers);
+
+                let audit_input = EventInput::new(
+                    trace_id,
+                    Source::Api,
+                    Category::Auth,
+                    "auth.2fa_required",
+                    Actor::with_details(
+                        row.get::<String, _>("id"),
+                        "user",
+                        Some(row.get::<String, _>("username")),
+                        Some(client_ip.clone()),
+                    ),
+                    Outcome::Denied,
+                    json!({
+                        "username": row.get::<String, _>("username"),
+                        "role": role,
+                        "client_ip": client_ip,
+                        "path": path,
+                        "reason": "mfa_enrollment_required",
+                    }),
+                );
+                let _ = state.audit.append(audit_input).await;
+
+                return Err(AuthError::MfaEnrollmentRequired);
+            }
+        }
+
         Ok(AuthenticatedUser {
             id: row.get("id"),
             username: row.get("username"),
-            role: row.get("role"),
+            role,
             created_at: row.get("created_at"),
+            mfa_verified,
         })
     }
 }
@@ -796,9 +946,10 @@ pub async fn login_handler(
     let user_id: String = user.get("id");
     let user_role: String = user.get("role");
     let is_2fa_required: i64 = user.get("is_2fa_required");
+    let totp_enabled: i64 = user.get("totp_enabled");
 
-    // If 2FA is required, do NOT issue a session token. Issue a 5-minute mfa_challenge instead.
-    if is_2fa_required == 1 {
+    // If 2FA has been enrolled and activated (or required with factor active), issue a 5-minute mfa_challenge.
+    if totp_enabled == 1 || is_2fa_required == 1 {
         let mfa_token = generate_mfa_token();
         sqlx::query(
             r#"
@@ -834,7 +985,10 @@ pub async fn login_handler(
             .into_response());
     }
 
-    // Login successful without 2FA
+    // If user's role mandates 2FA but factor is not yet enrolled, issue a restricted session (mfa_verified = 0)
+    // and flag mfa_enrollment_required: true in response.
+    let mfa_enrollment_required = state.config.require_2fa_roles.contains(&user_role);
+
     record_login_attempt(&state.db, username, &client_ip, true).await?;
 
     let token = generate_session_token();
@@ -842,8 +996,8 @@ pub async fn login_handler(
 
     sqlx::query(
         r#"
-        INSERT INTO sessions (token, user_id, expires_at)
-        VALUES (?, ?, datetime('now', ?))
+        INSERT INTO sessions (token, user_id, expires_at, mfa_verified)
+        VALUES (?, ?, datetime('now', ?), 0)
         "#,
     )
     .bind(&token)
@@ -874,6 +1028,7 @@ pub async fn login_handler(
             "username": username,
             "role": user_role,
             "client_ip": client_ip,
+            "mfa_enrollment_required": mfa_enrollment_required,
         }),
     )
     .with_subject(Subject::with_details(
@@ -887,8 +1042,26 @@ pub async fn login_handler(
     tracing::info!(
         username = %username,
         user_id = %user_id,
+        mfa_enrollment_required = %mfa_enrollment_required,
         "User authenticated successfully, session token issued"
     );
+
+    if mfa_enrollment_required {
+        return Ok((
+            StatusCode::OK,
+            Json(json!({
+                "token": token,
+                "expires_at": expires_at,
+                "user": {
+                    "id": user_id,
+                    "username": username.to_string(),
+                    "role": user_role,
+                },
+                "mfa_enrollment_required": true,
+            })),
+        )
+            .into_response());
+    }
 
     Ok((
         StatusCode::OK,
@@ -954,8 +1127,10 @@ pub async fn two_factor_enroll_handler(
 
     let otpauth_uri = totp.get_url();
 
+    let encrypted_secret = encrypt_totp_secret(&secret_base32, &state.config.totp_encryption_key)?;
+
     sqlx::query("UPDATE users SET totp_secret = ? WHERE id = ?")
-        .bind(&secret_base32)
+        .bind(&encrypted_secret)
         .bind(&user.id)
         .execute(&state.db)
         .await?;
@@ -1040,7 +1215,8 @@ pub async fn two_factor_confirm_handler(
         }
     };
 
-    let secret = totp_rs::Secret::Encoded(stored_secret);
+    let decrypted_secret = decrypt_totp_secret(&stored_secret, &state.config.totp_encryption_key)?;
+    let secret = totp_rs::Secret::Encoded(decrypted_secret);
     let secret_bytes = secret
         .to_bytes()
         .map_err(|e| AuthError::Hashing(e.to_string()))?;
@@ -1091,6 +1267,12 @@ pub async fn two_factor_confirm_handler(
     .bind(&user.id)
     .execute(&state.db)
     .await?;
+
+    // Elevate active sessions for this user to MFA verified
+    sqlx::query("UPDATE sessions SET mfa_verified = 1 WHERE user_id = ? AND revoked_at IS NULL")
+        .bind(&user.id)
+        .execute(&state.db)
+        .await?;
 
     tracing::info!(
         user_id = %user.id,
@@ -1279,21 +1461,26 @@ pub async fn two_factor_verify_handler(
         let trimmed_code = code.trim();
         if !trimmed_code.is_empty() {
             if let Some(ref secret_str) = stored_secret {
-                if let Ok(secret_bytes) = totp_rs::Secret::Encoded(secret_str.clone()).to_bytes() {
-                    if let Ok(totp) = totp_rs::TOTP::new(
-                        totp_rs::Algorithm::SHA1,
-                        6,
-                        1,
-                        30,
-                        secret_bytes,
-                        Some("Cercano".to_string()),
-                        username.clone(),
-                    ) {
-                        if trimmed_code.len() == 6
-                            && totp.check_current(trimmed_code).unwrap_or(false)
-                        {
-                            verified = true;
-                            method = "totp";
+                if let Ok(decrypted_secret) =
+                    decrypt_totp_secret(secret_str, &state.config.totp_encryption_key)
+                {
+                    if let Ok(secret_bytes) = totp_rs::Secret::Encoded(decrypted_secret).to_bytes()
+                    {
+                        if let Ok(totp) = totp_rs::TOTP::new(
+                            totp_rs::Algorithm::SHA1,
+                            6,
+                            1,
+                            30,
+                            secret_bytes,
+                            Some("Cercano".to_string()),
+                            username.clone(),
+                        ) {
+                            if trimmed_code.len() == 6
+                                && totp.check_current(trimmed_code).unwrap_or(false)
+                            {
+                                verified = true;
+                                method = "totp";
+                            }
                         }
                     }
                 }
@@ -1413,8 +1600,8 @@ pub async fn two_factor_verify_handler(
 
     sqlx::query(
         r#"
-        INSERT INTO sessions (token, user_id, expires_at)
-        VALUES (?, ?, datetime('now', ?))
+        INSERT INTO sessions (token, user_id, expires_at, mfa_verified)
+        VALUES (?, ?, datetime('now', ?), 1)
         "#,
     )
     .bind(&token)
@@ -1540,6 +1727,33 @@ pub async fn two_factor_revoke_handler(
             (id.to_string(), "admin")
         }
         _ => {
+            if state.config.require_2fa_roles.contains(&caller.role) {
+                let audit_input = EventInput::new(
+                    trace_id.clone(),
+                    Source::Api,
+                    Category::Auth,
+                    "auth.2fa_revoke_denied",
+                    Actor::with_details(
+                        &caller.id,
+                        "user",
+                        Some(caller.username.clone()),
+                        Some(client_ip.clone()),
+                    ),
+                    Outcome::Denied,
+                    json!({
+                        "username": caller.username,
+                        "role": caller.role,
+                        "reason": "self_revocation_disallowed_for_mandatory_role",
+                        "client_ip": client_ip,
+                    }),
+                );
+                let _ = state.audit.append(audit_input).await;
+                return Err(AuthError::Forbidden(
+                    "Los roles obligatorios no pueden desvincular su propio segundo factor."
+                        .to_string(),
+                ));
+            }
+
             if !crate::permissions::has_permission(&caller.role, crate::permissions::TWOFA_REVOKE) {
                 crate::permissions::audit_authz_denied(
                     &state.audit,

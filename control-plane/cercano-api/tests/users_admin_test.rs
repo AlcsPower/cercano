@@ -70,6 +70,23 @@ async fn request(
     (status, json)
 }
 
+fn generate_valid_totp_code(secret_base32: &str, username: &str) -> String {
+    let secret_bytes = totp_rs::Secret::Encoded(secret_base32.to_string())
+        .to_bytes()
+        .unwrap();
+    let totp = totp_rs::TOTP::new(
+        totp_rs::Algorithm::SHA1,
+        6,
+        1,
+        30,
+        secret_bytes,
+        Some("Cercano".to_string()),
+        username.to_string(),
+    )
+    .unwrap();
+    totp.generate_current().unwrap()
+}
+
 async fn bootstrap_and_login(env: &TestEnv) -> String {
     let (status, _) = request(
         env,
@@ -93,7 +110,24 @@ async fn login(env: &TestEnv, username: &str, password: &str) -> String {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "login {username}: {body}");
-    body["token"].as_str().unwrap().to_string()
+    let token = body["token"].as_str().unwrap().to_string();
+
+    if body["mfa_enrollment_required"].as_bool().unwrap_or(false) {
+        let (_, enroll_res) =
+            request(env, "POST", "/api/auth/2fa/enroll", Some(&token), None).await;
+        let secret = enroll_res["totp_secret_base32"].as_str().unwrap();
+        let code = generate_valid_totp_code(secret, username);
+        let (_, _) = request(
+            env,
+            "POST",
+            "/api/auth/2fa/confirm",
+            Some(&token),
+            Some(json!({ "totp_code": code })),
+        )
+        .await;
+    }
+
+    token
 }
 
 #[tokio::test]

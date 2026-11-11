@@ -90,7 +90,24 @@ async fn bootstrap_admin(env: &TestEnv) -> String {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    body["token"].as_str().unwrap().to_string()
+    let token = body["token"].as_str().unwrap().to_string();
+
+    if body["mfa_enrollment_required"].as_bool().unwrap_or(false) {
+        let (_, enroll_res) =
+            request(env, "POST", "/api/auth/2fa/enroll", Some(&token), None).await;
+        let secret = enroll_res["totp_secret_base32"].as_str().unwrap();
+        let code = generate_valid_totp_code(secret, "admin");
+        let (_, _) = request(
+            env,
+            "POST",
+            "/api/auth/2fa/confirm",
+            Some(&token),
+            Some(json!({ "totp_code": code })),
+        )
+        .await;
+    }
+
+    token
 }
 
 fn generate_valid_totp_code(secret_base32: &str, username: &str) -> String {
@@ -116,7 +133,7 @@ async fn test_tc_f4_004_two_step_login_and_totp_lifecycle() {
     let admin_token = bootstrap_admin(&env).await;
 
     // 1. Create a regular user
-    let (status, _user) = request(
+    let (status, user_obj) = request(
         &env,
         "POST",
         "/api/users",
@@ -129,6 +146,7 @@ async fn test_tc_f4_004_two_step_login_and_totp_lifecycle() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
+    let user_id = user_obj["id"].as_str().unwrap().to_string();
 
     // 2. Login without 2FA required -> returns 200 OK directly
     let (status, login_res) = request(
@@ -246,13 +264,25 @@ async fn test_tc_f4_004_two_step_login_and_totp_lifecycle() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(reuse_res["error"], "unauthorized");
 
-    // 9. Clean up / verify revocation
-    let (status, revoke_res) = request(
+    // 9. Self-revocation is denied for operator (mandatory 2FA role under F4-11)
+    let (status, self_revoke_res) = request(
         &env,
         "POST",
         "/api/auth/2fa/revoke",
         Some(final_token),
         None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(self_revoke_res["error"], "forbidden");
+
+    // Admin can revoke user's 2FA
+    let (status, revoke_res) = request(
+        &env,
+        "POST",
+        "/api/auth/2fa/revoke",
+        Some(&admin_token),
+        Some(json!({ "user_id": user_id })),
     )
     .await;
     assert_eq!(status, StatusCode::OK);

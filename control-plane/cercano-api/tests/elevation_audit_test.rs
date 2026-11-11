@@ -120,7 +120,7 @@ async fn test_tc_f3_080_schema_validates_elev_events() {
         .as_str()
         .expect("properties.action.pattern debe ser una cadena");
     assert_eq!(
-        action_pattern_raw, "^(conn|file|alarm|console|auth|build|chat|elev)(\\.[a-z0-9_]+)+$",
+        action_pattern_raw, "^(conn|file|alarm|console|auth|build|chat|elev|db)(\\.[a-z0-9_]+)+$",
         "El patrón de action en el schema debe cubrir elev y las demás categorías"
     );
 
