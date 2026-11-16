@@ -126,3 +126,7 @@ El equipo arranca con los valores por defecto indicados; si cambia alguno, avisa
 - **F4:** plan detallado en `PLAN-F4-CONSOLA.md`; RBAC y 2FA pueden ir en paralelo con F3; solo el generador (F4-07) espera F3-07.
 - **F8 (extra post-v1):** plan en `PLAN-F8-PORTABILIDAD.md`, decisión en `adr/011-portabilidad-bd.md`, contrato en `specs/db-portabilidad.md` y operación en `guias/respaldos-y-migracion.md`, por petición del dueño (2026-11-10): respaldos gestionados y migración asistida a PostgreSQL desde la consola. Se detalla antes de tiempo respecto a la regla de olas de §2; no bloquea M4. **F8-01 (2026-11-10):** inventario de las 142 sentencias y SQL Server diferido porque `sqlx 0.8` no tiene driver MSSQL (ver `status/informes/F8-01.md`).
 - **Documentos relacionados:** `ARQUITECTURA.md`, `../AGENTS.md`, `PLAN-F0-F1.md`, `PLAN-F2-AUDITORIA.md`, `PLAN-F3-GENERADOR.md`, `PLAN-F4-CONSOLA.md`, `PLAN-F4.5-CHAT.md`, `PLAN-F8-PORTABILIDAD.md`, `adr/011-portabilidad-bd.md`, `specs/db-portabilidad.md`, `guias/respaldos-y-migracion.md`, `PLAN-DE-PRUEBAS.md`, `status/TAREAS.md`, `status/BLOCKERS.md`.
+
+## Backlog de visibilidad aprobado (2026-11-16)
+
+Ideas aprobadas por el dueño, sin fase asignada hasta cerrar M2 reabierto: «Powered by Cercano» también en el chat (F4.5, con enlace al repositorio); página de releases con `SHA256SUMS` y SBOM; perfil de instalador `demo` con marca neutra para laboratorio; ejemplo público de exportación de auditoría verificable con `cercano-audit verify`; reporte privado de vulnerabilidades de GitHub enlazado desde `SECURITY.md`.
