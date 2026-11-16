@@ -15,6 +15,10 @@ on:
         default: '172.16.8.163'
         type: string
   push:
+    branches:
+      - 'docs/F0-01-gobernanza'
+      - 'feat/**'
+      - 'main'
     tags:
       - 'v*'
 
@@ -25,11 +29,63 @@ env:
   RUST_VERSION: "1.75"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
+  CARGO_EXPAND_VERSION: "1.0.95"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
 
 jobs:
+  generate-bridge:
+    name: Generate Flutter-Rust Bridge
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake curl gcc g++ libclang-dev libgtk-3-dev llvm-dev nasm ninja-build pkg-config wget
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: "rustfmt"
+
+      - name: Install Flutter SDK
+        uses: subosito/flutter-action@v2.12.0
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Generate Bridge files
+        shell: bash
+        run: |
+          cd vendor/client
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          pushd flutter && flutter pub get && popd
+          ~/.cargo/bin/flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+
+      - name: Upload Bridge Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-artifact
+          path: |
+            vendor/client/src/bridge_generated.rs
+            vendor/client/src/bridge_generated.io.rs
+            vendor/client/flutter/lib/generated_bridge.dart
+            vendor/client/flutter/lib/generated_bridge.freezed.dart
+
   build-windows-client:
     name: Build Windows Client (x86_64)
+    needs: [generate-bridge]
     runs-on: windows-2022
     steps:
       - name: Check out repository
@@ -37,6 +93,12 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+
+      - name: Restore Bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
 
       - name: Apply Cercano patches to upstream
         shell: bash
@@ -92,7 +154,6 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist/base
-          # Copiar el runner compilado y renombrar a cercano.exe
           cp -r vendor/client/flutter/build/windows/x64/runner/Release/* dist/base/
           if [ -f dist/base/rustdesk.exe ]; then
             mv -f dist/base/rustdesk.exe dist/base/cercano.exe
@@ -106,7 +167,7 @@ jobs:
           SERVER_IP="${{ github.event.inputs.target_server_ip || '172.16.8.163' }}"
           echo "Generando instaladores apuntando al servidor: $SERVER_IP"
 
-          # Compilar el generador cercano-build
+          # Compilar generador cercano-build
           cargo build --release -p cercano-build
 
           # Generar paquete Soporte
