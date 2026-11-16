@@ -32,6 +32,7 @@ pub mod ui;
 pub(crate) mod update_metadata;
 pub(crate) mod update_hash;
 pub mod cercano_profile;
+pub mod cercano_chat;
 #[cfg(target_os = "macos")]
 mod manual_update;
 mod version;

@@ -1209,6 +1209,69 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
+pub fn chat_get_branding(api_server: String) -> SyncReturn<String> {
+    match crate::cercano_chat::chat_get_branding(&api_server) {
+        Ok(branding) => SyncReturn(serde_json::to_string(&branding).unwrap_or_default()),
+        Err(_) => SyncReturn("".to_string()),
+    }
+}
+
+pub fn chat_create_conversation(
+    api_server: String,
+    first_name: String,
+    last_name: String,
+    initial_message: String,
+) -> SyncReturn<String> {
+    match crate::cercano_chat::chat_create_conversation(
+        &api_server,
+        &first_name,
+        &last_name,
+        &initial_message,
+    ) {
+        Ok(conv) => SyncReturn(serde_json::to_string(&conv).unwrap_or_default()),
+        Err(e) => SyncReturn(serde_json::json!({ "error": e }).to_string()),
+    }
+}
+
+pub fn chat_get_conversation(api_server: String, id: String) -> SyncReturn<String> {
+    match crate::cercano_chat::chat_get_conversation(&api_server, &id) {
+        Ok(conv) => SyncReturn(serde_json::to_string(&conv).unwrap_or_default()),
+        Err(e) => SyncReturn(serde_json::json!({ "error": e }).to_string()),
+    }
+}
+
+pub fn chat_send_message(api_server: String, id: String, body: String) -> SyncReturn<String> {
+    match crate::cercano_chat::chat_send_message(&api_server, &id, &body) {
+        Ok(msg) => SyncReturn(serde_json::to_string(&msg).unwrap_or_default()),
+        Err(e) => SyncReturn(serde_json::json!({ "error": e }).to_string()),
+    }
+}
+
+pub fn chat_send_attachment(
+    api_server: String,
+    id: String,
+    file_name: String,
+    mime: String,
+    bytes: Vec<u8>,
+) -> SyncReturn<String> {
+    match crate::cercano_chat::chat_send_attachment(&api_server, &id, &file_name, &mime, &bytes) {
+        Ok(msg) => SyncReturn(serde_json::to_string(&msg).unwrap_or_default()),
+        Err(e) => SyncReturn(serde_json::json!({ "error": e }).to_string()),
+    }
+}
+
+pub fn chat_mark_read(api_server: String, id: String) -> SyncReturn<bool> {
+    SyncReturn(crate::cercano_chat::chat_mark_read(&api_server, &id).is_ok())
+}
+
+pub fn chat_close_conversation(api_server: String, id: String, reason: String) -> SyncReturn<bool> {
+    SyncReturn(crate::cercano_chat::chat_close_conversation(&api_server, &id, &reason).is_ok())
+}
+
+pub fn chat_start_events_listener(api_server: String) {
+    crate::cercano_chat::start_chat_events_listener(&api_server);
+}
+
 pub fn main_deploy_device(token: String, id: String) -> String {
     #[cfg(target_os = "android")]
     {

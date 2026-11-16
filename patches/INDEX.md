@@ -24,6 +24,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `005-client-signed-profile.patch` | F3-02 | `vendor/client` | Localización, verificación de firma Ed25519 y aplicación de perfil de cliente firmado (`cercano-profile.signed.json`), comprobación de caducidad y restricciones de rol | `src/cercano_profile.rs`, `src/common.rs`, `src/lib.rs` | 2026-11-09 | Agente-Cliente |
 | `006-client-roles-modes.patch` | F3-14, F3-15 | `vendor/client` | Modos soporte y técnico: helpers de rol, bloqueo de salida y libreta en soporte, control de salida y sesión en técnico, protección de ajustes de red y elevación estructurada | `src/cercano_profile.rs`, `src/client.rs`, `src/flutter.rs`, `src/ui_interface.rs` | 2026-11-10 | Agente-Cliente |
 | `007-client-elevation.patch` | F3-16 | `vendor/client` | Flujo de elevación supervisada con credenciales: consentimiento obligatorio, `SecureElevationCredential` con zeroize, límite de 3 fallos y un solo uso | `src/cercano_profile.rs`, `src/platform/windows.rs`, `src/server/portable_service.rs` | 2026-11-10 | Agente-Cliente |
+| `008-client-support-chat.patch` | F4.5-10 | `vendor/client` | Módulo `cercano_chat.rs`, autenticación Ed25519 con reto/firma, REST, SSE con feature stream, reconexión, toast Windows y FFI Flutter | `Cargo.toml`, `src/cercano_chat.rs`, `src/lib.rs`, `src/flutter_ffi.rs` | 2026-11-16 | Agente-Cliente |
 
 ---
 
@@ -178,6 +179,30 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/platform/windows.rs`
   - `src/server/portable_service.rs`
 - **Estrategia de actualización (upstream sync):** Los componentes de elevación residen principalmente en `cercano_profile.rs`. En `platform/windows.rs` y `server/portable_service.rs`, el zeroize se aplica directamente sobre los buffers locales tras la llamada a `CreateProcessWithLogonW`. Al sincronizar con upstream, comprobar que `create_process_with_logon` mantenga la firma y aplicar la limpieza volátil sobre cualquier buffer auxiliar de contraseña.
+
+---
+
+### [008-client-support-chat.patch] Tarea F4.5-10: Módulo Rust del cliente Cercano Chat
+
+- **Archivo:** `patches/008-client-support-chat.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F4.5-10`
+- **Fecha:** `2026-11-16`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** Implementa el soporte nativo de Cercano Chat en el cliente de escritorio:
+  - **Módulo `cercano_chat.rs`:** Gestión de identidad de dispositivo fijada (`Config::get_id`, `Config::get_key_pair`), registro automático ante `cercano-api`, flujo criptográfico reto/firma con Ed25519 sobre 32 bytes de nonce (`POST /api/chat/auth/challenge` y `verify`).
+  - **Manejo de tokens en memoria:** Los tokens de sesión de chat (`cercano_chat_...`) residen estrictamente en memoria volátil (`RwLock<Option<String>>`), nunca en disco ni volcados en trazas de logs.
+  - **Regla estricta de TLS:** Comprobación estricta de endpoints HTTPS; rechazo incondicional de protocolos en texto claro (`http://`).
+  - **Cliente REST y SSE en tiempo real:** Comunicación REST (`conversations`, `messages`, `attachments`, `branding`, `read`, `close`) y stream continuo de eventos Server-Sent Events (`/api/chat/events`) con bucle de reconexión y espera exponencial (1, 2, 5, 30 s).
+  - **Notificaciones de escritorio:** Notificación tipo Toast nativa en Windows (`tauri-winrt-notification`) ante eventos de mensajes nuevos. Garantía estricta de privacidad: no contiene cuerpos de mensajes ni nombres de contactos.
+  - **Dependencias controladas:** Activación de la característica `"stream"` en `reqwest 0.12` en `vendor/client/Cargo.toml`; cero crates externas adicionales añadidas.
+  - **Puente FFI:** Funciones exportadas en `src/flutter_ffi.rs` para enlazar directamente con la interfaz Flutter multi-ventana en F4.5-11.
+- **Archivos modificados:**
+  - `Cargo.toml`
+  - `src/cercano_chat.rs`
+  - `src/lib.rs`
+  - `src/flutter_ffi.rs`
+- **Estrategia de actualización (upstream sync):** La lógica de chat está completamente encapsulada en `src/cercano_chat.rs`. En `src/lib.rs` y `src/flutter_ffi.rs` solo se añaden declaraciones públicas que no colisionan con llamadas existentes de RustDesk.
 
 ---
 
