@@ -107,3 +107,13 @@ sudo chown cercano:cercano /opt/cercano/api.env
 ```
 
 `cercano-api.service` carga ese archivo con `EnvironmentFile=-/opt/cercano/api.env`. Sin token, la API falla al arrancar (y `Restart=always` la reintentará): revise `journalctl -u cercano-api` si el servicio no queda activo.
+
+---
+
+## 5. Operación y Despliegue de Cercano Chat (Fase 4.5)
+
+Cercano Chat requiere terminación TLS en `cercano-web` y proxy inverso sin buffering para eventos en tiempo real:
+- **Configuración de Nginx:** Las directivas de proxy para SSE (`/api/chat/events`, con `proxy_buffering off` y `proxy_read_timeout 1h`) y subida de adjuntos multipart (`/api/chat/conversations/*/attachments`, hasta 10 MiB) están integradas en `deploy/nginx.conf`.
+- **Almacenamiento de adjuntos:** Volumen dedicado en `/opt/cercano/data/chat-attachments` con permisos `0700` (`UID 1000:1000`).
+- **Guía completa de operación:** Para el manual detallado de administración, políticas de retención, purga, escalado `cercano://` y procedimientos de soporte, consulte la [Guía de Despliegue y Operación de Cercano Chat](file:///docs/guias/chat.md).
+
