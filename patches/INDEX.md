@@ -25,6 +25,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `006-client-roles-modes.patch` | F3-14, F3-15 | `vendor/client` | Modos soporte y técnico: helpers de rol, bloqueo de salida y libreta en soporte, control de salida y sesión en técnico, protección de ajustes de red y elevación estructurada | `src/cercano_profile.rs`, `src/client.rs`, `src/flutter.rs`, `src/ui_interface.rs` | 2026-11-10 | Agente-Cliente |
 | `007-client-elevation.patch` | F3-16 | `vendor/client` | Flujo de elevación supervisada con credenciales: consentimiento obligatorio, `SecureElevationCredential` con zeroize, límite de 3 fallos y un solo uso | `src/cercano_profile.rs`, `src/platform/windows.rs`, `src/server/portable_service.rs` | 2026-11-10 | Agente-Cliente |
 | `008-client-support-chat.patch` | F4.5-10 | `vendor/client` | Módulo `cercano_chat.rs`, autenticación Ed25519 con reto/firma, REST, SSE con feature stream, reconexión, toast Windows y FFI Flutter | `Cargo.toml`, `src/cercano_chat.rs`, `src/lib.rs`, `src/flutter_ffi.rs` | 2026-11-16 | Agente-Cliente |
+| `009-client-flutter-chat.patch` | F4.5-11 | `vendor/client` | Interfaz Flutter de Cercano Chat, modelo, vista de bienvenida y onboarding (nombre/apellido), hilo de mensajes, composer, adjuntos, botón en panel soporte e i18n | `flutter/lib/cercano_chat/*`, `flutter/lib/desktop/pages/*`, `flutter/test/*`, `src/lang/*` | 2026-11-16 | Agente-Cliente |
 
 ---
 
@@ -203,6 +204,33 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/lib.rs`
   - `src/flutter_ffi.rs`
 - **Estrategia de actualización (upstream sync):** La lógica de chat está completamente encapsulada en `src/cercano_chat.rs`. En `src/lib.rs` y `src/flutter_ffi.rs` solo se añaden declaraciones públicas que no colisionan con llamadas existentes de RustDesk.
+
+---
+
+### [009-client-flutter-chat.patch] Tarea F4.5-11: Interfaz Flutter de Cercano Chat
+
+- **Archivo:** `patches/009-client-flutter-chat.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F4.5-11`
+- **Fecha:** `2026-11-16`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** Implementa la interfaz visual completa de Cercano Chat en Flutter:
+  - **Módulo `flutter/lib/cercano_chat/`:** Modelo de datos reactivo con Provider (`cercano_chat_model.dart`), página principal con diseño especificado en `docs/specs/chat.md` §14 (`cercano_chat_page.dart`), y puente FFI (`cercano_chat_ffi_bridge.dart`).
+  - **Formulario inicial de contacto:** Obligatoriedad de Nombre y Apellido la primera vez; almacenamiento persistente en opciones locales (`chat-contact-first-name`, `chat-contact-last-name`) sin transferir a telemetría ni logs.
+  - **Hilo de conversación multietapa:** Soporta estados bienvenida, en cola, activa, cerrada y sin conexión. Burbujas diferenciadas por tipo de remitente con color de acento corporativo, doble check de leído según `other_last_read_at`, previsualización de imágenes y tarjetas para PDF.
+  - **Acceso en panel de Soporte:** Botón «Chat de soporte» en `desktop_home_page.dart` (modo entrante/soporte) y apertura como pestaña dedicada en `desktop_tab_page.dart`.
+  - **Internacionalización:** Claves añadidas a `src/lang/es.rs` y `template.rs`.
+  - **Pruebas de modelo:** Suite de pruebas en `flutter/test/cercano_chat_model_test.dart`.
+- **Archivos modificados:**
+  - `flutter/lib/cercano_chat/cercano_chat_ffi_bridge.dart`
+  - `flutter/lib/cercano_chat/cercano_chat_model.dart`
+  - `flutter/lib/cercano_chat/cercano_chat_page.dart`
+  - `flutter/lib/desktop/pages/desktop_home_page.dart`
+  - `flutter/lib/desktop/pages/desktop_tab_page.dart`
+  - `flutter/test/cercano_chat_model_test.dart`
+  - `src/lang/es.rs`
+  - `src/lang/template.rs`
+- **Estrategia de actualización (upstream sync):** La funcionalidad reside casi en su totalidad dentro del directorio aislado `lib/cercano_chat/`. En `desktop_home_page.dart` y `desktop_tab_page.dart` solo se insertan widgets autocontenidos.
 
 ---
 

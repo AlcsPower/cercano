@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/cercano_chat/cercano_chat_page.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
@@ -31,6 +32,21 @@ class DesktopTabPage extends StatefulWidget {
             key: const ValueKey(kTabLabelSettingPage),
             initialTabkey: initialPage,
           )));
+    } catch (e) {
+      debugPrintStack(label: '$e');
+    }
+  }
+
+  static void onAddChat() {
+    try {
+      DesktopTabController tabController = Get.find<DesktopTabController>();
+      tabController.add(TabInfo(
+        key: 'Cercano Chat',
+        label: translate('Support Chat'),
+        selectedIcon: Icons.chat_bubble,
+        unselectedIcon: Icons.chat_bubble_outline,
+        page: const CercanoChatPage(key: ValueKey('Cercano Chat')),
+      ));
     } catch (e) {
       debugPrintStack(label: '$e');
     }
