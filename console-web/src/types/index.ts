@@ -272,7 +272,68 @@ export interface ChatSummary {
   unread: number;
 }
 
-export type ActiveTab = 'dashboard' | 'devices' | 'chat' | 'builder' | 'users' | 'roles' | 'audit' | 'settings' | 'security' | 'network' | 'twofa';
+export type ActiveTab = 'dashboard' | 'devices' | 'chat' | 'builder' | 'users' | 'roles' | 'audit' | 'identity' | 'settings' | 'security' | 'network' | 'twofa';
+
+export interface GroupItem {
+  id: string;
+  kind: 'user' | 'device';
+  name: string;
+  description?: string;
+  created_at: string;
+  created_by?: string;
+  updated_at: string;
+}
+
+export interface AddressBookItem {
+  id: string;
+  name: string;
+  device_id?: string;
+  group_id?: string;
+  host?: string;
+  port?: number;
+  tags?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface PolicyItem {
+  id: string;
+  scope_type: 'global' | 'group' | 'device';
+  scope_id: string;
+  version: number;
+  document: Record<string, any>;
+  document_sha256: string;
+  state: 'draft' | 'active' | 'superseded' | 'revoked';
+  effective_from?: string;
+  expires_at?: string;
+  created_at: string;
+  created_by?: string;
+}
+
+export interface EffectivePolicyExplanation {
+  value: any;
+  source: string;
+  rule: string;
+}
+
+export interface EffectivePolicyResponse {
+  device_id: string;
+  evaluated_at: string;
+  p0_role: string;
+  policy: Record<string, any>;
+  explanation: Record<string, EffectivePolicyExplanation>;
+}
+
+export interface IdpItem {
+  id: string;
+  kind: 'oidc' | 'ldap';
+  name: string;
+  config: Record<string, any>;
+  secret_ref?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface UserDetail extends User {
   is_active: boolean;

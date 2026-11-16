@@ -14,6 +14,7 @@ import {
   ScrollText,
   Sliders,
   ShieldCheck,
+  BookOpen,
 } from 'lucide-react';
 import { ActiveTab, UserRole } from '../../types';
 
@@ -32,11 +33,11 @@ export function isTabVisibleForRole(tabId: ActiveTab, role?: UserRole | string):
     case 'admin':
       return true; // admin: all tabs
     case 'operator':
-      // operator: dashboard, devices, builder, chat, settings, twofa (and network)
-      return ['dashboard', 'devices', 'builder', 'chat', 'settings', 'twofa', 'network'].includes(tabId);
+      // operator: dashboard, devices, builder, chat, settings, twofa, network, identity
+      return ['dashboard', 'devices', 'builder', 'chat', 'settings', 'twofa', 'network', 'identity'].includes(tabId);
     case 'auditor':
-      // auditor: dashboard, devices, audit, settings, chat, twofa (and network)
-      return ['dashboard', 'devices', 'audit', 'settings', 'chat', 'twofa', 'network'].includes(tabId);
+      // auditor: dashboard, devices, audit, settings, chat, twofa, network, identity
+      return ['dashboard', 'devices', 'audit', 'settings', 'chat', 'twofa', 'network', 'identity'].includes(tabId);
     case 'user':
     default:
       // user: read-only subset
@@ -74,6 +75,11 @@ export const TabBar: React.FC<TabBarProps> = ({
       id: 'roles',
       label: 'Roles y RBAC',
       icon: <Shield size={17} />,
+    },
+    {
+      id: 'identity',
+      label: 'Estrategias e Identidad',
+      icon: <BookOpen size={17} />,
     },
     {
       id: 'audit',

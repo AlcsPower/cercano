@@ -2,14 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import {
+  AddressBookItem,
   AuthResponse,
   BuildJobRecord,
   CercanoProfilePayload,
   Device,
+  EffectivePolicyResponse,
   EnqueueBuildResponse,
+  GroupItem,
+  IdpItem,
   LoginResponse,
   LoginResult,
   MfaChallengeResponse,
+  PolicyItem,
   RotateKeysResponse,
   ServerPublicKeyResponse,
   SystemMetrics,
@@ -1134,6 +1139,175 @@ class CercanoApiClient {
       job.status = 'revoked';
       job.logs += `\n[${new Date().toISOString()}] Instalador revocado por el operador. Razón: ${reason || 'N/A'}`;
     }
+  }
+
+  // ==========================================
+  // Phase 5: Identity, Groups & Central Policies
+  // ==========================================
+
+  public async listGroups(): Promise<GroupItem[]> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch('/api/groups', {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) throw new Error('Error al listar grupos.');
+      return res.json();
+    }
+    return [
+      { id: 'grp-01', kind: 'user', name: 'Soporte Nivel 1', description: 'Técnicos de mesa de ayuda', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { id: 'grp-02', kind: 'device', name: 'Servidores Sucursal Norte', description: 'Nodos de cómputo remotos', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    ];
+  }
+
+  public async createGroup(data: { name: string; kind: 'user' | 'device'; description?: string }): Promise<GroupItem> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Error al crear grupo.');
+      return res.json();
+    }
+    return {
+      id: `grp-mock-${Date.now()}`,
+      kind: data.kind,
+      name: data.name,
+      description: data.description,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  public async deleteGroup(id: string): Promise<void> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch(`/api/groups/${id}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) throw new Error('Error al eliminar grupo.');
+      return;
+    }
+  }
+
+  public async listAddressBook(): Promise<AddressBookItem[]> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch('/api/address-book', {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) throw new Error('Error al listar libreta de direcciones.');
+      return res.json();
+    }
+    return [
+      { id: 'ab-01', name: 'Estación Principal Contabilidad', device_id: 'cercano-dev-91820', host: '172.16.8.10', port: 21118, tags: 'finanzas,lan', created_at: new Date().toISOString() },
+    ];
+  }
+
+  public async createAddressBook(data: { name: string; device_id?: string; group_id?: string; host?: string; port?: number; tags?: string; notes?: string }): Promise<AddressBookItem> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch('/api/address-book', {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Error al crear entrada en libreta.');
+      return res.json();
+    }
+    return {
+      id: `ab-mock-${Date.now()}`,
+      ...data,
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  public async deleteAddressBook(id: string): Promise<void> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch(`/api/address-book/${id}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) throw new Error('Error al eliminar entrada de libreta.');
+      return;
+    }
+  }
+
+  public async listPolicies(): Promise<PolicyItem[]> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch('/api/policies', {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) throw new Error('Error al listar estrategias.');
+      return res.json();
+    }
+    return [
+      {
+        id: 'pol-01',
+        scope_type: 'global',
+        scope_id: '',
+        version: 1,
+        document: { allow_clipboard: true, session_max_duration_minutes: 120 },
+        document_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        state: 'active',
+        created_at: new Date().toISOString(),
+      },
+    ];
+  }
+
+  public async getEffectivePolicy(deviceId: string): Promise<EffectivePolicyResponse> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch(`/api/policies/effective?device_id=${encodeURIComponent(deviceId)}`, {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) throw new Error('Error al consultar política efectiva.');
+      return res.json();
+    }
+    return {
+      device_id: deviceId,
+      evaluated_at: new Date().toISOString(),
+      p0_role: 'soporte',
+      policy: {
+        allow_clipboard: true,
+        allow_file_transfer: false,
+        session_max_duration_minutes: 120,
+      },
+      explanation: {
+        allow_clipboard: { value: true, source: 'P1:global', rule: 'restrictive_bool' },
+        allow_file_transfer: { value: false, source: 'P0:profile_ceiling', rule: 'p0_ceiling_enforced' },
+        session_max_duration_minutes: { value: 120, source: 'P1:global', rule: 'min_scalar' },
+      },
+    };
+  }
+
+  public async listIdps(): Promise<IdpItem[]> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch('/api/idp', {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) throw new Error('Error al listar proveedores de identidad.');
+      return res.json();
+    }
+    return [
+      {
+        id: 'idp-01',
+        kind: 'oidc',
+        name: 'Azure AD / Entra ID Corporativo',
+        config: { issuer: 'https://login.microsoftonline.com/tenant', client_id: 'cercano-sso', client_secret: '********' },
+        enabled: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+  }
+
+  public async testIdp(id: string): Promise<{ ok: boolean; status?: string; error?: string }> {
+    if (this.isConnectedToLiveApi) {
+      const res = await fetch(`/api/idp/${encodeURIComponent(id)}/test`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+      });
+      return res.json();
+    }
+    return { ok: true, status: 'healthy' };
   }
 }
 

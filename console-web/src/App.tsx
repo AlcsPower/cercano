@@ -14,6 +14,7 @@ import { SecurityView } from './components/views/SecurityView';
 import { NetworkView } from './components/views/NetworkView';
 import { UsersView } from './components/views/UsersView';
 import { RolesView } from './components/views/RolesView';
+import { IdentityView } from './components/views/IdentityView';
 import { AuditView } from './components/views/AuditView';
 import { SettingsView } from './components/views/SettingsView';
 import { TwoFAView } from './components/views/TwoFAView';
@@ -155,6 +156,8 @@ export const App: React.FC = () => {
         {activeTab === 'users' && <UsersView />}
 
         {activeTab === 'roles' && <RolesView />}
+
+        {activeTab === 'identity' && <IdentityView />}
 
         {activeTab === 'audit' && <AuditView />}
 
