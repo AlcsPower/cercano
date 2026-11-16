@@ -19,6 +19,9 @@
 
 //! Domain models and types for Identity, Groups, Address Book and Central Policies (F5).
 
+pub mod address_book;
+pub mod groups;
+
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{FromRow, Row};

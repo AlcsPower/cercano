@@ -35,7 +35,7 @@ pub mod routes;
 pub mod server_keys;
 pub mod shutdown;
 
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 pub use config::Config;
 pub use db::init_db;
@@ -300,6 +300,47 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/chat/agents",
             get(chat::conversations::list_chat_agents_handler),
+        )
+        // Groups API (F5-03)
+        .route(
+            "/api/groups",
+            get(identity::groups::list_groups_handler).post(identity::groups::create_group_handler),
+        )
+        .route(
+            "/api/groups/:id",
+            get(identity::groups::get_group_handler)
+                .patch(identity::groups::update_group_handler)
+                .delete(identity::groups::delete_group_handler),
+        )
+        .route(
+            "/api/groups/:id/members",
+            get(identity::groups::list_group_members_handler),
+        )
+        .route(
+            "/api/groups/:id/members/:subject_type/:subject_id",
+            post(identity::groups::add_group_member_handler)
+                .delete(identity::groups::remove_group_member_handler),
+        )
+        .route(
+            "/api/groups/:id/grants",
+            get(identity::groups::list_group_grants_handler)
+                .post(identity::groups::add_group_grant_handler),
+        )
+        .route(
+            "/api/groups/:id/grants/:to/:permission",
+            delete(identity::groups::remove_group_grant_handler),
+        )
+        // Address Book API (F5-03)
+        .route(
+            "/api/address-book",
+            get(identity::address_book::list_address_book_handler)
+                .post(identity::address_book::create_address_book_handler),
+        )
+        .route(
+            "/api/address-book/:id",
+            get(identity::address_book::get_address_book_handler)
+                .patch(identity::address_book::update_address_book_handler)
+                .delete(identity::address_book::delete_address_book_handler),
         )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
