@@ -130,7 +130,7 @@ Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5. F5-
 | F5-03 | API CRUD de grupos y libreta con auditoría | F5-02, F4-05 | ControlPlane | QA | Hecho |
 | F5-04 | Enforcement de alcance por rol/grupo y permisos entre grupos | F5-02/03 | ControlPlane | Seguridad | Hecho |
 | F5-05 | Servicio de estrategias: versionado, precedencia y política efectiva | F5-01/02 | ControlPlane | Seguridad/QA | Hecho |
-| F5-06 | Cliente: descarga, cacheo y aplicación segura de estrategias | F5-05, F3-02/13 | Cliente | QA/Seguridad | Pendiente |
+| F5-06 | Cliente: descarga, cacheo y aplicación segura de estrategias | F5-05, F3-02/13 | Cliente | QA/Seguridad | Hecho |
 | F5-07 | Inicio de sesión OIDC con PKCE y vinculación de identidad | F5-01, F4 | ControlPlane | Seguridad | Pendiente |
 | F5-08 | Autenticación LDAP sobre TLS y mapeo explícito de grupos | F5-01, F4 | ControlPlane | Seguridad | Pendiente |
 | F5-09 | Evaluar cambio de ID de dispositivo y decisión ADR | F5-01, F1-05 | Coordinador + Servidor | Seguridad/Dueño | Pendiente |

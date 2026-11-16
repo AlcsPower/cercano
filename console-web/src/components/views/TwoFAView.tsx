@@ -41,21 +41,10 @@ export const TwoFAView: React.FC = () => {
     const check2faStatus = async () => {
       setIsCheckingStatus(true);
       try {
-        const users = await apiClient.getUsers();
-        const currentUser =
-          users.find(
-            (u) =>
-              (user?.id && u.id === user.id) ||
-              (user?.username && u.username === user.username)
-          ) || (users.length === 1 ? users[0] : undefined);
-
-        if (currentUser && isMounted) {
-          const active =
-            currentUser.totp_enabled === true ||
-            (currentUser.totp_enabled as unknown === 1) ||
-            currentUser.is_2fa_required === true ||
-            (currentUser.is_2fa_required as unknown === 1);
-          setIs2faActive(Boolean(active));
+        const me = await apiClient.getMe();
+        if (me && isMounted) {
+          const active = Boolean((me as { mfa_verified?: boolean }).mfa_verified || (me as { totp_enabled?: boolean }).totp_enabled);
+          setIs2faActive(active);
         }
       } catch (err: unknown) {
         if (isMounted && err instanceof Error) {

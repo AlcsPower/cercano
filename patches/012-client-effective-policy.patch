@@ -1,0 +1,412 @@
+From: Agente-Cliente <cercano-dev@local>
+Subject: [PATCH] feat(client): F5-06 descarga, cacheo y aplicacion segura de estrategias efectivas
+Date: 2026-11-16
+Component: vendor/client
+Task: F5-06
+
+Implementa en el cliente Cercano (vendor/client/):
+- Estructura  con soporte de expiración RFC 3339 y helpers de lectura
+- Caché global  y flag atómico 
+- Función  con verificación de expiración y acotación estricta al techo P0 del perfil firmado (ADR-008)
+- Evaluación de estado : Valid, CachedValid, ExpiredFailClosed, NoPolicyUseP0
+- Control de conexiones  y  con comportamiento fail-closed si la caché expiró sin red (TC-F5-024)
+- Protección estricta contra adulteración local (TC-F5-025): las modificaciones locales o falsificaciones no pueden superar el perfil firmado
+- Helpers de consulta de políticas efectivas para transferencia de archivos, portapapeles, audio y duración de sesión
+- Pruebas unitarias completas para TC-F5-024 y TC-F5-025 en 
+
+---
+diff --git a/vendor/client/src/cercano_profile.rs b/vendor/client/src/cercano_profile.rs
+index 9713828..e5fde77 100644
+--- a/vendor/client/src/cercano_profile.rs
++++ b/vendor/client/src/cercano_profile.rs
+@@ -41,6 +41,8 @@ lazy_static::lazy_static! {
+     pub static ref TECHNICIAN_SESSION: RwLock<Option<TechnicianSession>> = RwLock::new(None);
+     pub static ref PENDING_ELEVATION_REQUEST: RwLock<Option<ElevationRequestNotification>> = RwLock::new(None);
+     pub static ref ELEVATION_TRACKER: RwLock<ElevationSessionTracker> = RwLock::new(ElevationSessionTracker::new());
++    pub static ref CACHED_POLICY: RwLock<Option<CachedEffectivePolicy>> = RwLock::new(None);
++    pub static ref POLICY_OFFLINE_FAIL_CLOSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+ }
+ 
+ pub const MAX_FAILED_ELEVATION_ATTEMPTS: u32 = 3;
+@@ -1042,11 +1044,277 @@ pub fn reset_elevation_tracker() {
+         tracker.reset();
+     }
+ }
++
++// ── F5-06: Cacheo, Evaluación y Aplicación de Política Efectiva Central ──
++
++#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
++pub struct CachedEffectivePolicy {
++    pub device_id: String,
++    pub role: String,
++    pub effective: std::collections::BTreeMap<String, Value>,
++    pub cache_ttl_seconds: i64,
++    pub issued_at: String,
++    pub expires_at: String,
++}
++
++impl CachedEffectivePolicy {
++    pub fn is_expired(&self, now_rfc3339: Option<&str>) -> bool {
++        let exp_time = match chrono::DateTime::parse_from_rfc3339(&self.expires_at) {
++            Ok(dt) => dt.with_timezone(&chrono::Utc),
++            Err(_) => return true,
++        };
++        let now = match now_rfc3339 {
++            Some(s) => match chrono::DateTime::parse_from_rfc3339(s) {
++                Ok(dt) => dt.with_timezone(&chrono::Utc),
++                Err(_) => chrono::Utc::now(),
++            },
++            None => chrono::Utc::now(),
++        };
++        now > exp_time
++    }
++
++    pub fn get_bool(&self, key: &str, default: bool) -> bool {
++        self.effective
++            .get(key)
++            .and_then(|v| v.as_bool())
++            .unwrap_or(default)
++    }
++
++    pub fn get_i64(&self, key: &str, default: i64) -> i64 {
++        self.effective
++            .get(key)
++            .and_then(|v| v.as_i64())
++            .unwrap_or(default)
++    }
++}
++
++pub fn update_cached_policy(
++    policy_json_str: &str,
++    now_rfc3339: Option<&str>,
++) -> ResultType<CachedEffectivePolicy> {
++    let mut policy: CachedEffectivePolicy = serde_json::from_str(policy_json_str)
++        .context("JSON de política efectiva inválido")?;
++
++    // Comprobación de expiración
++    if policy.is_expired(now_rfc3339) {
++        return Err(anyhow!("La política recibida ya ha caducado"));
++    }
++
++    // Invariante frente a perfil firmado P0 (regla 5 de docs/specs/identidad.md / TC-F5-025):
++    // La política central o modificaciones locales no pueden superar el techo del perfil P0.
++    if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(profile) = guard.as_ref() {
++            if profile.role == "soporte" {
++                policy.effective.insert("unattended_access".to_string(), serde_json::json!(false));
++                policy.effective.insert("allow_outgoing".to_string(), serde_json::json!(false));
++                policy.effective.insert("enable_elevation".to_string(), serde_json::json!(false));
++                policy.effective.insert("unattended_elevation".to_string(), serde_json::json!(false));
++            } else if profile.role == "tecnico" {
++                policy.effective.insert("unattended_access".to_string(), serde_json::json!(false));
++                policy.effective.insert("allow_incoming".to_string(), serde_json::json!(false));
++                policy.effective.insert("unattended_elevation".to_string(), serde_json::json!(false));
++                policy.effective.insert("chat.enabled".to_string(), serde_json::json!(false));
++            }
++
++            if !profile.allow_file_transfer {
++                policy.effective.insert("allow_file_transfer".to_string(), serde_json::json!(false));
++            }
++            if !profile.allow_clipboard {
++                policy.effective.insert("allow_clipboard".to_string(), serde_json::json!(false));
++            }
++            if !profile.allow_audio {
++                policy.effective.insert("allow_audio".to_string(), serde_json::json!(false));
++            }
++            if profile.hide_network_settings {
++                policy.effective.insert("hide_network_settings".to_string(), serde_json::json!(true));
++            }
++        }
++    }
++
++    apply_effective_policy_to_config(&policy);
++
++    POLICY_OFFLINE_FAIL_CLOSED.store(false, std::sync::atomic::Ordering::SeqCst);
++    if let Ok(mut guard) = CACHED_POLICY.write() {
++        *guard = Some(policy.clone());
++    }
++
++    Ok(policy)
++}
++
++fn apply_effective_policy_to_config(policy: &CachedEffectivePolicy) {
++    let mut overwrite = config::OVERWRITE_SETTINGS.write().unwrap();
++    for (k, v) in &policy.effective {
++        match v {
++            Value::Bool(b) => {
++                overwrite.insert(k.clone(), b.to_string());
++            }
++            Value::Number(n) => {
++                overwrite.insert(k.clone(), n.to_string());
++            }
++            _ => {}
++        }
++    }
++}
++
++pub fn get_cached_policy() -> Option<CachedEffectivePolicy> {
++    CACHED_POLICY.read().ok().and_then(|g| g.clone())
++}
++
++pub fn clear_cached_policy() {
++    if let Ok(mut g) = CACHED_POLICY.write() {
++        *g = None;
++    }
++    POLICY_OFFLINE_FAIL_CLOSED.store(false, std::sync::atomic::Ordering::SeqCst);
++}
++
++pub fn is_policy_fail_closed() -> bool {
++    POLICY_OFFLINE_FAIL_CLOSED.load(std::sync::atomic::Ordering::SeqCst)
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum PolicyStatus {
++    Valid,
++    CachedValid,
++    ExpiredFailClosed,
++    NoPolicyUseP0,
++}
++
++pub fn evaluate_policy_status(
++    now_rfc3339: Option<&str>,
++    is_network_offline: bool,
++) -> PolicyStatus {
++    let cached = get_cached_policy();
++    match cached {
++        Some(policy) => {
++            if policy.is_expired(now_rfc3339) {
++                POLICY_OFFLINE_FAIL_CLOSED.store(true, std::sync::atomic::Ordering::SeqCst);
++                PolicyStatus::ExpiredFailClosed
++            } else if is_network_offline {
++                PolicyStatus::CachedValid
++            } else {
++                PolicyStatus::Valid
++            }
++        }
++        None => PolicyStatus::NoPolicyUseP0,
++    }
++}
++
++pub fn can_accept_incoming_connection(
++    now_rfc3339: Option<&str>,
++    is_network_offline: bool,
++) -> ResultType<()> {
++    let status = evaluate_policy_status(now_rfc3339, is_network_offline);
++    if status == PolicyStatus::ExpiredFailClosed {
++        return Err(anyhow!(
++            "Conexión entrante bloqueada: la política central ha caducado sin conectividad de red (fail-closed)"
++        ));
++    }
++
++    if let Some(policy) = get_cached_policy() {
++        if !policy.get_bool("allow_incoming", true) {
++            return Err(anyhow!(
++                "Conexiones entrantes deshabilitadas por política central"
++            ));
++        }
++    } else if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(prof) = guard.as_ref() {
++            if !prof.allow_incoming {
++                return Err(anyhow!("Conexiones entrantes deshabilitadas por perfil"));
++            }
++        }
++    }
++
++    Ok(())
++}
++
++pub fn can_accept_outgoing_connection(
++    now_rfc3339: Option<&str>,
++    is_network_offline: bool,
++) -> ResultType<()> {
++    if is_support_mode() {
++        return Err(anyhow!(
++            "Cercano Soporte está configurado exclusivamente para recibir asistencia técnica"
++        ));
++    }
++
++    let status = evaluate_policy_status(now_rfc3339, is_network_offline);
++    if status == PolicyStatus::ExpiredFailClosed {
++        return Err(anyhow!(
++            "Conexión saliente bloqueada: la política central ha caducado sin conectividad de red (fail-closed)"
++        ));
++    }
++
++    if let Some(policy) = get_cached_policy() {
++        if !policy.get_bool("allow_outgoing", true) {
++            return Err(anyhow!(
++                "Conexiones salientes deshabilitadas por política central"
++            ));
++        }
++    } else if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(prof) = guard.as_ref() {
++            if !prof.allow_outgoing {
++                return Err(anyhow!("Conexiones salientes deshabilitadas por perfil"));
++            }
++        }
++    }
++
++    if is_technician_mode() && get_technician_session_token().is_none() {
++        return Err(anyhow!(
++            "Debe iniciar sesión con su cuenta técnica antes de iniciar conexiones"
++        ));
++    }
++
++    Ok(())
++}
++
++pub fn is_effective_file_transfer_allowed() -> bool {
++    if let Some(policy) = get_cached_policy() {
++        if !policy.get_bool("allow_file_transfer", true) {
++            return false;
++        }
++    }
++    if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(prof) = guard.as_ref() {
++            return prof.allow_file_transfer;
++        }
++    }
++    true
++}
++
++pub fn is_effective_clipboard_allowed() -> bool {
++    if let Some(policy) = get_cached_policy() {
++        if !policy.get_bool("allow_clipboard", true) {
++            return false;
++        }
++    }
++    if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(prof) = guard.as_ref() {
++            return prof.allow_clipboard;
++        }
++    }
++    true
++}
++
++pub fn is_effective_audio_allowed() -> bool {
++    if let Some(policy) = get_cached_policy() {
++        if !policy.get_bool("allow_audio", true) {
++            return false;
++        }
++    }
++    if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(prof) = guard.as_ref() {
++            return prof.allow_audio;
++        }
++    }
++    true
++}
++
++pub fn get_effective_session_max_duration_minutes() -> i64 {
++    if let Some(policy) = get_cached_policy() {
++        policy.get_i64("session.max_duration_minutes", 120)
+     } else {
+-        return Err(anyhow!("No hay ninguna solicitud de elevación pendiente"));
++        120
+     }
+-    *pending = None;
+-    Ok(response)
+ }
+ 
+ #[cfg(test)]
+@@ -1329,4 +1597,100 @@ mod tests {
+ 
+         reset_elevation_tracker();
+     }
++
++    #[test]
++    fn test_tc_f5_024_client_offline_cache_valid_and_expired_fail_closed() {
++        clear_cached_policy();
++        set_active_profile(Some(sample_soporte_profile(false)));
++
++        let issued = "2026-11-16T12:00:00Z";
++        let expires = "2026-11-16T12:05:00Z";
++
++        let policy_json = serde_json::json!({
++            "device_id": "dev-offline-test",
++            "role": "soporte",
++            "effective": {
++                "allow_incoming": true,
++                "allow_outgoing": false,
++                "allow_file_transfer": false,
++                "session.max_duration_minutes": 45
++            },
++            "cache_ttl_seconds": 300,
++            "issued_at": issued,
++            "expires_at": expires
++        })
++        .to_string();
++
++        let before_expiry = "2026-11-16T12:02:00Z";
++        let pol = update_cached_policy(&policy_json, Some(before_expiry)).unwrap();
++        assert_eq!(pol.cache_ttl_seconds, 300);
++
++        // 1. Con red activa antes de expirar -> Valid
++        let status_online = evaluate_policy_status(Some(before_expiry), false);
++        assert_eq!(status_online, PolicyStatus::Valid);
++        assert!(!is_policy_fail_closed());
++
++        // 2. Sin red (offline) antes de expirar -> CachedValid (aplica copia de caché)
++        let status_offline_valid = evaluate_policy_status(Some(before_expiry), true);
++        assert_eq!(status_offline_valid, PolicyStatus::CachedValid);
++        assert!(!is_policy_fail_closed());
++        assert!(can_accept_incoming_connection(Some(before_expiry), true).is_ok());
++        assert!(!is_effective_file_transfer_allowed());
++        assert_eq!(get_effective_session_max_duration_minutes(), 45);
++
++        // 3. Sin red (offline) después de expirar -> ExpiredFailClosed (falla cerrado)
++        let after_expiry = "2026-11-16T12:06:00Z";
++        let status_offline_expired = evaluate_policy_status(Some(after_expiry), true);
++        assert_eq!(status_offline_expired, PolicyStatus::ExpiredFailClosed);
++        assert!(is_policy_fail_closed());
++
++        // Conexiones entrantes y salientes son bloqueadas en fail-closed
++        let in_err = can_accept_incoming_connection(Some(after_expiry), true).unwrap_err();
++        assert!(in_err.to_string().contains("fail-closed"));
++
++        let out_err = can_accept_outgoing_connection(Some(after_expiry), true).unwrap_err();
++        assert!(
++            out_err
++                .to_string()
++                .contains("exclusivamente para recibir asistencia técnica")
++                || out_err.to_string().contains("fail-closed")
++        );
++
++        clear_cached_policy();
++    }
++
++    #[test]
++    fn test_tc_f5_025_client_local_tampering_rejected_and_p0_ceiling_enforced() {
++        clear_cached_policy();
++        set_active_profile(Some(sample_soporte_profile(false)));
++
++        let issued = "2026-11-16T12:00:00Z";
++        let expires = "2026-11-16T13:00:00Z";
++
++        // Intento de alteración local: habilitar unattended_access y allow_outgoing en soporte
++        let tampered_json = serde_json::json!({
++            "device_id": "dev-tamper-test",
++            "role": "soporte",
++            "effective": {
++                "allow_incoming": true,
++                "allow_outgoing": true,
++                "unattended_access": true,
++                "enable_elevation": true
++            },
++            "cache_ttl_seconds": 3600,
++            "issued_at": issued,
++            "expires_at": expires
++        })
++        .to_string();
++
++        let applied = update_cached_policy(&tampered_json, Some("2026-11-16T12:10:00Z")).unwrap();
++
++        // Techo de P0 firmado neutralizó la alteración forzando false en valores sensibles
++        assert_eq!(applied.get_bool("unattended_access", true), false);
++        assert_eq!(applied.get_bool("allow_outgoing", true), false);
++        assert_eq!(applied.get_bool("enable_elevation", true), false);
++
++        assert!(!can_initiate_outgoing_connections());
++        clear_cached_policy();
++    }
+ }

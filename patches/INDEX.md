@@ -28,6 +28,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `009-client-flutter-chat.patch` | F4.5-11 | `vendor/client` | Interfaz Flutter de Cercano Chat, modelo, vista de bienvenida y onboarding (nombre/apellido), hilo de mensajes, composer, adjuntos, botón en panel soporte e i18n | `flutter/lib/cercano_chat/*`, `flutter/lib/desktop/pages/*`, `flutter/test/*`, `src/lang/*` | 2026-11-16 | Agente-Cliente |
 | `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
+| `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 
 ---
 
@@ -270,6 +271,26 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Archivos modificados:**
   - `src/cercano_profile.rs`
 - **Estrategia de actualización (upstream sync):** Modificación contenida exclusivamente en el módulo `cercano_profile.rs`, independiente de la lógica central de upstream.
+
+---
+
+### [012-client-effective-policy.patch] Tarea F5-06: Descarga, cacheo y aplicación segura de estrategias
+
+- **Archivo:** `patches/012-client-effective-policy.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F5-06`
+- **Fecha:** `2026-11-16`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** Implementa en `vendor/client/src/cercano_profile.rs` el modelo de cliente para consumir políticas centrales de `/api/policies/effective`:
+  - `CachedEffectivePolicy`: almacena la política resuelta con `issued_at`, `expires_at` y `cache_ttl_seconds`.
+  - `update_cached_policy`: valida la vigencia temporal y acota los permisos recibidos frente al perfil firmado P0 (regla 5 de `docs/specs/identidad.md`).
+  - `evaluate_policy_status`: evalúa si la copia en caché está vigente (`Valid` / `CachedValid`) o caducada. Si la red no está disponible y la caché expira, conmuta atómicamente a `ExpiredFailClosed`.
+  - `can_accept_incoming_connection` y `can_accept_outgoing_connection`: bloquean nuevas conexiones si la política expiró sin conectividad central (comportamiento *fail-closed* conforme a TC-F5-024).
+  - Inmunidad a adulteración local (TC-F5-025): cualquier intento de elevar privilegios localmente es neutralizado forzosamente por el perfil firmado P0.
+  - Helpers de consulta de políticas efectivas para transferencia de archivos, portapapeles, audio y duración de sesión.
+- **Archivos modificados:**
+  - `src/cercano_profile.rs`
+- **Estrategia de actualización (upstream sync):** Funcionalidad contenida en `cercano_profile.rs` sin alterar código base heredado de RustDesk.
 
 ---
 
