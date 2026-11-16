@@ -315,6 +315,116 @@ pub const MIGRATIONS: &[Migration] = &[
             ON chat_reads(reader_type, reader_id);
         "#,
     },
+    Migration {
+        version: 9,
+        name: "009_identity_groups_policies_idp",
+        sql: r#"
+        CREATE TABLE IF NOT EXISTS groups (
+            id          TEXT PRIMARY KEY,
+            kind        TEXT NOT NULL CHECK (kind IN ('user','device')),
+            name        TEXT NOT NULL,
+            description TEXT,
+            created_at  TEXT NOT NULL,
+            created_by  TEXT,
+            updated_at  TEXT NOT NULL,
+            updated_by  TEXT,
+            UNIQUE (kind, name)
+        );
+
+        CREATE TABLE IF NOT EXISTS group_members (
+            group_id     TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+            subject_type TEXT NOT NULL CHECK (subject_type IN ('user','device')),
+            subject_id   TEXT NOT NULL,
+            added_at     TEXT NOT NULL,
+            added_by     TEXT,
+            PRIMARY KEY (group_id, subject_type, subject_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS group_grants (
+            from_group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+            to_group_id   TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+            permission    TEXT NOT NULL CHECK (permission IN ('read','operate')),
+            created_at    TEXT NOT NULL,
+            created_by    TEXT,
+            PRIMARY KEY (from_group_id, to_group_id, permission),
+            CHECK (from_group_id <> to_group_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS address_book (
+            id         TEXT PRIMARY KEY,
+            name       TEXT NOT NULL,
+            device_id  TEXT REFERENCES devices(id) ON DELETE CASCADE,
+            group_id   TEXT REFERENCES groups(id) ON DELETE SET NULL,
+            host       TEXT,
+            port       INTEGER,
+            tags       TEXT,
+            notes      TEXT,
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            updated_at TEXT NOT NULL,
+            updated_by TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS policies (
+            id              TEXT PRIMARY KEY,
+            scope_type      TEXT NOT NULL CHECK (scope_type IN ('global','group','device')),
+            scope_id        TEXT NOT NULL,
+            version         INTEGER NOT NULL,
+            document        TEXT NOT NULL,
+            document_sha256 TEXT NOT NULL,
+            state           TEXT NOT NULL CHECK (state IN ('draft','active','superseded','revoked')),
+            effective_from  TEXT,
+            expires_at      TEXT,
+            created_at      TEXT NOT NULL,
+            created_by      TEXT,
+            revoked_at      TEXT,
+            revoked_by      TEXT,
+            UNIQUE (scope_type, scope_id, version),
+            CHECK (scope_type <> 'global' OR scope_id = '')
+        );
+
+        CREATE TABLE IF NOT EXISTS identity_providers (
+            id         TEXT PRIMARY KEY,
+            kind       TEXT NOT NULL CHECK (kind IN ('oidc','ldap')),
+            name       TEXT NOT NULL UNIQUE,
+            config     TEXT NOT NULL,
+            secret_ref TEXT,
+            enabled    INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            updated_at TEXT NOT NULL,
+            updated_by TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS federated_identities (
+            id            TEXT PRIMARY KEY,
+            provider_id   TEXT NOT NULL REFERENCES identity_providers(id) ON DELETE CASCADE,
+            subject       TEXT NOT NULL,
+            user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at    TEXT NOT NULL,
+            last_login_at TEXT,
+            revoked_at    TEXT,
+            UNIQUE (provider_id, subject),
+            UNIQUE (provider_id, user_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_group_members_subject
+            ON group_members(subject_type, subject_id);
+        CREATE INDEX IF NOT EXISTS idx_group_grants_to
+            ON group_grants(to_group_id, permission);
+        CREATE INDEX IF NOT EXISTS idx_address_book_device
+            ON address_book(device_id);
+        CREATE INDEX IF NOT EXISTS idx_address_book_group
+            ON address_book(group_id);
+        CREATE INDEX IF NOT EXISTS idx_policies_scope
+            ON policies(scope_type, scope_id, version);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_active
+            ON policies(scope_type, scope_id)
+            WHERE state = 'active';
+        CREATE INDEX IF NOT EXISTS idx_federated_identities_user
+            ON federated_identities(user_id);
+        "#,
+    },
 ];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
@@ -483,7 +593,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 8);
+        assert_eq!(rows.len(), 9);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
         assert_eq!(rows[1].get::<i64, _>("version"), 2);
@@ -500,6 +610,11 @@ mod tests {
         assert_eq!(rows[6].get::<String, _>("name"), "007_console_rbac_2fa");
         assert_eq!(rows[7].get::<i64, _>("version"), 8);
         assert_eq!(rows[7].get::<String, _>("name"), "008_chat_schema");
+        assert_eq!(rows[8].get::<i64, _>("version"), 9);
+        assert_eq!(
+            rows[8].get::<String, _>("name"),
+            "009_identity_groups_policies_idp"
+        );
 
         // Verify build_jobs table exists
         let build_jobs = sqlx::query("SELECT count(*) as cnt FROM build_jobs")
@@ -568,6 +683,23 @@ mod tests {
         assert_eq!(branding.get::<String, _>("support_name"), "Cercano Soporte");
         assert_eq!(branding.get::<String, _>("accent_color"), "#3B5BFF");
 
+        // Verify F5 identity, groups, policies and idp tables
+        for table in [
+            "groups",
+            "group_members",
+            "group_grants",
+            "address_book",
+            "policies",
+            "identity_providers",
+            "federated_identities",
+        ] {
+            let count = sqlx::query(&format!("SELECT count(*) as cnt FROM {table}"))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(count.get::<i64, _>("cnt"), 0, "tabla {table} vacía");
+        }
+
         // Verify idempotency of run_migrations
         let second_run = run_migrations(&pool).await;
         assert!(second_run.is_ok());
@@ -586,7 +718,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 8);
+        assert_eq!(rows.len(), 9);
     }
 
     #[tokio::test]
@@ -801,5 +933,120 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(remaining_attempts.get::<i64, _>("cnt"), 1);
+    }
+
+    #[tokio::test]
+    async fn test_f5_02_identity_groups_policies_idp_schema() {
+        let pool = init_db("sqlite::memory:").await.unwrap();
+
+        // 1. Groups & Constraints
+        sqlx::query("INSERT INTO groups (id, kind, name, created_at, updated_at) VALUES ('grp-u1', 'user', 'Soporte N1', '2026-11-16T12:00:00Z', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query("INSERT INTO groups (id, kind, name, created_at, updated_at) VALUES ('grp-d1', 'device', 'Servidores Core', '2026-11-16T12:00:00Z', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Check constraint kind IN ('user', 'device')
+        let invalid_kind = sqlx::query("INSERT INTO groups (id, kind, name, created_at, updated_at) VALUES ('grp-x', 'other', 'Invalido', '2026-11-16T12:00:00Z', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await;
+        assert!(invalid_kind.is_err());
+
+        // Unique constraint (kind, name)
+        let dup_group = sqlx::query("INSERT INTO groups (id, kind, name, created_at, updated_at) VALUES ('grp-u2', 'user', 'Soporte N1', '2026-11-16T12:00:00Z', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await;
+        assert!(dup_group.is_err());
+
+        // 2. Group Members & Cascading Delete
+        sqlx::query("INSERT INTO group_members (group_id, subject_type, subject_id, added_at) VALUES ('grp-u1', 'user', 'usr-123', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // 3. Group Grants
+        sqlx::query("INSERT INTO group_grants (from_group_id, to_group_id, permission, created_at) VALUES ('grp-u1', 'grp-d1', 'read', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Self-grant rejected (CHECK from_group_id <> to_group_id)
+        let self_grant = sqlx::query("INSERT INTO group_grants (from_group_id, to_group_id, permission, created_at) VALUES ('grp-u1', 'grp-u1', 'read', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await;
+        assert!(self_grant.is_err());
+
+        // 4. Address Book
+        sqlx::query("INSERT INTO address_book (id, name, group_id, created_at, updated_at) VALUES ('ab-1', 'Server Alpha', 'grp-d1', '2026-11-16T12:00:00Z', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // 5. Policies & Constraints
+        // Global policy (scope_id MUST be '')
+        sqlx::query("INSERT INTO policies (id, scope_type, scope_id, version, document, document_sha256, state, created_at) VALUES ('pol-1', 'global', '', 1, '{}', 'sha', 'active', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Global policy with non-empty scope_id rejected
+        let invalid_global = sqlx::query("INSERT INTO policies (id, scope_type, scope_id, version, document, document_sha256, state, created_at) VALUES ('pol-x', 'global', 'not-empty', 1, '{}', 'sha', 'active', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await;
+        assert!(invalid_global.is_err());
+
+        // Partial unique index: second active policy for (global, '') rejected
+        let dup_active_global = sqlx::query("INSERT INTO policies (id, scope_type, scope_id, version, document, document_sha256, state, created_at) VALUES ('pol-2', 'global', '', 2, '{}', 'sha', 'active', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await;
+        assert!(dup_active_global.is_err());
+
+        // 6. Identity Providers & Federated Identities
+        sqlx::query("INSERT INTO identity_providers (id, kind, name, config, created_at, updated_at) VALUES ('idp-1', 'oidc', 'Keycloak Corporate', '{}', '2026-11-16T12:00:00Z', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Check kind IN ('oidc', 'ldap')
+        let invalid_idp = sqlx::query("INSERT INTO identity_providers (id, kind, name, config, created_at, updated_at) VALUES ('idp-x', 'saml', 'Invalid IdP', '{}', '2026-11-16T12:00:00Z', '2026-11-16T12:00:00Z')")
+            .execute(&pool)
+            .await;
+        assert!(invalid_idp.is_err());
+
+        // 7. Test Cascade Delete on Group
+        sqlx::query("DELETE FROM groups WHERE id = 'grp-u1'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let remaining_members =
+            sqlx::query("SELECT count(*) as cnt FROM group_members WHERE group_id = 'grp-u1'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(remaining_members.get::<i64, _>("cnt"), 0);
+
+        let remaining_grants =
+            sqlx::query("SELECT count(*) as cnt FROM group_grants WHERE from_group_id = 'grp-u1'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(remaining_grants.get::<i64, _>("cnt"), 0);
+
+        // Address book group_id set to null on delete
+        sqlx::query("DELETE FROM groups WHERE id = 'grp-d1'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let ab_entry = sqlx::query("SELECT group_id FROM address_book WHERE id = 'ab-1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(ab_entry.get::<Option<String>, _>("group_id").is_none());
     }
 }

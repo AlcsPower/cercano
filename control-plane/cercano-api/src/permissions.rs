@@ -62,6 +62,15 @@ pub const TWOFA_ENROLL: &str = "2fa:enroll";
 pub const TWOFA_REVOKE: &str = "2fa:revoke";
 pub const DB_ADMIN: &str = "db:admin";
 
+pub const GROUPS_READ: &str = "groups:read";
+pub const GROUPS_MANAGE: &str = "groups:manage";
+pub const BOOK_READ: &str = "book:read";
+pub const BOOK_MANAGE: &str = "book:manage";
+pub const POLICY_READ: &str = "policy:read";
+pub const POLICY_MANAGE: &str = "policy:manage";
+pub const IDP_MANAGE: &str = "idp:manage";
+pub const IDENTITY_MANAGE: &str = "identity:manage";
+
 const OPERATOR_PERMISSIONS: &[&str] = &[
     USERS_READ,
     DEVICES_READ,
@@ -74,6 +83,9 @@ const OPERATOR_PERMISSIONS: &[&str] = &[
     CHAT_CLOSE,
     TWOFA_ENROLL,
     TWOFA_REVOKE,
+    GROUPS_READ,
+    BOOK_READ,
+    POLICY_READ,
 ];
 
 const AUDITOR_PERMISSIONS: &[&str] = &[
@@ -84,6 +96,8 @@ const AUDITOR_PERMISSIONS: &[&str] = &[
     SETTINGS_READ,
     CHAT_READ,
     TWOFA_ENROLL,
+    GROUPS_READ,
+    POLICY_READ,
 ];
 
 const LEGACY_PERMISSIONS: &[&str] = &[
@@ -360,6 +374,11 @@ mod tests {
         assert!(has_permission(ADMIN, CHAT_WRITE));
         assert!(has_permission(ADMIN, CHAT_CLOSE));
         assert!(has_permission(ADMIN, CHAT_MANAGE_BRANDING));
+        assert!(has_permission(ADMIN, GROUPS_MANAGE));
+        assert!(has_permission(ADMIN, BOOK_MANAGE));
+        assert!(has_permission(ADMIN, POLICY_MANAGE));
+        assert!(has_permission(ADMIN, IDP_MANAGE));
+        assert!(has_permission(ADMIN, IDENTITY_MANAGE));
     }
 
     #[test]
@@ -371,6 +390,13 @@ mod tests {
         assert!(has_permission(OPERATOR, CHAT_WRITE));
         assert!(has_permission(OPERATOR, CHAT_CLOSE));
         assert!(!has_permission(OPERATOR, CHAT_MANAGE_BRANDING));
+        assert!(has_permission(OPERATOR, GROUPS_READ));
+        assert!(has_permission(OPERATOR, BOOK_READ));
+        assert!(has_permission(OPERATOR, POLICY_READ));
+        assert!(!has_permission(OPERATOR, GROUPS_MANAGE));
+        assert!(!has_permission(OPERATOR, BOOK_MANAGE));
+        assert!(!has_permission(OPERATOR, POLICY_MANAGE));
+        assert!(!has_permission(OPERATOR, IDP_MANAGE));
 
         assert!(has_permission(AUDITOR, AUDIT_READ));
         assert!(has_permission(AUDITOR, CHAT_READ));
@@ -378,6 +404,11 @@ mod tests {
         assert!(!has_permission(AUDITOR, CHAT_CLOSE));
         assert!(!has_permission(AUDITOR, CHAT_MANAGE_BRANDING));
         assert!(!has_permission(AUDITOR, USERS_MANAGE));
+        assert!(has_permission(AUDITOR, GROUPS_READ));
+        assert!(has_permission(AUDITOR, POLICY_READ));
+        assert!(!has_permission(AUDITOR, BOOK_READ));
+        assert!(!has_permission(AUDITOR, GROUPS_MANAGE));
+        assert!(!has_permission(AUDITOR, IDP_MANAGE));
 
         assert!(has_permission(LEGACY_USER, CHAT_READ));
         assert!(!has_permission(LEGACY_USER, CHAT_WRITE));

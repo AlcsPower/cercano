@@ -26,6 +26,7 @@ pub mod config;
 pub mod db;
 pub mod devices;
 pub mod health;
+pub mod identity;
 pub mod middleware;
 pub mod permissions;
 pub mod profile;
