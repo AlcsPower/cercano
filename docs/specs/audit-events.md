@@ -20,7 +20,7 @@ El sistema de auditoría de **Cercano** proporciona un registro estructurado, in
 ## 2. Esquema Común de Evento de Auditoría
 
 El archivo formal JSON Schema Draft-07 se encuentra publicado en:  
- [`docs/specs/audit-events.schema.json`](file:///c:/Users/alcs/OneDrive%20-%20cercano.local/Documentos/Mis%20Proyectos/Cercano/docs/specs/audit-events.schema.json).
+ [`docs/specs/audit-events.schema.json`](audit-events.schema.json).
 
 ### 2.1 Campos Obligatorios y Opcionales
 
@@ -851,9 +851,9 @@ El algoritmo de verificación implementado en `audit-core` (tarea F2-02) y expue
 
 ## 8. Criterios de Aceptación y Checklist de F2-01
 
-- [x] Esquema formal JSON Schema Draft-07 en [`docs/specs/audit-events.schema.json`](file:///c:/Users/alcs/OneDrive%20-%20cercano.local/Documentos/Mis%20Proyectos/Cercano/docs/specs/audit-events.schema.json).
+- [x] Esquema formal JSON Schema Draft-07 en [`docs/specs/audit-events.schema.json`](audit-events.schema.json).
 - [x] Validación estricta de sintaxis JSON Schema y compatibilidad de tipos.
-- [x] Documentación exhaustiva en [`docs/specs/audit-events.md`](file:///c:/Users/alcs/OneDrive%20-%20cercano.local/Documentos/Mis%20Proyectos/Cercano/docs/specs/audit-events.md) con reglas RFC 8785 (JCS).
+- [x] Documentación exhaustiva en [`docs/specs/audit-events.md`](audit-events.md) con reglas RFC 8785 (JCS).
 - [x] Especificación exacta de la fórmula de hash y bloque génesis de 64 ceros.
 - [x] Catálogo con los 12 tipos de eventos requeridos y vectores de prueba numéricamente verificados.
 - [x] Regla estricta de seguridad que prohíbe el almacenamiento de contraseñas, secretos, tokens o binarios en `details`.

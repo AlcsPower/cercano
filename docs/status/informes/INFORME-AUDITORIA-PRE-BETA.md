@@ -63,7 +63,7 @@ flowchart TD
 
 ## 2. Cumplimiento Legal y Licenciamiento Clean-Room
 
-1. **Resolución del Bloqueo B-001:** El archivo [`LICENSE`](file:///c:/Users/alcs/OneDrive%20-%20cercano.local/Documentos/Mis%20Proyectos/Cercano/LICENSE) contiene el texto íntegro y oficial de la **GNU Affero General Public License v3.0**. Verificado con `bash tools/check-license.sh`.
+1. **Resolución del Bloqueo B-001:** El archivo [`LICENSE`](../../LICENSE) contiene el texto íntegro y oficial de la **GNU Affero General Public License v3.0**. Verificado con `bash tools/check-license.sh`.
 2. **Encabezados AGPL-3.0:** Todo código nuevo (`.rs`, `.ts`, `.tsx`, `.sh`, `.py`) posee el encabezado oficial de copyright y licencia, validado con `bash tools/check-license-headers.sh`.
 3. **Metodología Clean-Room:** Cero binarios, librerías o código propietario de RustDesk Server Pro fueron descargados, inspeccionados o descompilados. La API de control, el personalizador y la consola fueron desarrollados desde cero basándose en especificaciones abiertas.
 
@@ -94,7 +94,7 @@ flowchart TD
 
 ## 4. Personalizador Corporativo y Generador de Instaladores
 
-En respuesta al requerimiento de adaptación corporativa, se incorporó en la consola web ([`BuilderView.tsx`](file:///c:/Users/alcs/OneDrive%20-%20cercano.local/Documentos/Mis%20Proyectos/Cercano/console-web/src/components/views/BuilderView.tsx)):
+En respuesta al requerimiento de adaptación corporativa, se incorporó en la consola web ([`BuilderView.tsx`](../../console-web/src/components/views/BuilderView.tsx)):
 1. **Identidad de Marca:** Carga de logotipo corporativo (SVG/PNG) y selector de color institucional con paletas accesibles.
 2. **Inyección de Parámetros de Red:** Inserción automática de hosts locales (Rendezvous `127.0.0.1:21116`, Relay `127.0.0.1:21117`, API `http://127.0.0.1:21114`) y clave pública del servidor.
 3. **Directivas de Seguridad:** Bloqueo de configuración para el usuario final, modo portable, acceso desatendido y restricción estricta a la red LAN.

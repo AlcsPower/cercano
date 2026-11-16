@@ -13,7 +13,7 @@ void main() {
 
       final customJson = {
         'support_name': 'Soporte TI Central',
-        'organization_name': 'Ministerio',
+        'organization_name': 'Organización',
         'logo_url': 'https://cercano.local/logo.png',
         'accent_color': '#FF5500',
         'welcome_text': 'Bienvenido a soporte',
