@@ -21,8 +21,10 @@
 
 pub mod address_book;
 pub mod groups;
+pub mod policies;
 pub mod scope;
 
+pub use policies::resolve_effective_policy;
 pub use scope::{is_address_book_in_scope, is_device_in_scope, is_group_in_scope};
 
 use serde::{Deserialize, Serialize};

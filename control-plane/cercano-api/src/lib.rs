@@ -342,6 +342,28 @@ pub fn create_app(state: AppState) -> Router {
                 .patch(identity::address_book::update_address_book_handler)
                 .delete(identity::address_book::delete_address_book_handler),
         )
+        // Central Policies API (F5-05)
+        .route(
+            "/api/policies",
+            get(identity::policies::list_policies_handler)
+                .post(identity::policies::create_policy_handler),
+        )
+        .route(
+            "/api/policies/effective",
+            get(identity::policies::effective_policy_handler),
+        )
+        .route(
+            "/api/policies/:id",
+            get(identity::policies::get_policy_handler),
+        )
+        .route(
+            "/api/policies/:id/activate",
+            post(identity::policies::activate_policy_handler),
+        )
+        .route(
+            "/api/policies/:id/revoke",
+            post(identity::policies::revoke_policy_handler),
+        )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .with_state(state)
