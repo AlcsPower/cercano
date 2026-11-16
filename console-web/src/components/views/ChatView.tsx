@@ -4,6 +4,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  Bell,
+  BellOff,
   Check,
   CheckCheck,
   CheckCircle2,
@@ -17,6 +19,7 @@ import {
   Settings2,
   ShieldCheck,
   UserRound,
+  WifiOff,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { chatApi, chatStatusLabel, ChatFilter } from '../../api/chat';
@@ -107,7 +110,30 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUserId, canManageBran
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // shortcut: polling cada 5 s hasta la SSE de F4.5-06; reemplazar por /api/chat/events.
+  type SseStatus = 'connected' | 'connecting' | 'reconnecting' | 'offline';
+  const [sseStatus, setSseStatus] = useState<SseStatus>('connecting');
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'default';
+  });
+
+  const selectedIdRef = useRef<string | null>(selectedId);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  const requestNotificationPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+    } catch {
+      // Ignored
+    }
+  };
+
   const loadConversations = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -143,10 +169,92 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUserId, canManageBran
   useEffect(() => {
     loadConversations();
     chatApi.getBranding().then(setBranding).catch(() => setBranding(DEFAULT_BRANDING));
-    const interval = setInterval(() => {
+
+    if (!apiClient.isLiveMode()) {
+      setSseStatus('offline');
+      const interval = setInterval(() => {
+        loadConversations(true);
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+
+    const token = apiClient.getToken();
+    if (!token) {
+      setSseStatus('offline');
+      return;
+    }
+
+    setSseStatus('connecting');
+    const sseUrl = `/api/chat/events?token=${encodeURIComponent(token)}`;
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onopen = () => {
+      setSseStatus('connected');
+    };
+
+    eventSource.onerror = () => {
+      setSseStatus('reconnecting');
+    };
+
+    eventSource.addEventListener('poke', (e: MessageEvent) => {
+      try {
+        const poke = JSON.parse(e.data);
+        if (poke.type === 'resync') {
+          loadConversations(true);
+          const activeId = selectedIdRef.current;
+          if (activeId) loadDetail(activeId, true);
+        } else if (poke.type === 'queue') {
+          loadConversations(true);
+        } else if (poke.type === 'status') {
+          loadConversations(true);
+          const activeId = selectedIdRef.current;
+          if (activeId && activeId === poke.conversation_id) loadDetail(activeId, true);
+        } else if (poke.type === 'message') {
+          loadConversations(true);
+          const activeId = selectedIdRef.current;
+          if (activeId && activeId === poke.conversation_id) {
+            loadDetail(activeId, true);
+          }
+
+          // Browser notification when tab is backgrounded
+          if (
+            typeof document !== 'undefined' &&
+            document.hidden &&
+            typeof Notification !== 'undefined' &&
+            Notification.permission === 'granted'
+          ) {
+            try {
+              const notif = new Notification('Cercano Soporte: Nuevo mensaje', {
+                body: 'Hay nueva actividad en la cola de soporte.',
+                icon: '/favicon.ico',
+                tag: 'cercano-chat-poke',
+              });
+              notif.onclick = () => {
+                window.focus();
+                if (poke.conversation_id) {
+                  setSelectedId(poke.conversation_id);
+                }
+                notif.close();
+              };
+            } catch {
+              // Platform restrictions
+            }
+          }
+        }
+      } catch {
+        // Ignored
+      }
+    });
+
+    // Fallback safety refresh every 60s
+    const safetyInterval = setInterval(() => {
       loadConversations(true);
-    }, 5000);
-    return () => clearInterval(interval);
+    }, 60000);
+
+    return () => {
+      eventSource.close();
+      clearInterval(safetyInterval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -283,11 +391,71 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUserId, canManageBran
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!live && (
+          {!live ? (
             <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
               Datos de ejemplo
             </span>
+          ) : sseStatus === 'connected' ? (
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+              title="Conexión en tiempo real activa"
+              aria-label="En tiempo real"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse motion-reduce:animate-none" />
+              <span className="hidden sm:inline">En vivo</span>
+            </span>
+          ) : sseStatus === 'reconnecting' || sseStatus === 'connecting' ? (
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+              title="Reconectando con el servidor"
+              aria-label="Reconectando"
+            >
+              <RefreshCw size={12} className="animate-spin motion-reduce:animate-none" />
+              <span>Reconectando</span>
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
+              title="Sin conexión en tiempo real"
+              aria-label="Desconectado"
+            >
+              <WifiOff size={12} />
+              <span>Desconectado</span>
+            </span>
           )}
+
+          {typeof window !== 'undefined' && 'Notification' in window && (
+            notificationPermission === 'default' ? (
+              <AppleButton
+                variant="secondary"
+                size="sm"
+                onClick={requestNotificationPermission}
+                icon={<Bell size={14} />}
+                aria-label="Activar notificaciones de escritorio"
+              >
+                Notificaciones
+              </AppleButton>
+            ) : notificationPermission === 'granted' ? (
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-cercano-blue/10 text-cercano-blue dark:text-blue-400 border border-cercano-blue/20"
+                title="Notificaciones de escritorio activadas"
+                aria-label="Notificaciones activadas"
+              >
+                <Bell size={13} />
+                <span className="hidden sm:inline">Alertas on</span>
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-black/5 dark:bg-white/10 text-cercano-slate dark:text-gray-400 border border-black/5 dark:border-white/10"
+                title="Notificaciones bloqueadas por el navegador"
+                aria-label="Notificaciones bloqueadas"
+              >
+                <BellOff size={13} />
+                <span className="hidden sm:inline">Silenciado</span>
+              </span>
+            )
+          )}
+
           {canManageBranding && (
             <AppleButton
               variant="secondary"
@@ -305,12 +473,35 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUserId, canManageBran
               loadConversations();
               if (selectedId) loadDetail(selectedId);
             }}
-            icon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />}
+            icon={<RefreshCw size={14} className={loading ? 'animate-spin motion-reduce:animate-none' : ''} />}
           >
             Actualizar
           </AppleButton>
         </div>
       </div>
+
+      {live && sseStatus === 'reconnecting' && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300"
+        >
+          <div className="flex items-center gap-2">
+            <RefreshCw size={16} className="animate-spin motion-reduce:animate-none text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>Reconectando al servicio de chat en tiempo real… Las actualizaciones se reflejarán automáticamente al restablecer el enlace.</span>
+          </div>
+          <AppleButton
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              loadConversations();
+              if (selectedId) loadDetail(selectedId);
+            }}
+          >
+            Reintentar
+          </AppleButton>
+        </div>
+      )}
 
       {error && (
         <div
@@ -406,7 +597,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUserId, canManageBran
                     key={conversation.id}
                     onClick={() => setSelectedId(conversation.id)}
                     aria-current={selected ? 'true' : undefined}
-                    className={`w-full text-left px-4 py-3 border-b border-black/5 dark:border-white/[0.04] transition-colors ${
+                    aria-label={`Conversación con ${displayName(conversation)}, ${pill.label}`}
+                    className={`w-full text-left px-4 py-3 border-b border-black/5 dark:border-white/[0.04] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cercano-blue focus-visible:ring-inset motion-reduce:transition-none ${
                       selected
                         ? 'bg-cercano-blue/10 dark:bg-cercano-blue/20'
                         : 'hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'

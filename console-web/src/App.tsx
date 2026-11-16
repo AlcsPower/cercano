@@ -88,6 +88,15 @@ export const App: React.FC = () => {
     };
   }, [isAuthenticated, activeTab]);
 
+  // Update document title with chat badge (N)
+  useEffect(() => {
+    if (chatBadge > 0) {
+      document.title = `(${chatBadge}) Cercano Console`;
+    } else {
+      document.title = 'Cercano Console';
+    }
+  }, [chatBadge]);
+
   // Tab accessibility fallback: if current user role cannot view activeTab, fall back to 'dashboard'
   useEffect(() => {
     if (!isTabVisibleForRole(activeTab, user?.role)) {
