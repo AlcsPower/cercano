@@ -23,7 +23,7 @@ Ofrece las capacidades empresariales que tradicionalmente se reservan a versione
 3. **Generador y empaquetador de instaladores personalizados (Hito M2)**: Compilación reproducible de instaladores Windows (`.exe` y `.msi`) configurados por rol (`soporte` vs `tecnico`), con firma digital Authenticode enchufable, listas de materiales de software (SBOM CycloneDX/SPDX) y verificación de procedencia.
 4. **Seguridad y roles aplicados en el servidor (ADR-008)**: El servidor valida de forma inmutable el tipo de instalador (`installer_id`), bloqueando cualquier intento de inicio de conexiones o escalada no autorizada desde clientes de soporte y disparando alarmas de seguridad críticas.
 
-> 🚀 **Estado del Proyecto: Fase 3 completada (Hito M2: Generador de instaladores personalizados cerrado).**  
+> 🚀 **Estado del Proyecto: Fase 3 con M2 reabierto.** El generador, los perfiles, la firma y los roles funcionan, pero **aún no existe un cliente Windows compilado**: los `.exe`/`.msi` generados hoy contienen un stub y no abren (bloqueo B-002; tareas F3-19…21).  
 > Fases 0 (Fundación), 1 (Núcleo y Paridad Básica), 2 (Auditoría y Traza Inmutable) y 3 (Generador y Roles de Instalador) completadas. Consulta el detalle en [`docs/status/F3-cierre.md`](docs/status/F3-cierre.md), [`docs/status/TAREAS.md`](docs/status/TAREAS.md) y [`docs/ROADMAP.md`](docs/ROADMAP.md).  
 > **Rama principal de trabajo y coordinación:** [`docs/F0-01-gobernanza`](https://github.com/AlcsPower/cercano/tree/docs/F0-01-gobernanza).
 
@@ -61,7 +61,7 @@ cercano/
 | **Motor de Alarmas en Tiempo Real** | Detección automática en ventana deslizante para fuerza bruta, ráfagas de IP, violaciones de lista blanca CIDR y violación de roles. | `cercano-api` | ✅ Producción |
 | **Consola Web Administrativa** | UI moderna, accesible, con fuentes auto-hospedadas (100% offline), tema claro/oscuro de alto contraste y previsualizador interactivo. | `console-web` | ✅ Producción |
 | **Generador CLI `cercano-build`** | Compilación y empaquetado reproducible (Estrategia A) a partir de perfiles JSON validados bajo JSON Schema y firmados con Ed25519. | `cercano-build` | ✅ Producción |
-| **Empaquetado Windows (.exe y .msi)** | Generación de instaladores `.exe` auto-extraíbles y paquetes `.msi` (WiX v4/CFBF) con UpgradeCodes estables y desinstalación limpia. | `cercano-build` | ✅ Producción |
+| **Empaquetado Windows (.exe y .msi)** | Generación de instaladores `.exe` auto-extraíbles y paquetes `.msi` (WiX v4/CFBF) con UpgradeCodes estables y desinstalación limpia. **Requiere el binario base del cliente Windows, que aún no se compila (F3-19).** | `cercano-build` | ⚠️ Solo estructura; sin cliente real |
 | **Firma Authenticode Enchufable** | Firma digital con soporte para drivers `signtool`, `osslsigncode` y `mock`, con sello de tiempo RFC 3161 obligatorio y aborto atómico. | `cercano-build` | ✅ Producción |
 | **Servicio de Compilación en API** | Endpoints `POST /api/builds`, cola asíncrona, control de concurrencia semafórico, almacenamiento y retención con RBAC estricto. | `cercano-api` | ✅ Producción |
 | **Auditoría Encadenada `build.*`** | Trazabilidad completa de generación de instaladores: `build.requested`, `build.started`, `build.completed`, `build.downloaded`, `build.revoked`. | `cercano-api` | ✅ Producción |

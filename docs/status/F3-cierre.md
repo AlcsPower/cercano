@@ -7,6 +7,8 @@
 
 ---
 
+> **Fe de erratas (2026-11-16, Coordinador).** Este cierre **no debe leerse como «el instalador Windows funciona»**. Se verificaron el empaquetado, los perfiles, la firma, la auditoría y los roles, pero no que el `.exe`/`.msi` arrancara con el cliente real: `dist/base/cercano.exe` nunca se compiló y el generador empaquetó un stub de 512 bytes. M2 queda **reabierto** hasta cerrar F3-19, F3-20 y F3-21 (bloqueo B-002).
+
 ## 1. Resumen Ejecutivo
 
 La **Fase 3 (Hito M2: Generador de instaladores personalizados)** del proyecto **Cercano** ha sido completada en su totalidad con éxito, cumpliendo estrictamente con los criterios de aceptación de `docs/PLAN-F3-GENERADOR.md`, las directrices de `docs/ARQUITECTURA.md` y las normas de gobernanza de `AGENTS.md`.

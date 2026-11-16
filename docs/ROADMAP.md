@@ -61,7 +61,7 @@ Duraciones orientativas, a ajustar tras F0 (suponen 3–5 agentes en paralelo).
 | **F0** | Fundación y spikes técnicos | 1–2 sem | Repo con gobernanza, CI, laboratorio LAN y 5 spikes que validan o refutan las hipótesis H1–H5 |
 | **F1** | Núcleo: servidor + control plane + cliente rebrandeado | 3–4 sem | **M0:** dos equipos en LAN se conectan (directo y por relay) usando binarios de Cercano, registrados en `cercano-api` |
 | **F2** | Auditoría y traza | 3–4 sem | **M1:** toda sesión genera eventos encadenados, consultables y verificables por API y CLI |
-| **F3** | Generador de instaladores | 4–5 sem | **M2:** desde un perfil JSON se obtiene un instalador Windows firmado, preconfigurado y revocable, en dos tipos: soporte (solo recibe) y técnico (funciones avanzadas, con elevación con credenciales desactivada por defecto) |
+| **F3** | Generador de instaladores | 4–5 sem | **M2 (reabierto 2026-11-16, B-002):** desde un perfil JSON se obtiene un instalador Windows firmado, preconfigurado y revocable, en dos tipos: soporte (solo recibe) y técnico (funciones avanzadas, con elevación con credenciales desactivada por defecto) |
 | **F4** | Consola web, RBAC y 2FA | 4 sem | **M3:** administración completa (usuarios, dispositivos, auditoría, generador) desde navegador |
 | **F4.5** | Cercano Chat (complemento) | 2–3 sem | **M3.5:** una persona con Cercano Soporte resuelve un problema pequeño por chat con un técnico, con adjuntos, notificaciones y escalado auditado |
 | **F5** | Identidad y control de acceso | 4–5 sem | Libreta, estrategias, OIDC/LDAP, acceso entre grupos |

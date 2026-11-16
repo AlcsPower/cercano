@@ -129,6 +129,11 @@
 | TC-F3-082 | Ráfaga de elevaciones del mismo técnico | Se dispara la alarma |
 | TC-F3-083 | Elevación desatendida en un `soporte` con el perfil por defecto | Rechazada; solo se acepta si el perfil la habilita |
 | TC-F3-084 | Fuzzing del mensaje de elevación | Sin caídas ni fugas de información |
+| TC-F3-090 | `cercano-build` sin `--base-binary` | Error claro; no se genera instalador |
+| TC-F3-091 | `--allow-stub` | Artefactos `*-STUB.*`, `"stub": true` en la procedencia y aviso; no se firma con la clave de producción |
+| TC-F3-092 | `--base-binary` con un archivo que no es PE o de tamaño ínfimo | Rechazado |
+| TC-F3-093 | La API ofrece la descarga de un artefacto stub fuera de modo desarrollo | Denegada; la consola avisa |
+| TC-F3-094 | Windows 10 y 11 limpios: instalar `.exe` y `.msi`, abrir, perfil verificado, conectar, desinstalar | Todo correcto con el cliente real |
 
 
 ### F4 — Consola, RBAC y 2FA (v0.2: F4-11…F4-13)

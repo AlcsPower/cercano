@@ -120,6 +120,9 @@ Se compila un binario base por versión. El generador añade/empaqueta un *perfi
 | F3-16 | Spike S6 y elevación con credenciales | F3-14, F3-15 | Cliente | Seguridad |
 | F3-17 | Auditoría `elev.*` y alarmas de elevación | F3-16, F2-02, F2-07 | ControlPlane | QA |
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador |
+| F3-19 | Cliente Windows real: pipeline que compila `vendor/client` (Flutter + Rust + vcpkg) y publica `dist/base/cercano.exe` | F3-03, F3-05 | Builder + Cliente | QA |
+| F3-20 | Fail-closed: el generador y la API rechazan empaquetar sin binario base real; el stub solo con `--allow-stub` y marcado | F3-05, F3-07 | Builder + ControlPlane | Seguridad |
+| F3-21 | Prueba de humo en Windows 10/11: instalar `.exe`/`.msi`, abrir, perfil verificado, conexión, desinstalar | F3-19, F3-20 | QA | Coordinador |
 
 ### Detalle
 
@@ -195,7 +198,19 @@ Primero extender el esquema de eventos ya publicado en F2-01 (`docs/specs/audit-
 Ampliar el modelo de amenazas con el abuso de la elevación, un técnico comprometido, un instalador `tecnico` robado y la escalada de `soporte` a `tecnico`; fuzzing del mensaje de elevación; pruebas de abuso en el laboratorio. Informe `docs/status/informes/F3-18.md`.
 *CA:* sin hallazgos críticos o altos abiertos; los medios y bajos con plan; la activación en producción queda condicionada a 2FA (F4).
 
-**Gate F3 (M2):** flujo completo demostrado en el laboratorio para ambos roles; la matriz de la sección 1 verificada por QA; ninguna clave privada ni credencial presente en artefactos, repositorio ni auditoría (verificación automática); revisión de seguridad sin hallazgos altos; SBOM y firmas verificables; elevación entregada desactivada por defecto.
+**F3-19 Cliente Windows real.** *(Alta; reabre M2, bloqueo B-002.)*
+El CI actual (`base-binary.yml`) compila en Linux y el generador empaqueta, si no recibe `--base-binary`, un *stub* PE de 512 bytes sin código máquina: el `.exe`/`.msi` resultante se instala pero no abre. Crear un workflow `windows-latest` que compile el cliente completo con las herramientas que exige RustDesk (Visual Studio C++ Build Tools, Flutter SDK fijado por versión, Rust, vcpkg con caché y los códecs C++), aplique `patches/`, y publique `cercano.exe` (más DLL y datos de Flutter si el cliente no es un único ejecutable) con SHA-256, SBOM y metadatos. Cambia el contrato del «binario base»: puede ser un **directorio** (`dist/base/windows-x86_64/`) y no un único archivo, y el generador debe empaquetarlo completo. La reproducibilidad bit a bit (TC-F3-021) se exige para el crate Rust en Linux; en Windows se registra el hash por build y se documenta la causa de las diferencias, salvo que se demuestre lo contrario. Primero un spike S8 (1–2 días) que mida tiempo de CI, tamaño y si hace falta un runner propio.
+*CA:* un tag produce un artefacto Windows que arranca en un Windows 10/11 limpio; `cercano-build --base-binary` lo empaqueta (`.exe` y `.msi`) y el perfil firmado se verifica al abrir; hashes y SBOM publicados; tiempo y caché documentados.
+
+**F3-20 Fail-closed ante binario ausente o inválido.**
+Sin `--base-binary`, `cercano-build` falla con error claro salvo `--allow-stub` (solo pruebas), que nombra los artefactos `*-STUB.*`, escribe `"stub": true` en `build-provenance.json` y avisa por stderr. Validar que el binario base es un PE de un tamaño razonable con una sección de código. `cercano-api` no ofrece la descarga de artefactos stub fuera de modo desarrollo y la consola muestra la advertencia. Un build stub nunca se firma con la clave de producción.
+*CA:* TC-F3-090…093; ningún instalador de producción puede salir sin cliente real.
+
+**F3-21 Prueba de humo en Windows.**
+Instalar, abrir, comprobar `soporte`/`tecnico`, perfil verificado y revocación, conectar y desinstalar con `.exe` y `.msi`, en Windows 10 y 11, con y sin Defender activo. Informe `docs/status/informes/F3-21.md`.
+*CA:* TC-F3-094 en verde en ambas versiones.
+
+**Gate F3 (M2):** flujo completo demostrado en el laboratorio para ambos roles; la matriz de la sección 1 verificada por QA; ninguna clave privada ni credencial presente en artefactos, repositorio ni auditoría (verificación automática); revisión de seguridad sin hallazgos altos; SBOM y firmas verificables; elevación entregada desactivada por defecto; **instalador que abre y funciona en Windows 10/11 con el cliente real (F3-19…21)**.
 
 ## 7. Fuera de alcance en F3
 

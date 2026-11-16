@@ -75,6 +75,9 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-16 | Spike S6 y elevación con credenciales | F3-14, F3-15 | Cliente | Seguridad | Hecho |
 | F3-17 | Auditoría `elev.*` y alarmas de elevación | F3-16, F2-02, F2-07 | ControlPlane | QA | Hecho |
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador | Hecho |
+| F3-19 | Cliente Windows real (pipeline `windows-latest`, spike S8) | F3-03, F3-05 | Builder + Cliente | QA | Pendiente |
+| F3-20 | Fail-closed: sin binario base real no se empaqueta (`--allow-stub`) | F3-05, F3-07 | Builder + ControlPlane | Seguridad | Pendiente |
+| F3-21 | Prueba de humo en Windows 10/11 | F3-19, F3-20 | QA | Coordinador | Pendiente |
 
 ## F4 — Consola web, RBAC y 2FA
 
@@ -193,4 +196,4 @@ Fuente: `docs/PLAN-F8-PORTABILIDAD.md`. Después de F7; **no bloquea M4**. SQL S
 | F8-09 | Matriz de pruebas SQLite/PostgreSQL/SQL Server y pruebas de fallo | F8-04…08 | QA | Coordinador | Pendiente |
 | F8-10 | Runbook `docs/guias/respaldos-y-migracion.md`, cierre e informe | F8-09 | Coordinador | Dueño | Pendiente |
 
-_Total: 53 tareas F0–F3, 13 de F4, 16 de F4.5, 13 de F5, 10 de F6, 13 de F7 y 10 de F8 (extra post-v1, no bloquea M4). Los planes F5–F8 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado. F8-01 arrancó el 2026-11-10 (análisis y ADR, sin código) y está en verificación; el resto de F8 sigue a la espera de esa aprobación. F5-01 quedó redactado el 2026-11-10 (ADR-012 y spec de identidad) y espera la aprobación del dueño y la revisión de Seguridad; no se ha escrito código de F5. F6-01 midió el laboratorio el 2026-11-10 (RTT, pérdida, throughput y consumo de relay; ver S7 e informe) y está en verificación: la medición de sesión queda para F6-05/F6-06._
+_Total: 56 tareas F0–F3 (F3-19…21 reabren M2, ver B-002), 13 de F4, 16 de F4.5, 13 de F5, 10 de F6, 13 de F7 y 10 de F8 (extra post-v1, no bloquea M4). Los planes F5–F8 están revisados por el Coordinador y pendientes de aprobación del dueño; no indican que las fases hayan comenzado. F8-01 arrancó el 2026-11-10 (análisis y ADR, sin código) y está en verificación; el resto de F8 sigue a la espera de esa aprobación. F5-01 quedó redactado el 2026-11-10 (ADR-012 y spec de identidad) y espera la aprobación del dueño y la revisión de Seguridad; no se ha escrito código de F5. F6-01 midió el laboratorio el 2026-11-10 (RTT, pérdida, throughput y consumo de relay; ver S7 e informe) y está en verificación: la medición de sesión queda para F6-05/F6-06._
