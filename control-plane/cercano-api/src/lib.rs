@@ -51,6 +51,7 @@ pub struct AppState {
     pub build_queue: Arc<builder::BuildQueue>,
     pub revocation_checker: Arc<revocation::RevocationChecker>,
     pub chat_hub: Arc<chat::events::ChatHub>,
+    pub oidc_flows: Arc<identity::oidc::OidcFlowStore>,
 }
 
 impl AppState {
@@ -63,6 +64,7 @@ impl AppState {
             config.revocation_fail_closed,
         ));
         let chat_hub = Arc::new(chat::events::ChatHub::new());
+        let oidc_flows = Arc::new(identity::oidc::OidcFlowStore::new());
         Self {
             config,
             db,
@@ -71,6 +73,7 @@ impl AppState {
             build_queue,
             revocation_checker,
             chat_hub,
+            oidc_flows,
         }
     }
 }
@@ -363,6 +366,35 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/policies/:id/revoke",
             post(identity::policies::revoke_policy_handler),
+        )
+        // Identity Providers & OIDC Federation (F5-07)
+        .route(
+            "/api/idp",
+            get(identity::oidc::list_idp_handler).post(identity::oidc::create_idp_handler),
+        )
+        .route(
+            "/api/idp/:id",
+            get(identity::oidc::get_idp_handler)
+                .patch(identity::oidc::update_idp_handler)
+                .delete(identity::oidc::delete_idp_handler),
+        )
+        .route("/api/idp/:id/test", post(identity::oidc::test_idp_handler))
+        .route(
+            "/api/auth/oidc/:provider/start",
+            get(identity::oidc::oidc_start_handler),
+        )
+        .route(
+            "/api/auth/oidc/:provider/callback",
+            get(identity::oidc::oidc_callback_handler),
+        )
+        .route(
+            "/api/identity/links",
+            get(identity::oidc::list_identity_links_handler)
+                .post(identity::oidc::create_identity_link_handler),
+        )
+        .route(
+            "/api/identity/links/:id",
+            delete(identity::oidc::delete_identity_link_handler),
         )
         .layer(axum::middleware::from_fn(middleware::trace_id_middleware))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))

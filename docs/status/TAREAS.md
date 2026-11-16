@@ -131,7 +131,7 @@ Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5. F5-
 | F5-04 | Enforcement de alcance por rol/grupo y permisos entre grupos | F5-02/03 | ControlPlane | Seguridad | Hecho |
 | F5-05 | Servicio de estrategias: versionado, precedencia y política efectiva | F5-01/02 | ControlPlane | Seguridad/QA | Hecho |
 | F5-06 | Cliente: descarga, cacheo y aplicación segura de estrategias | F5-05, F3-02/13 | Cliente | QA/Seguridad | Hecho |
-| F5-07 | Inicio de sesión OIDC con PKCE y vinculación de identidad | F5-01, F4 | ControlPlane | Seguridad | Pendiente |
+| F5-07 | Inicio de sesión OIDC con PKCE y vinculación de identidad | F5-01, F4 | ControlPlane | Seguridad | Hecho |
 | F5-08 | Autenticación LDAP sobre TLS y mapeo explícito de grupos | F5-01, F4 | ControlPlane | Seguridad | Pendiente |
 | F5-09 | Evaluar cambio de ID de dispositivo y decisión ADR | F5-01, F1-05 | Coordinador + Servidor | Seguridad/Dueño | Pendiente |
 | F5-10 | Evaluar/integrar Windows LAPS bajo consentimiento y permiso dedicado | F5-01, F3-16…18, F4 | ControlPlane + Cliente | Seguridad | Pendiente |

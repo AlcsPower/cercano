@@ -57,9 +57,9 @@ export const BuilderView: React.FC = () => {
   });
 
   const [serverConfig, setServerConfig] = useState({
-    rendezvous_server: '127.0.0.1:21116',
-    relay_server: '127.0.0.1:21117',
-    api_server: 'http://127.0.0.1:21114',
+    rendezvous_server: '172.16.8.163:21116',
+    relay_server: '172.16.8.163:21117',
+    api_server: 'http://172.16.8.163:21114',
     server_public_key: '',
   });
 

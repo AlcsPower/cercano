@@ -21,6 +21,7 @@
 
 pub mod address_book;
 pub mod groups;
+pub mod oidc;
 pub mod policies;
 pub mod scope;
 
