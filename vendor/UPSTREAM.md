@@ -34,6 +34,15 @@ Este documento registra los componentes de software de código abierto importado
 - **Ruta local:** `vendor/client/`
 - **Propósito en Cercano:** Proporcionar la base para el cliente multiplataforma de escritorio, que será rebrandeado y conectado a `cercano-api`.
 
+### 3. Crate compartido (`vendor/client/libs/hbb_common`)
+
+- **Proyecto:** RustDesk hbb_common
+- **Repositorio origen:** `https://github.com/rustdesk/hbb_common.git`
+- **Hash de commit:** `fae47e024dd83cef6aaecde0aa7d11731df11649` (fijado por submódulo de tag `1.5.1` de RustDesk)
+- **Licencia:** GNU Affero General Public License v3.0 (AGPL-3.0)
+- **Ruta local:** `vendor/client/libs/hbb_common/`
+- **Propósito en Cercano:** Librería base de protocolos, configuración, códecs y utilidades compartidas del cliente Cercano.
+
 ---
 
 ## Procedimiento para sincronización / actualización de Upstream

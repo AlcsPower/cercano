@@ -29,6 +29,7 @@ console-web/.vite/
 console-web/dist/
 dist/
 console-web/node_modules/
+graphify-out/
 
 # IDE & OS
 .idea/

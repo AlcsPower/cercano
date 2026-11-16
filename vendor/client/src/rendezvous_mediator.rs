@@ -1351,10 +1351,11 @@ impl RendezvousMediator {
             relay_server = crate::increase_port(&self.host, 1);
         }
         if relay_server.is_empty() {
-            relay_server = "127.0.0.1:21117".to_string();
+            relay_server = "172.16.8.163:21117".to_string();
         }
         relay_server
     }
+}
 
 fn get_direct_port() -> i32 {
     let mut port = Config::get_option("direct-access-port")
