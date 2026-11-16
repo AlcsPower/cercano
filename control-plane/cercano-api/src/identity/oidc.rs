@@ -478,6 +478,76 @@ pub async fn create_idp_handler(
                     .into_response();
             }
         }
+    } else if kind_parsed == IdpKind::Ldap {
+        let cfg_res: Result<crate::identity::ldap::LdapConfig, _> =
+            serde_json::from_value(payload.config.clone());
+        match cfg_res {
+            Ok(cfg) => {
+                // TC-F5-040: LDAP sin TLS rechazada
+                let is_tls = cfg.url.starts_with("ldaps://")
+                    || (cfg.url.starts_with("ldap://") && cfg.start_tls);
+                if !is_tls {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "error": "tls_required",
+                            "message": "LDAP requiere cifrado TLS obligatorio (ldaps:// o start_tls: true)."
+                        })),
+                    )
+                        .into_response();
+                }
+                if cfg.base_dn.trim().is_empty() || cfg.bind_dn.trim().is_empty() {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "error": "invalid_config",
+                            "message": "Los campos 'base_dn' y 'bind_dn' son obligatorios."
+                        })),
+                    )
+                        .into_response();
+                }
+                if !cfg.user_filter.contains("{username}") {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "error": "invalid_user_filter",
+                            "message": "El campo 'user_filter' debe contener el marcador '{username}'."
+                        })),
+                    )
+                        .into_response();
+                }
+                if cfg.timeout_ms > 5000 {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "error": "timeout_too_high",
+                            "message": "El timeout LDAP no puede superar los 5000 ms."
+                        })),
+                    )
+                        .into_response();
+                }
+                if cfg.default_role == "admin" {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "error": "invalid_default_role",
+                            "message": "El rol por defecto de LDAP no puede ser 'admin'; admin solo se concede por allowlist explícito."
+                        })),
+                    )
+                        .into_response();
+                }
+            }
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "error": "invalid_config",
+                        "message": format!("Configuración LDAP inválida: {}", e)
+                    })),
+                )
+                    .into_response();
+            }
+        }
     }
 
     let id = Uuid::now_v7().to_string();
@@ -872,6 +942,20 @@ pub async fn test_idp_handler(
                         "ok": false,
                         "error": "idp_unavailable",
                         "message": "Proveedor OIDC no responde o se encuentra fuera de servicio."
+                    })),
+                )
+                    .into_response();
+            }
+        }
+    } else if row.kind == IdpKind::Ldap {
+        if let Ok(cfg) = serde_json::from_str::<crate::identity::ldap::LdapConfig>(&row.config) {
+            if cfg.simulate_unavailable {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({
+                        "ok": false,
+                        "error": "ldap_unavailable",
+                        "message": "Servidor LDAP no responde o se encuentra fuera de servicio."
                     })),
                 )
                     .into_response();

@@ -387,6 +387,11 @@ pub fn create_app(state: AppState) -> Router {
             "/api/auth/oidc/:provider/callback",
             get(identity::oidc::oidc_callback_handler),
         )
+        // LDAP Authentication (F5-08)
+        .route(
+            "/api/auth/ldap/:provider/login",
+            post(identity::ldap::ldap_login_handler),
+        )
         .route(
             "/api/identity/links",
             get(identity::oidc::list_identity_links_handler)
