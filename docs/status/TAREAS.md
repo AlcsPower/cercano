@@ -141,7 +141,7 @@ Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5. F5-
 | F5-09 | Evaluar cambio de ID de dispositivo y decisión ADR | F5-01, F1-05 | Coordinador + Servidor | Seguridad/Dueño | Hecho |
 | F5-10 | Evaluar/integrar Windows LAPS bajo consentimiento y permiso dedicado | F5-01, F3-16…18, F4 | ControlPlane + Cliente | Seguridad | Hecho |
 | F5-11 | Consola: grupos, libreta, estrategias, federación y política efectiva | F5-03…08 | Web | QA | Hecho |
-| F5-12 | Pruebas de integración, autorización, identidad y laboratorio LAN | F5-03…11 | QA + Seguridad | Coordinador | Pendiente |
+| F5-12 | Pruebas de integración, autorización, identidad y laboratorio LAN | F5-03…11 | QA + Seguridad | Coordinador | Hecho |
 | F5-13 | Documentación de operador y cierre F5 | F5-12 | Coordinador | Dueño | Pendiente |
 
 ## F6 — Optimización LAN y relays
