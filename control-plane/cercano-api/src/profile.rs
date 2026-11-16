@@ -484,14 +484,12 @@ mod tests {
         let json_soporte = include_str!("../../../docs/specs/examples/profile-soporte-valido.json");
         let prof_soporte: CercanoProfile = serde_json::from_str(json_soporte).expect("Valid JSON");
         assert!(prof_soporte.policy.chat.is_none());
-        assert!(
-            prof_soporte
-                .policy
-                .chat
-                .as_ref()
-                .map(|c| c.is_enabled_for_role("soporte"))
-                .unwrap_or(true)
-        );
+        assert!(prof_soporte
+            .policy
+            .chat
+            .as_ref()
+            .map(|c| c.is_enabled_for_role("soporte"))
+            .unwrap_or(true));
 
         let mut val: serde_json::Value = serde_json::from_str(json_soporte).unwrap();
         val["policy"]["chat"] = serde_json::json!({
