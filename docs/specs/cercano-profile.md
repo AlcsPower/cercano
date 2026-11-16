@@ -59,6 +59,10 @@ El generador de instaladores (`cercano-build` o `POST /builds`) toma este perfil
 * `hide_network_settings` (*boolean*, default true): Bloquea edición local de servidores.
 * `enable_elevation` (*boolean*, default false): Habilita solicitudes de elevación administrativa.
 * `unattended_elevation` (*boolean*, default false): Permite elevación desatendida previa autorización.
+* `chat` (*object*, opcional, F4.5-13): Política soberana de Cercano Chat.
+  * `enabled` (*boolean*, opcional): Habilita la funcionalidad de chat en el cliente. Por defecto `true` para rol `soporte`, `false` para rol `tecnico`.
+  * `allow_attachments` (*boolean*, default true): Habilita el envío y recepción de archivos adjuntos (imágenes/PDF).
+  * `allow_remote_escalation` (*boolean*, default true): Permite el escalado interactivo de la conversación hacia una sesión remota.
 
 ### 3.5 `installation` (Requerido)
 * `mode` (*enum ["installed", "portable"]*, requerido): Modo de empaquetado.

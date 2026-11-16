@@ -74,6 +74,25 @@ pub struct PolicyConfig {
     pub enable_elevation: bool,
     #[serde(default)]
     pub unattended_elevation: bool,
+    #[serde(default)]
+    pub chat: Option<ChatPolicyConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ChatPolicyConfig {
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default = "default_true")]
+    pub allow_attachments: bool,
+    #[serde(default = "default_true")]
+    pub allow_remote_escalation: bool,
+}
+
+impl ChatPolicyConfig {
+    pub fn is_enabled_for_role(&self, role: &str) -> bool {
+        self.enabled.unwrap_or(role == "soporte")
+    }
 }
 
 fn default_true() -> bool {
@@ -458,6 +477,44 @@ mod tests {
         assert!(res.is_err(), "Unknown fields must be rejected");
         let err_msg = res.unwrap_err().to_string();
         assert!(err_msg.contains("unknown field `unknown_extra_property`"));
+    }
+
+    #[test]
+    fn test_f4_5_13_policy_chat_schema_and_defaults() {
+        let json_soporte = include_str!("../../../docs/specs/examples/profile-soporte-valido.json");
+        let prof_soporte: CercanoProfile = serde_json::from_str(json_soporte).expect("Valid JSON");
+        assert!(prof_soporte.policy.chat.is_none());
+        assert_eq!(
+            prof_soporte
+                .policy
+                .chat
+                .as_ref()
+                .map(|c| c.is_enabled_for_role("soporte"))
+                .unwrap_or(true),
+            true
+        );
+
+        let mut val: serde_json::Value = serde_json::from_str(json_soporte).unwrap();
+        val["policy"]["chat"] = serde_json::json!({
+            "enabled": false,
+            "allow_attachments": false,
+            "allow_remote_escalation": false
+        });
+        let prof_chat: CercanoProfile =
+            serde_json::from_value(val.clone()).expect("Valid with chat");
+        let chat = prof_chat.policy.chat.expect("Chat policy exists");
+        assert_eq!(chat.enabled, Some(false));
+        assert_eq!(chat.allow_attachments, false);
+        assert_eq!(chat.allow_remote_escalation, false);
+        assert_eq!(chat.is_enabled_for_role("soporte"), false);
+
+        val["policy"]["chat"]["unrecognized_field"] = serde_json::json!(true);
+        let err: Result<CercanoProfile, _> = serde_json::from_value(val);
+        assert!(err.is_err());
+        assert!(err
+            .unwrap_err()
+            .to_string()
+            .contains("unknown field `unrecognized_field`"));
     }
 
     #[test]

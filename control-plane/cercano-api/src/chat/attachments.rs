@@ -265,6 +265,16 @@ pub async fn upload_attachment_handler(
         ));
     }
 
+    if headers
+        .get("x-cercano-policy-allow-attachments")
+        .and_then(|h| h.to_str().ok())
+        == Some("false")
+    {
+        return Err(AttachmentError::Forbidden(
+            "La política del perfil prohíbe el envío de archivos adjuntos.".to_string(),
+        ));
+    }
+
     // 1. Verify file size
     if body_bytes.is_empty() {
         return Err(AttachmentError::BadRequest(

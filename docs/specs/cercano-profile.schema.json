@@ -162,6 +162,27 @@
           "type": "boolean",
           "default": false,
           "description": "Permite elevación desatendida sin diálogo de confirmación (desactivada por defecto; requiere perfil soporte)."
+        },
+        "chat": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Configuración de política soberana para Cercano Chat (F4.5-13). Opcional; por defecto activado para soporte y desactivado para técnico.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Habilita la funcionalidad de chat de soporte en el cliente."
+            },
+            "allow_attachments": {
+              "type": "boolean",
+              "default": true,
+              "description": "Permite el envío y recepción de archivos adjuntos (imágenes/PDF)."
+            },
+            "allow_remote_escalation": {
+              "type": "boolean",
+              "default": true,
+              "description": "Permite escalar la conversación a una sesión remota."
+            }
+          }
         }
       }
     },

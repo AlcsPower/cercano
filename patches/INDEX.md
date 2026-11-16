@@ -27,6 +27,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `008-client-support-chat.patch` | F4.5-10 | `vendor/client` | Módulo `cercano_chat.rs`, autenticación Ed25519 con reto/firma, REST, SSE con feature stream, reconexión, toast Windows y FFI Flutter | `Cargo.toml`, `src/cercano_chat.rs`, `src/lib.rs`, `src/flutter_ffi.rs` | 2026-11-16 | Agente-Cliente |
 | `009-client-flutter-chat.patch` | F4.5-11 | `vendor/client` | Interfaz Flutter de Cercano Chat, modelo, vista de bienvenida y onboarding (nombre/apellido), hilo de mensajes, composer, adjuntos, botón en panel soporte e i18n | `flutter/lib/cercano_chat/*`, `flutter/lib/desktop/pages/*`, `flutter/test/*`, `src/lang/*` | 2026-11-16 | Agente-Cliente |
 | `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
+| `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 
 ---
 
@@ -252,6 +253,23 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/rendezvous_mediator.rs`
   - `src/server.rs`
 - **Estrategia de actualización (upstream sync):** Modificaciones mínimas y quirúrgicas en los puntos de entrada de unilinks/CLI y en la construcción del contexto de conexión. En futuras versiones de upstream, verificar únicamente que los argumentos de línea de comandos en `core_main.rs` y `common.dart` no colisionen.
+
+---
+
+### [011-client-policy-chat.patch] Tarea F4.5-13: Soporte de policy.chat y verificaciones en cliente
+
+- **Archivo:** `patches/011-client-policy-chat.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F4.5-13`
+- **Fecha:** `2026-11-16`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** Incorpora la deserialización y evaluación de la subsección `policy.chat` del perfil firmado de Cercano en el cliente (`src/cercano_profile.rs`):
+  - Añade `ChatPolicyDto` (`enabled`, `allow_attachments`, `allow_remote_escalation`) con defaults seguros (`allow_attachments: true`, `allow_remote_escalation: true`).
+  - Aplica la invariante de rol: si `chat.enabled` se omite, los perfiles de soporte lo habilitan por defecto (`true`) y los técnicos lo deshabilitan (`false`).
+  - Expone los helpers públicos `is_chat_enabled()`, `is_chat_allow_attachments()`, y `is_chat_allow_remote_escalation()`.
+- **Archivos modificados:**
+  - `src/cercano_profile.rs`
+- **Estrategia de actualización (upstream sync):** Modificación contenida exclusivamente en el módulo `cercano_profile.rs`, independiente de la lógica central de upstream.
 
 ---
 

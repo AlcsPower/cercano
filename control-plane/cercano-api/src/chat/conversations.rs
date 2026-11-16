@@ -478,7 +478,7 @@ pub async fn create_or_join_conversation_handler(
 
     // Query device snapshot from `devices` and `chat_devices`
     let dev_info = sqlx::query(
-        "SELECT d.name, d.hostname, d.os, c.installer_id
+        "SELECT d.name, d.hostname, d.os, d.role, c.installer_id
          FROM devices d
          LEFT JOIN chat_devices c ON d.id = c.device_id
          WHERE d.id = ?",
@@ -489,6 +489,13 @@ pub async fn create_or_join_conversation_handler(
     .map_err(|e| ChatConvError::Internal(e.to_string()))?;
 
     let (device_name, device_hostname, device_os, installer_id) = if let Some(row) = dev_info {
+        if let Ok(Some(r)) = row.try_get::<Option<String>, _>("role") {
+            if r == "tecnico" {
+                return Err(ChatConvError::Forbidden(
+                    "El rol técnico no tiene permitido iniciar conversaciones de chat.".to_string(),
+                ));
+            }
+        }
         (
             row.try_get::<String, _>("name").ok(),
             row.try_get::<String, _>("hostname").ok(),
@@ -1851,11 +1858,22 @@ pub async fn escalate_conversation_handler(
     State(state): State<AppState>,
     caller: ChatCaller,
     Path(conv_id): Path<String>,
+    headers: HeaderMap,
     payload: Option<Json<EscalatePayload>>,
 ) -> Result<Response, ChatConvError> {
     if !state.config.chat_enabled {
         return Err(ChatConvError::Forbidden(
             "El servicio de chat está desactivado.".to_string(),
+        ));
+    }
+
+    if headers
+        .get("x-cercano-policy-allow-remote-escalation")
+        .and_then(|h| h.to_str().ok())
+        == Some("false")
+    {
+        return Err(ChatConvError::Forbidden(
+            "La política del perfil prohíbe el escalado a sesión remota.".to_string(),
         ));
     }
 

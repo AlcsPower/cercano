@@ -1,0 +1,108 @@
+From: Agente-Cliente <cercano-dev@local>
+Subject: [PATCH] feat(client): F4.5-13 soporte de policy.chat y verificacion de politicas de chat
+Date: 2026-11-16
+Component: vendor/client
+Task: F4.5-13
+
+Implementa en el cliente Cercano (vendor/client/):
+- Soporte para policy.chat (enabled, allow_attachments, allow_remote_escalation) en PolicyDto
+- Exposicion de campos verificados en VerifiedProfileInfo
+- Helpers publicos is_chat_enabled(), is_chat_allow_attachments(), is_chat_allow_remote_escalation()
+- Invariante: soporte activa chat por defecto; tecnico lo desactiva por defecto si no esta explicito
+
+---
+diff --git a/vendor/client/src/cercano_profile.rs b/vendor/client/src/cercano_profile.rs
+index ede129a..9713828 100644
+--- a/vendor/client/src/cercano_profile.rs
++++ b/vendor/client/src/cercano_profile.rs
+@@ -288,6 +288,9 @@ pub struct VerifiedProfileInfo {
+     pub allow_clipboard: bool,
+     pub allow_audio: bool,
+     pub hide_network_settings: bool,
++    pub chat_enabled: bool,
++    pub chat_allow_attachments: bool,
++    pub chat_allow_remote_escalation: bool,
+ }
+ 
+ #[derive(Debug, Deserialize)]
+@@ -363,6 +366,19 @@ struct PolicyDto {
+     _enable_elevation: bool,
+     #[serde(default)]
+     _unattended_elevation: bool,
++    #[serde(default)]
++    chat: Option<ChatPolicyDto>,
++}
++
++#[derive(Debug, Clone, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub struct ChatPolicyDto {
++    #[serde(default)]
++    pub enabled: Option<bool>,
++    #[serde(default = "default_true")]
++    pub allow_attachments: bool,
++    #[serde(default = "default_true")]
++    pub allow_remote_escalation: bool,
+ }
+ 
+ fn default_true() -> bool {
+@@ -590,6 +606,16 @@ pub fn verify_signed_profile_bytes(
+ 
+     let app_name = profile.identity.and_then(|id| id.app_name);
+ 
++    let (chat_enabled, chat_allow_attachments, chat_allow_remote_escalation) =
++        match profile.policy.chat {
++            Some(ref c) => (
++                c.enabled.unwrap_or(profile.role == "soporte"),
++                c.allow_attachments,
++                c.allow_remote_escalation,
++            ),
++            None => (profile.role == "soporte", true, true),
++        };
++
+     Ok((
+         VerifiedProfileInfo {
+             profile_id: profile.profile_id,
+@@ -604,6 +630,9 @@ pub fn verify_signed_profile_bytes(
+             allow_clipboard: profile.policy.allow_clipboard,
+             allow_audio: profile.policy.allow_audio,
+             hide_network_settings: profile.policy.hide_network_settings,
++            chat_enabled,
++            chat_allow_attachments,
++            chat_allow_remote_escalation,
+         },
+         profile.server.server_public_key,
+         app_name,
+@@ -780,6 +809,33 @@ pub fn requires_session_approval() -> bool {
+     true
+ }
+ 
++pub fn is_chat_enabled() -> bool {
++    if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(profile) = guard.as_ref() {
++            return profile.chat_enabled;
++        }
++    }
++    is_support_mode()
++}
++
++pub fn is_chat_allow_attachments() -> bool {
++    if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(profile) = guard.as_ref() {
++            return profile.chat_allow_attachments;
++        }
++    }
++    true
++}
++
++pub fn is_chat_allow_remote_escalation() -> bool {
++    if let Ok(guard) = ACTIVE_PROFILE.read() {
++        if let Some(profile) = guard.as_ref() {
++            return profile.chat_allow_remote_escalation;
++        }
++    }
++    true
++}
++
+ pub fn get_technician_session_token() -> Option<String> {
+     TECHNICIAN_SESSION
+         .read()

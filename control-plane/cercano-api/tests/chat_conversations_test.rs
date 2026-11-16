@@ -118,6 +118,35 @@ async fn request_raw(
     request_with_headers(env, method, uri, &headers, body).await
 }
 
+async fn request_binary(
+    env: &TestEnv,
+    method: &str,
+    uri: &str,
+    token: Option<&str>,
+    headers: &[(&str, &str)],
+    body: Vec<u8>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder().method(method).uri(uri);
+    let auth_val;
+    if let Some(tok) = token {
+        auth_val = format!("Bearer {tok}");
+        builder = builder.header("authorization", auth_val);
+    }
+    for (k, v) in headers {
+        builder = builder.header(*k, *v);
+    }
+    let request = builder.body(Body::from(body)).unwrap();
+    let response = env.app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let json = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+    };
+    (status, json)
+}
+
 fn generate_keypair() -> (SigningKey, String) {
     let signing_key = SigningKey::generate(&mut OsRng);
     let verifying_key = signing_key.verifying_key();
@@ -953,4 +982,104 @@ async fn test_tc_f4_5_086_remote_session_escalation() {
         .as_str()
         .unwrap()
         .starts_with("cercano://connect"));
+}
+
+#[tokio::test]
+async fn test_tc_f4_5_087_policy_chat_enforcement() {
+    let env = setup().await;
+    let (dev_tok, _sk) = create_authenticated_device(&env, "dev-policy-soporte").await;
+    let (dev_tec_tok, _sk_tec) = create_authenticated_device(&env, "dev-policy-tecnico").await;
+    let admin_tok = bootstrap_admin_session(&env).await;
+    let tech_tok = create_technician_session(&env, &admin_tok, "tech_policy_user").await;
+
+    // Set dev-policy-tecnico role in devices table
+    sqlx::query("UPDATE devices SET role = 'tecnico' WHERE id = 'dev-policy-tecnico'")
+        .execute(&env.db)
+        .await
+        .unwrap();
+
+    // 1. Device with tecnico role cannot create conversation -> 403 Forbidden
+    let (s_tec, b_tec) = request_raw(
+        &env,
+        "POST",
+        "/api/chat/conversations",
+        Some(&dev_tec_tok),
+        Some(json!({
+            "contact_first_name": "Técnico",
+            "contact_last_name": "Local",
+            "body": "Intento de inicio de chat",
+            "client_message_id": "tec-msg-1"
+        })),
+    )
+    .await;
+    assert_eq!(s_tec, StatusCode::FORBIDDEN);
+    assert_eq!(b_tec["error"], "forbidden");
+    assert!(b_tec["message"].as_str().unwrap().contains("técnico"));
+
+    // 2. Soporte device creates conversation -> 201 Created
+    let (s_sop, conv) = request_raw(
+        &env,
+        "POST",
+        "/api/chat/conversations",
+        Some(&dev_tok),
+        Some(json!({
+            "contact_first_name": "Usuario",
+            "contact_last_name": "Soporte",
+            "body": "Consulta de soporte con adjunto",
+            "client_message_id": "sop-msg-1"
+        })),
+    )
+    .await;
+    assert_eq!(s_sop, StatusCode::CREATED);
+    let conv_id = conv["id"].as_str().unwrap();
+
+    // 3. Upload attachment with allow_attachments=false policy header -> 403 Forbidden
+    let att_headers = [
+        ("content-type", "image/png"),
+        ("x-cercano-policy-allow-attachments", "false"),
+        ("x-file-name", "captura.png"),
+        ("x-client-message-id", "att-policy-1"),
+    ];
+
+    let mut png_bytes = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    png_bytes.extend_from_slice(&[0u8; 64]);
+
+    let (s_att_denied, _) = request_binary(
+        &env,
+        "POST",
+        &format!("/api/chat/conversations/{conv_id}/attachments"),
+        Some(&dev_tok),
+        &att_headers,
+        png_bytes,
+    )
+    .await;
+    assert_eq!(s_att_denied, StatusCode::FORBIDDEN);
+
+    // 4. Claim conversation
+    let (s_claim, _) = request_raw(
+        &env,
+        "POST",
+        &format!("/api/chat/conversations/{conv_id}/claim"),
+        Some(&tech_tok),
+        None,
+    )
+    .await;
+    assert_eq!(s_claim, StatusCode::OK);
+
+    // 5. Escalate with allow_remote_escalation=false policy header -> 403 Forbidden
+    let auth_val = format!("Bearer {tech_tok}");
+    let esc_headers = [
+        ("authorization", auth_val.as_str()),
+        ("x-cercano-policy-allow-remote-escalation", "false"),
+    ];
+
+    let (s_esc_denied, _) = request_with_headers(
+        &env,
+        "POST",
+        &format!("/api/chat/conversations/{conv_id}/escalate"),
+        &esc_headers,
+        Some(json!({ "trace_id": conv_id })),
+    )
+    .await;
+    assert_eq!(s_esc_denied, StatusCode::FORBIDDEN);
 }
