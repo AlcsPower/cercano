@@ -17,10 +17,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Group and Group-Grant REST handlers for Phase 5 (F5-03).
+//! Group and Group-Grant REST handlers for Phase 5 (F5-03, F5-04).
 //!
 //! Provides CRUD for user/device groups, group memberships, and group-to-group
-//! grant relationships (`read`, `operate`) with RBAC and audit logging.
+//! grant relationships (`read`, `operate`) with RBAC, non-enumerative scoping, and audit logging.
 
 use audit_core::{Actor, Category, EventInput, Outcome, Source};
 use axum::extract::{Path, Query, State};
@@ -35,9 +35,10 @@ use uuid::Uuid;
 
 use crate::auth::{extract_client_ip, extract_trace_id, AuthenticatedUser};
 use crate::identity::{
-    validate_group_name, Group, GroupGrant, GroupKind, GroupMember, GroupPermission, SubjectType,
+    is_group_in_scope, validate_group_name, Group, GroupGrant, GroupKind, GroupMember,
+    GroupPermission, SubjectType,
 };
-use crate::permissions::{check_permission, GROUPS_MANAGE, GROUPS_READ};
+use crate::permissions::{audit_scope_denied, check_permission, GROUPS_MANAGE, GROUPS_READ};
 use crate::AppState;
 
 macro_rules! db_or_500 {
@@ -48,6 +49,21 @@ macro_rules! db_or_500 {
         }
     };
 }
+
+const GROUPS_SCOPE_CLAUSE: &str = r#"
+    (? = 'admin' OR ? = 'auditor' OR (
+        EXISTS (
+            SELECT 1 FROM group_members
+            WHERE group_id = groups.id AND subject_type = 'user' AND subject_id = ?
+        ) OR EXISTS (
+            SELECT 1 FROM group_grants gg
+            JOIN group_members gm_user ON gg.from_group_id = gm_user.group_id
+            WHERE gg.to_group_id = groups.id
+              AND gm_user.subject_type = 'user' AND gm_user.subject_id = ?
+              AND gg.permission IN ('read', 'operate')
+        )
+    ))
+"#;
 
 #[derive(Debug, Deserialize)]
 pub struct ListGroupsQuery {
@@ -93,16 +109,23 @@ pub async fn list_groups_handler(
     let offset = params.offset.unwrap_or(0).max(0);
 
     let (items, total) = if let Some(ref kind) = params.kind {
+        let sql = format!(
+            "SELECT id, kind, name, description, created_at, created_by, updated_at, updated_by
+             FROM groups WHERE kind = ? AND ({}) ORDER BY name ASC LIMIT ? OFFSET ?",
+            GROUPS_SCOPE_CLAUSE
+        );
+
         let rows = db_or_500!(
-            sqlx::query(
-                "SELECT id, kind, name, description, created_at, created_by, updated_at, updated_by
-                 FROM groups WHERE kind = ? ORDER BY name ASC LIMIT ? OFFSET ?",
-            )
-            .bind(kind)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&state.db)
-            .await
+            sqlx::query(&sql)
+                .bind(kind)
+                .bind(&user.role)
+                .bind(&user.role)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&state.db)
+                .await
         );
 
         let items: Vec<Group> = rows
@@ -110,24 +133,40 @@ pub async fn list_groups_handler(
             .filter_map(|r| Group::from_row(&r).ok())
             .collect();
 
+        let count_sql = format!(
+            "SELECT count(*) FROM groups WHERE kind = ? AND ({})",
+            GROUPS_SCOPE_CLAUSE
+        );
+
         let total: i64 = db_or_500!(
-            sqlx::query_scalar("SELECT count(*) FROM groups WHERE kind = ?")
+            sqlx::query_scalar(&count_sql)
                 .bind(kind)
+                .bind(&user.role)
+                .bind(&user.role)
+                .bind(&user.id)
+                .bind(&user.id)
                 .fetch_one(&state.db)
                 .await
         );
 
         (items, total)
     } else {
+        let sql = format!(
+            "SELECT id, kind, name, description, created_at, created_by, updated_at, updated_by
+             FROM groups WHERE ({}) ORDER BY name ASC LIMIT ? OFFSET ?",
+            GROUPS_SCOPE_CLAUSE
+        );
+
         let rows = db_or_500!(
-            sqlx::query(
-                "SELECT id, kind, name, description, created_at, created_by, updated_at, updated_by
-                 FROM groups ORDER BY name ASC LIMIT ? OFFSET ?",
-            )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&state.db)
-            .await
+            sqlx::query(&sql)
+                .bind(&user.role)
+                .bind(&user.role)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&state.db)
+                .await
         );
 
         let items: Vec<Group> = rows
@@ -135,8 +174,17 @@ pub async fn list_groups_handler(
             .filter_map(|r| Group::from_row(&r).ok())
             .collect();
 
+        let count_sql = format!(
+            "SELECT count(*) FROM groups WHERE ({})",
+            GROUPS_SCOPE_CLAUSE
+        );
+
         let total: i64 = db_or_500!(
-            sqlx::query_scalar("SELECT count(*) FROM groups")
+            sqlx::query_scalar(&count_sql)
+                .bind(&user.role)
+                .bind(&user.role)
+                .bind(&user.id)
+                .bind(&user.id)
                 .fetch_one(&state.db)
                 .await
         );
@@ -283,7 +331,27 @@ pub async fn get_group_handler(
 
     match row {
         Some(r) => match Group::from_row(&r) {
-            Ok(group) => Json(group).into_response(),
+            Ok(group) => {
+                if user.role != "admin" {
+                    let in_scope = match is_group_in_scope(&state.db, &user, &id).await {
+                        Ok(v) => v,
+                        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                    };
+                    if !in_scope {
+                        audit_scope_denied(
+                            &state.audit,
+                            &user,
+                            "group",
+                            &id,
+                            &client_ip,
+                            &trace_id,
+                        )
+                        .await;
+                        return StatusCode::NOT_FOUND.into_response();
+                    }
+                }
+                Json(group).into_response()
+            }
             Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         },
         None => StatusCode::NOT_FOUND.into_response(),
@@ -448,6 +516,25 @@ pub async fn list_group_members_handler(
     let trace_id = extract_trace_id(&headers);
     if let Err(e) = check_permission(&state, &user, GROUPS_READ, &client_ip, &trace_id).await {
         return e.into_response();
+    }
+
+    if user.role != "admin" {
+        let in_scope = match is_group_in_scope(&state.db, &user, &id).await {
+            Ok(v) => v,
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+        if !in_scope {
+            let group_exists: bool = db_or_500!(
+                sqlx::query_scalar("SELECT count(*) > 0 FROM groups WHERE id = ?")
+                    .bind(&id)
+                    .fetch_one(&state.db)
+                    .await
+            );
+            if group_exists {
+                audit_scope_denied(&state.audit, &user, "group", &id, &client_ip, &trace_id).await;
+            }
+            return StatusCode::NOT_FOUND.into_response();
+        }
     }
 
     let rows = db_or_500!(
@@ -634,6 +721,25 @@ pub async fn list_group_grants_handler(
     let trace_id = extract_trace_id(&headers);
     if let Err(e) = check_permission(&state, &user, GROUPS_READ, &client_ip, &trace_id).await {
         return e.into_response();
+    }
+
+    if user.role != "admin" {
+        let in_scope = match is_group_in_scope(&state.db, &user, &id).await {
+            Ok(v) => v,
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+        if !in_scope {
+            let group_exists: bool = db_or_500!(
+                sqlx::query_scalar("SELECT count(*) > 0 FROM groups WHERE id = ?")
+                    .bind(&id)
+                    .fetch_one(&state.db)
+                    .await
+            );
+            if group_exists {
+                audit_scope_denied(&state.audit, &user, "group", &id, &client_ip, &trace_id).await;
+            }
+            return StatusCode::NOT_FOUND.into_response();
+        }
     }
 
     let rows = db_or_500!(

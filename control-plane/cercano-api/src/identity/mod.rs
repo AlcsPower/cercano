@@ -21,6 +21,9 @@
 
 pub mod address_book;
 pub mod groups;
+pub mod scope;
+
+pub use scope::{is_address_book_in_scope, is_device_in_scope, is_group_in_scope};
 
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;

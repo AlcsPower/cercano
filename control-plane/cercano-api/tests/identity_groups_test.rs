@@ -362,9 +362,15 @@ async fn test_tc_f5_003_address_book_crud_and_permissions() {
     let entry_id = body["id"].as_str().unwrap().to_string();
     assert_eq!(body["name"], "Servidor Intranet");
 
-    // 4. Operator reads address book -> 200 OK
+    // 4. Operator reads address book -> 200 OK, but 0 entries visible (rule 3: entries without group/device are admin-only)
     let (status, body) =
         request_json(&app, "GET", "/api/address-book", Some(&operator_tok), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total"], 0);
+
+    // 4b. Admin reads address book -> 200 OK, 1 entry visible
+    let (status, body) =
+        request_json(&app, "GET", "/api/address-book", Some(&admin_tok), None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["total"], 1);
     assert_eq!(body["items"][0]["name"], "Servidor Intranet");

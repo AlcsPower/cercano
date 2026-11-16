@@ -824,7 +824,7 @@ pub async fn heartbeat_handler(
 /// Protected by Bearer token authentication.
 pub async fn list_devices_handler(
     State(state): State<AppState>,
-    _user: AuthenticatedUser,
+    user: AuthenticatedUser,
 ) -> Result<Json<Vec<DeviceResponse>>, DeviceError> {
     let grace_secs = state.config.device_grace_period_secs as i64;
 
@@ -844,6 +844,21 @@ pub async fn list_devices_handler(
             profile_id,
             role
         FROM devices
+        WHERE ? = 'admin'
+           OR EXISTS (
+                SELECT 1 FROM group_members gm_dev
+                JOIN group_members gm_user ON gm_dev.group_id = gm_user.group_id
+                WHERE gm_dev.subject_type = 'device' AND gm_dev.subject_id = devices.id
+                  AND gm_user.subject_type = 'user' AND gm_user.subject_id = ?
+           )
+           OR EXISTS (
+                SELECT 1 FROM group_grants gg
+                JOIN group_members gm_user ON gg.from_group_id = gm_user.group_id
+                JOIN group_members gm_dev ON gg.to_group_id = gm_dev.group_id
+                WHERE gm_dev.subject_type = 'device' AND gm_dev.subject_id = devices.id
+                  AND gm_user.subject_type = 'user' AND gm_user.subject_id = ?
+                  AND gg.permission IN ('read', 'operate')
+           )
         ORDER BY created_at DESC
         "#,
         DEVICE_STATUS_EXPR
@@ -851,6 +866,9 @@ pub async fn list_devices_handler(
 
     let rows = sqlx::query(&query_sql)
         .bind(grace_secs)
+        .bind(&user.role)
+        .bind(&user.id)
+        .bind(&user.id)
         .fetch_all(&state.db)
         .await?;
 
@@ -877,13 +895,45 @@ pub async fn list_devices_handler(
 
 /// Retrieves details for a specific device with calculated status.
 ///
-/// Protected by Bearer token authentication.
+/// Protected by Bearer token authentication and group-based scope enforcement (F5-04).
 pub async fn get_device_handler(
     State(state): State<AppState>,
-    _user: AuthenticatedUser,
+    headers: HeaderMap,
+    user: AuthenticatedUser,
     Path(id): Path<String>,
 ) -> Result<Json<DeviceResponse>, DeviceError> {
     let grace_secs = state.config.device_grace_period_secs as i64;
+
+    // F5-04 Non-enumerative scope check
+    if user.role != "admin" {
+        let in_scope = crate::identity::is_device_in_scope(&state.db, &user, &id).await?;
+        if !in_scope {
+            let device_exists: bool =
+                sqlx::query_scalar("SELECT count(*) > 0 FROM devices WHERE id = ?")
+                    .bind(&id)
+                    .fetch_one(&state.db)
+                    .await?;
+
+            if device_exists {
+                let client_ip = extract_client_ip(&headers, None, &state.config.trusted_proxies);
+                let trace_id = extract_trace_id(&headers);
+                crate::permissions::audit_scope_denied(
+                    &state.audit,
+                    &user,
+                    "device",
+                    &id,
+                    &client_ip,
+                    &trace_id,
+                )
+                .await;
+            }
+
+            return Err(DeviceError::NotFound(format!(
+                "Dispositivo con ID '{}' no encontrado",
+                id
+            )));
+        }
+    }
 
     let query_sql = format!(
         r#"

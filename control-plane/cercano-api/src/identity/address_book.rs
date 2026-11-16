@@ -17,10 +17,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Address Book REST handlers for Phase 5 (F5-03).
+//! Address Book REST handlers for Phase 5 (F5-03, F5-04).
 //!
-//! Provides CRUD for address book entries with RBAC (`book:read`, `book:manage`)
-//! and comprehensive audit logging (`console.book.*`).
+//! Provides CRUD for address book entries with RBAC (`book:read`, `book:manage`),
+//! strict non-enumerative group/device scoping (F5-04), and audit logging (`console.book.*`).
 
 use audit_core::{Actor, Category, EventInput, Outcome, Source};
 use axum::extract::{Path, Query, State};
@@ -34,8 +34,11 @@ use sqlx::{FromRow, Row};
 use uuid::Uuid;
 
 use crate::auth::{extract_client_ip, extract_trace_id, AuthenticatedUser};
-use crate::identity::{validate_address_book_name, AddressBookEntry, MAX_NOTES_LEN, MAX_TAGS_LEN};
-use crate::permissions::{check_permission, BOOK_MANAGE, BOOK_READ};
+use crate::identity::{
+    is_address_book_in_scope, validate_address_book_name, AddressBookEntry, MAX_NOTES_LEN,
+    MAX_TAGS_LEN,
+};
+use crate::permissions::{audit_scope_denied, check_permission, BOOK_MANAGE, BOOK_READ};
 use crate::AppState;
 
 macro_rules! db_or_500 {
@@ -46,6 +49,42 @@ macro_rules! db_or_500 {
         }
     };
 }
+
+const ADDRESS_BOOK_SCOPE_CLAUSE: &str = r#"
+    (? = 'admin' OR (
+        address_book.device_id IS NOT NULL AND (
+            EXISTS (
+                SELECT 1 FROM group_members gm_dev
+                JOIN group_members gm_user ON gm_dev.group_id = gm_user.group_id
+                WHERE gm_dev.subject_type = 'device' AND gm_dev.subject_id = address_book.device_id
+                  AND gm_user.subject_type = 'user' AND gm_user.subject_id = ?
+            )
+            OR EXISTS (
+                SELECT 1 FROM group_grants gg
+                JOIN group_members gm_user ON gg.from_group_id = gm_user.group_id
+                JOIN group_members gm_dev ON gg.to_group_id = gm_dev.group_id
+                WHERE gm_dev.subject_type = 'device' AND gm_dev.subject_id = address_book.device_id
+                  AND gm_user.subject_type = 'user' AND gm_user.subject_id = ?
+                  AND gg.permission IN ('read', 'operate')
+            )
+        )
+    ) OR (
+        address_book.group_id IS NOT NULL AND (
+            EXISTS (
+                SELECT 1 FROM group_members gm_user
+                WHERE gm_user.group_id = address_book.group_id
+                  AND gm_user.subject_type = 'user' AND gm_user.subject_id = ?
+            )
+            OR EXISTS (
+                SELECT 1 FROM group_grants gg
+                JOIN group_members gm_user ON gg.from_group_id = gm_user.group_id
+                WHERE gg.to_group_id = address_book.group_id
+                  AND gm_user.subject_type = 'user' AND gm_user.subject_id = ?
+                  AND gg.permission IN ('read', 'operate')
+            )
+        )
+    ))
+"#;
 
 #[derive(Debug, Deserialize)]
 pub struct ListAddressBookQuery {
@@ -92,16 +131,24 @@ pub async fn list_address_book_handler(
     let offset = params.offset.unwrap_or(0).max(0);
 
     let (items, total) = if let Some(ref gid) = params.group_id {
+        let sql = format!(
+            "SELECT id, name, device_id, group_id, host, port, tags, notes, created_at, created_by, updated_at, updated_by
+             FROM address_book WHERE group_id = ? AND ({}) ORDER BY name ASC LIMIT ? OFFSET ?",
+            ADDRESS_BOOK_SCOPE_CLAUSE
+        );
+
         let rows = db_or_500!(
-            sqlx::query(
-                "SELECT id, name, device_id, group_id, host, port, tags, notes, created_at, created_by, updated_at, updated_by
-                 FROM address_book WHERE group_id = ? ORDER BY name ASC LIMIT ? OFFSET ?",
-            )
-            .bind(gid)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&state.db)
-            .await
+            sqlx::query(&sql)
+                .bind(gid)
+                .bind(&user.role)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&state.db)
+                .await
         );
 
         let items: Vec<AddressBookEntry> = rows
@@ -109,24 +156,42 @@ pub async fn list_address_book_handler(
             .filter_map(|r| AddressBookEntry::from_row(&r).ok())
             .collect();
 
+        let count_sql = format!(
+            "SELECT count(*) FROM address_book WHERE group_id = ? AND ({})",
+            ADDRESS_BOOK_SCOPE_CLAUSE
+        );
+
         let total: i64 = db_or_500!(
-            sqlx::query_scalar("SELECT count(*) FROM address_book WHERE group_id = ?")
+            sqlx::query_scalar(&count_sql)
                 .bind(gid)
+                .bind(&user.role)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(&user.id)
                 .fetch_one(&state.db)
                 .await
         );
 
         (items, total)
     } else {
+        let sql = format!(
+            "SELECT id, name, device_id, group_id, host, port, tags, notes, created_at, created_by, updated_at, updated_by
+             FROM address_book WHERE ({}) ORDER BY name ASC LIMIT ? OFFSET ?",
+            ADDRESS_BOOK_SCOPE_CLAUSE
+        );
+
         let rows = db_or_500!(
-            sqlx::query(
-                "SELECT id, name, device_id, group_id, host, port, tags, notes, created_at, created_by, updated_at, updated_by
-                 FROM address_book ORDER BY name ASC LIMIT ? OFFSET ?",
-            )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&state.db)
-            .await
+            sqlx::query(&sql)
+                .bind(&user.role)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&state.db)
+                .await
         );
 
         let items: Vec<AddressBookEntry> = rows
@@ -134,8 +199,18 @@ pub async fn list_address_book_handler(
             .filter_map(|r| AddressBookEntry::from_row(&r).ok())
             .collect();
 
+        let count_sql = format!(
+            "SELECT count(*) FROM address_book WHERE ({})",
+            ADDRESS_BOOK_SCOPE_CLAUSE
+        );
+
         let total: i64 = db_or_500!(
-            sqlx::query_scalar("SELECT count(*) FROM address_book")
+            sqlx::query_scalar(&count_sql)
+                .bind(&user.role)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(&user.id)
+                .bind(&user.id)
                 .fetch_one(&state.db)
                 .await
         );
@@ -283,7 +358,27 @@ pub async fn get_address_book_handler(
 
     match row {
         Some(r) => match AddressBookEntry::from_row(&r) {
-            Ok(entry) => Json(entry).into_response(),
+            Ok(entry) => {
+                if user.role != "admin" {
+                    let in_scope = match is_address_book_in_scope(&state.db, &user, &entry).await {
+                        Ok(v) => v,
+                        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                    };
+                    if !in_scope {
+                        audit_scope_denied(
+                            &state.audit,
+                            &user,
+                            "address_book",
+                            &id,
+                            &client_ip,
+                            &trace_id,
+                        )
+                        .await;
+                        return StatusCode::NOT_FOUND.into_response();
+                    }
+                }
+                Json(entry).into_response()
+            }
             Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         },
         None => StatusCode::NOT_FOUND.into_response(),
@@ -304,7 +399,7 @@ pub async fn update_address_book_handler(
     }
 
     let current = db_or_500!(
-        sqlx::query("SELECT id, name, device_id, group_id, host, port, tags, notes FROM address_book WHERE id = ?")
+        sqlx::query("SELECT id, name, device_id, group_id, host, port, tags, notes, created_at, created_by, updated_at, updated_by FROM address_book WHERE id = ?")
             .bind(&id)
             .fetch_optional(&state.db)
             .await
@@ -314,6 +409,29 @@ pub async fn update_address_book_handler(
         Some(r) => r,
         None => return StatusCode::NOT_FOUND.into_response(),
     };
+
+    if user.role != "admin" {
+        let entry = match AddressBookEntry::from_row(&current) {
+            Ok(e) => e,
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+        let in_scope = match is_address_book_in_scope(&state.db, &user, &entry).await {
+            Ok(v) => v,
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+        if !in_scope {
+            audit_scope_denied(
+                &state.audit,
+                &user,
+                "address_book",
+                &id,
+                &client_ip,
+                &trace_id,
+            )
+            .await;
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    }
 
     let new_name = match payload.name {
         Some(ref n) => {
@@ -416,16 +534,47 @@ pub async fn delete_address_book_handler(
         return e.into_response();
     }
 
-    let res = db_or_500!(
+    let existing = db_or_500!(
+        sqlx::query("SELECT id, name, device_id, group_id, host, port, tags, notes, created_at, created_by, updated_at, updated_by FROM address_book WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(&state.db)
+            .await
+    );
+
+    let existing = match existing {
+        Some(r) => r,
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    if user.role != "admin" {
+        let entry = match AddressBookEntry::from_row(&existing) {
+            Ok(e) => e,
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+        let in_scope = match is_address_book_in_scope(&state.db, &user, &entry).await {
+            Ok(v) => v,
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+        if !in_scope {
+            audit_scope_denied(
+                &state.audit,
+                &user,
+                "address_book",
+                &id,
+                &client_ip,
+                &trace_id,
+            )
+            .await;
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    }
+
+    db_or_500!(
         sqlx::query("DELETE FROM address_book WHERE id = ?")
             .bind(&id)
             .execute(&state.db)
             .await
     );
-
-    if res.rows_affected() == 0 {
-        return StatusCode::NOT_FOUND.into_response();
-    }
 
     let _ = state
         .audit

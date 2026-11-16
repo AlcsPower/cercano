@@ -184,6 +184,40 @@ pub async fn audit_authz_denied(
     let _ = audit.append(audit_input).await;
 }
 
+pub async fn audit_scope_denied(
+    audit: &audit_core::AuditStore,
+    user: &AuthenticatedUser,
+    resource_type: &str,
+    resource_id: &str,
+    client_ip: &str,
+    trace_id: &str,
+) {
+    let audit_input = EventInput::new(
+        trace_id,
+        Source::Api,
+        Category::Console,
+        "authz.denied",
+        Actor::with_details(
+            &user.id,
+            "user",
+            Some(user.username.clone()),
+            Some(client_ip.to_string()),
+        ),
+        Outcome::Denied,
+        json!({
+            "username": user.username,
+            "role": user.role,
+            "resource": resource_type,
+            "resource_id": resource_id,
+            "reason": "out_of_scope",
+            "client_ip": client_ip,
+        }),
+    )
+    .with_subject(Subject::with_details(resource_id, resource_type, None));
+
+    let _ = audit.append(audit_input).await;
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RbacError {
     #[error("Authentication error: {0}")]
