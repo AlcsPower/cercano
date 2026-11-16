@@ -607,11 +607,7 @@ pub async fn is_locked_out(pool: &SqlitePool, username: &str, ip: &str) -> Resul
     .await?;
 
     let ip_count: i64 = ip_row.get("failed_count");
-    if ip_count >= MAX_FAILED_LOGIN_ATTEMPTS {
-        return Ok(true);
-    }
-
-    Ok(false)
+    Ok(ip_count >= MAX_FAILED_LOGIN_ATTEMPTS)
 }
 
 /// Records a login attempt into `login_attempts` for audit and brute-force tracking.
