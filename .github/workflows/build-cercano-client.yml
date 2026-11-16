@@ -1,0 +1,136 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Cercano Contributors
+#
+# Workflow oficial de compilación del cliente de escritorio gráfico completo (Flutter + Rust)
+# Produce el binario base 'cercano.exe' y los instaladores Windows (Soporte y Técnico).
+
+name: Build Cercano Desktop Client (Production)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_server_ip:
+        description: 'IP o Host del servidor Cercano (defecto: 172.16.8.163)'
+        required: false
+        default: '172.16.8.163'
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+env:
+  RUST_VERSION: "1.75"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+
+jobs:
+  build-windows-client:
+    name: Build Windows Client (x86_64)
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply Cercano patches to upstream
+        shell: bash
+        run: |
+          bash tools/check-license.sh
+          bash tools/apply-patches
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter SDK
+        uses: subosito/flutter-action@v2.12.0
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Precache Flutter Windows engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: "rustfmt"
+
+      - name: Setup vcpkg with GitHub Actions cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies (x64-windows-static)
+        shell: bash
+        run: |
+          $VCPKG_ROOT/vcpkg install \
+            --triplet x64-windows-static \
+            --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Build Full Cercano Client Executable
+        shell: bash
+        run: |
+          cd vendor/client
+          python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+
+      - name: Stage Client Base Binary into dist/base
+        shell: bash
+        run: |
+          mkdir -p dist/base
+          # Copiar el runner compilado y renombrar a cercano.exe
+          cp -r vendor/client/flutter/build/windows/x64/runner/Release/* dist/base/
+          if [ -f dist/base/rustdesk.exe ]; then
+            mv -f dist/base/rustdesk.exe dist/base/cercano.exe
+          fi
+          echo "OK: Binario base staged en dist/base/cercano.exe"
+          ls -la dist/base/
+
+      - name: Generate Signed Installers with cercano-build
+        shell: bash
+        run: |
+          SERVER_IP="${{ github.event.inputs.target_server_ip || '172.16.8.163' }}"
+          echo "Generando instaladores apuntando al servidor: $SERVER_IP"
+
+          # Compilar el generador cercano-build
+          cargo build --release -p cercano-build
+
+          # Generar paquete Soporte
+          target/release/cercano-build \
+            --profile docs/specs/examples/profile-soporte-lan.json \
+            --base-binary dist/base/cercano.exe \
+            --out dist/builds \
+            --package-windows
+
+          # Generar paquete Técnico
+          target/release/cercano-build \
+            --profile docs/specs/examples/profile-tecnico-lan.json \
+            --base-binary dist/base/cercano.exe \
+            --out dist/builds \
+            --package-windows
+
+          ls -la dist/builds/cercano-soporte-1.0.0/
+          ls -la dist/builds/cercano-tecnico-1.0.0/
+
+      - name: Upload Windows Client Installer Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cercano-windows-production-installers
+          path: |
+            dist/builds/
+            dist/base/cercano.exe
+          retention-days: 14

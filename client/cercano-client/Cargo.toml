@@ -1,0 +1,14 @@
+[package]
+name = "cercano-client"
+version = "0.1.0"
+edition = "2021"
+authors = ["Cercano Contributors"]
+license = "AGPL-3.0-only"
+description = "Cercano Lightweight Client for Windows"
+
+[workspace]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
