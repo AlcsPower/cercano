@@ -168,4 +168,6 @@ jobs:
       - name: Cargo check client
         env:
           SODIUM_USE_PKG_CONFIG: 1
+          CXXFLAGS: "-include cstdint"
+          CFLAGS: "-include stdint.h"
         run: cargo check --manifest-path vendor/client/Cargo.toml
