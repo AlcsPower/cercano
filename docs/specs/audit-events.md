@@ -809,6 +809,26 @@ Para cada evento se incluye el vector de prueba matemático oficial:
 
 ---
 
+### 6.19 Eventos de Identidad, Grupos y Federación (F5)
+
+Definidos en [`docs/specs/identidad.md`](identidad.md) §9 y [ADR-012](../adr/012-identidad-grupos-federacion.md):
+
+| Acción (`action`) | Categoría | Operación | Campos permitidos en `details` | Campos PROHIBIDOS |
+|---|---|---|---|---|
+| `console.group.created` / `_updated` / `_deleted` | `console` | CRUD de grupos de usuarios/dispositivos | `{ "group_id", "kind", "name", "created_by"? }` | contraseñas, tokens |
+| `console.group.member_added` / `_removed` | `console` | Gestión de miembros de grupo | `{ "group_id", "subject_type", "subject_id" }` | credenciales de usuario |
+| `console.group.grant_added` / `_removed` | `console` | Concesiones de acceso entre grupos | `{ "from_group_id", "to_group_id", "permission" }` | secretos |
+| `console.book.entry_created` / `_updated` / `_deleted` | `console` | Libreta de direcciones técnica | `{ "entry_id", "device_id"?, "group_id"?, "host"? }` | credenciales de conexión |
+| `console.policy.created` / `_activated` / `_revoked` | `console` | Ciclo de vida de estrategias versionadas | `{ "policy_id", "scope_type", "scope_id", "version", "doc_sha256" }` | contenido malformado |
+| `console.idp.created` / `_updated` / `_disabled` | `console` | Configuración de proveedores OIDC/LDAP | `{ "provider_id", "kind", "name", "secret_ref" }` | `client_secret`, password bind |
+| `auth.identity.linked` / `_unlinked` | `auth` | Vinculación federada de cuentas | `{ "user_id", "provider_id", "subject" }` | tokens de acceso/id_token |
+| `auth.oidc_login` / `_failed` | `auth` | Inicio de sesión OIDC | `{ "provider_id", "subject", "error_code"? }` | id_token, access_token, state, code |
+| `auth.ldap_login` / `_failed` | `auth` | Inicio de sesión LDAP sobre TLS | `{ "provider_id", "username", "error_code"? }` | contraseña de usuario |
+| `auth.break_glass_login` | `auth` | Acceso local de emergencia (break-glass) | `{ "user_id", "reason" }` | contraseñas o códigos TOTP |
+| `auth.denied` | `auth` | Denegación por política o fuera de alcance | `{ "resource", "action_attempted", "reason" }` | credenciales |
+
+---
+
 ## 7. Verificación Offline de la Cadena (`cercano-audit verify`)
 
 El algoritmo de verificación implementado en `audit-core` (tarea F2-02) y expuesto mediante la herramienta CLI `cercano-audit verify` (tarea F2-03) sigue los siguientes pasos:

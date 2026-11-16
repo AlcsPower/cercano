@@ -1,7 +1,7 @@
 # ADR-012 — Grupos, estrategias centrales y federación de identidad (F5)
 
-- **Estado:** Propuesto; lo aprueba el dueño (F5-01). Hasta entonces no se implementa nada de F5.
-- **Fecha:** 2026-11-10
+- **Estado:** Aprobado (2026-11-16) por Dueño del producto, Coordinador y Agente-Seguridad.
+- **Fecha:** 2026-11-10 (Aprobado: 2026-11-16)
 - **Fase:** F5
 - **Decisores:** Dueño del producto, Coordinador, Agente-ControlPlane, Agente-Seguridad
 - **Relacionados:** [`docs/specs/identidad.md`](../specs/identidad.md) (contrato), [`docs/PLAN-F5-IDENTIDAD.md`](../PLAN-F5-IDENTIDAD.md) (tareas), [`docs/adr/008-roles-instalador.md`](008-roles-instalador.md) (roles de instalador, no se tocan), [`docs/specs/cercano-profile.md`](../specs/cercano-profile.md) (perfil firmado), [`docs/specs/audit-events.md`](../specs/audit-events.md)

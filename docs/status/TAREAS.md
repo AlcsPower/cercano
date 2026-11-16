@@ -125,7 +125,7 @@ Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5. F5-
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
-| F5-01 | Aprobar modelo de grupos, libreta, estrategias, federación, LAPS y orden de migraciones | F4, F4.5 | Coordinador + Seguridad | Dueño/QA | En verificación |
+| F5-01 | Aprobar modelo de grupos, libreta, estrategias, federación, LAPS y orden de migraciones | F4, F4.5 | Coordinador + Seguridad | Dueño/QA | Hecho |
 | F5-02 | Migración aditiva (siguiente versión libre; hoy la 009) y modelos de grupos, membresías, libreta y estrategias | F5-01 | ControlPlane | QA | Pendiente |
 | F5-03 | API CRUD de grupos y libreta con auditoría | F5-02, F4-05 | ControlPlane | QA | Pendiente |
 | F5-04 | Enforcement de alcance por rol/grupo y permisos entre grupos | F5-02/03 | ControlPlane | Seguridad | Pendiente |

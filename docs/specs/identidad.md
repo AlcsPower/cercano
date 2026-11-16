@@ -1,6 +1,6 @@
 # Especificación — Identidad, grupos, estrategias y federación (F5)
 
-**Versión:** 0.1 · **Fecha:** 2026-11-10 · **Estado:** contrato propuesto; lo aprueba el dueño en F5-01 y lo implementan F5-02…F5-08.
+**Versión:** 1.0 · **Fecha:** 2026-11-16 · **Estado:** Aprobado en F5-01 para implementación en F5-02…F5-08.
 **Decisión:** [ADR-012](../adr/012-identidad-grupos-federacion.md). **Plan:** [PLAN-F5-IDENTIDAD.md](../PLAN-F5-IDENTIDAD.md). **Pruebas:** [PLAN-DE-PRUEBAS.md](../PLAN-DE-PRUEBAS.md) §6 «F5».
 
 > Regla de oro: todo lo de este documento se **calcula y aplica en el servidor**. La consola y el cliente solo muestran lo que el API concede. Ausencia de grupo, concesión, política o proveedor nunca amplía permisos.
@@ -180,18 +180,18 @@ allowlist, nunca por defecto.
 Categoría `console` para cambios de configuración y `auth` para autenticación; no se añaden categorías
 nuevas. Nunca se registran contraseñas, tokens, códigos TOTP, secretos LDAP/OIDC ni credenciales.
 
-| Evento | Categoría | Cuándo |
+| Evento (`action`) | Categoría | Cuándo |
 |---|---|---|
-| `group.created`, `group.updated`, `group.deleted` | console | CRUD de grupo |
-| `group.member_added`, `group.member_removed` | console | Membresía |
-| `group.grant_added`, `group.grant_removed` | console | Concesión entre grupos |
-| `book.entry_created`, `book.entry_updated`, `book.entry_deleted` | console | Libreta |
-| `policy.created`, `policy.activated`, `policy.revoked` | console | Estrategias |
-| `idp.created`, `idp.updated`, `idp.disabled` | console | Proveedores |
-| `identity.linked`, `identity.unlinked` | auth | Vinculación |
+| `console.group.created`, `console.group.updated`, `console.group.deleted` | console | CRUD de grupo |
+| `console.group.member_added`, `console.group.member_removed` | console | Membresía |
+| `console.group.grant_added`, `console.group.grant_removed` | console | Concesión entre grupos |
+| `console.book.entry_created`, `console.book.entry_updated`, `console.book.entry_deleted` | console | Libreta |
+| `console.policy.created`, `console.policy.activated`, `console.policy.revoked` | console | Estrategias |
+| `console.idp.created`, `console.idp.updated`, `console.idp.disabled` | console | Proveedores |
+| `auth.identity.linked`, `auth.identity.unlinked` | auth | Vinculación |
 | `auth.oidc_login`, `auth.oidc_failed`, `auth.ldap_login`, `auth.ldap_failed` | auth | Login federado |
 | `auth.break_glass_login` | auth | Cuenta local de emergencia |
-| `authz.denied` | auth | Denegación (ya existe) |
+| `auth.denied` | auth | Denegación por política o alcance |
 
 ## 10. API
 
