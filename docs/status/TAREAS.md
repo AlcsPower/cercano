@@ -126,7 +126,7 @@ Fuente: `docs/PLAN-F4.5-CHAT.md` v1.1. Backend y consola dependen de F4-05/06; e
 
 ## F5 — Identidad y control de acceso
 
-Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5. F5-01 se redactó por adelantado (2026-11-10) como diseño; la implementación sigue esperando ese cierre y la aprobación del dueño.
+Fuente: `docs/PLAN-F5-IDENTIDAD.md`. Fase 5 completada y cerrada formalmente (2026-11-16; ver `docs/status/F5-cierre.md`). Las 13 tareas F5-01 a F5-13 están en Hecho (con F5-09 y F5-10 diferidas mediante ADR-013 y ADR-014).
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
@@ -142,7 +142,7 @@ Fuente: `docs/PLAN-F5-IDENTIDAD.md`. F5 empieza tras el cierre de F4 y F4.5. F5-
 | F5-10 | Evaluar/integrar Windows LAPS bajo consentimiento y permiso dedicado | F5-01, F3-16…18, F4 | ControlPlane + Cliente | Seguridad | Hecho |
 | F5-11 | Consola: grupos, libreta, estrategias, federación y política efectiva | F5-03…08 | Web | QA | Hecho |
 | F5-12 | Pruebas de integración, autorización, identidad y laboratorio LAN | F5-03…11 | QA + Seguridad | Coordinador | Hecho |
-| F5-13 | Documentación de operador y cierre F5 | F5-12 | Coordinador | Dueño | Pendiente |
+| F5-13 | Documentación de operador y cierre F5 | F5-12 | Coordinador | Dueño | Hecho |
 
 ## F6 — Optimización LAN y relays
 
