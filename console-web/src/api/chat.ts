@@ -376,6 +376,29 @@ export const chatApi = {
     await request<void>(`/api/chat/conversations/${id}/read`, { method: 'POST' });
   },
 
+  async escalate(
+    id: string,
+    traceId?: string
+  ): Promise<{ device_id: string; trace_id: string; url: string }> {
+    if (!isLive()) {
+      const conv = mockConversations.find((c) => c.id === id);
+      const deviceId = conv?.device_id || '987654321';
+      const actualTrace = traceId || id;
+      return {
+        device_id: deviceId,
+        trace_id: actualTrace,
+        url: `cercano://connect?device=${deviceId}&trace=${actualTrace}`,
+      };
+    }
+    return request<{ device_id: string; trace_id: string; url: string }>(
+      `/api/chat/conversations/${id}/escalate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ trace_id: traceId }),
+      }
+    );
+  },
+
   async getBranding(): Promise<ChatBranding> {
     if (!isLive()) {
       return { ...mockBranding };

@@ -41,8 +41,21 @@ type Message = RendezvousMessage;
 
 fn connection_meta(
     control_permissions: Option<ControlPermissions>,
-    controlled_context: Option<ControlledContext>,
+    mut controlled_context: Option<ControlledContext>,
 ) -> ConnectionMeta {
+    if let Ok(trace) = std::env::var("CERCANO_CONN_AUDIT_REF") {
+        if !trace.trim().is_empty() {
+            if let Some(ref mut ctx) = controlled_context {
+                if ctx.conn_audit_ref.is_empty() {
+                    ctx.conn_audit_ref = trace;
+                }
+            } else {
+                let mut ctx = ControlledContext::new();
+                ctx.conn_audit_ref = trace;
+                controlled_context = Some(ctx);
+            }
+        }
+    }
     ConnectionMeta {
         control_permissions,
         controlled_context,

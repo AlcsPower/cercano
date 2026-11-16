@@ -775,6 +775,12 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             "--relay" => {
                 param_array.push(format!("relay=true"));
             }
+            "--trace" | "--trace_id" => {
+                if let Some(trace) = args.next() {
+                    std::env::set_var("CERCANO_CONN_AUDIT_REF", &trace);
+                    param_array.push(format!("trace={trace}"));
+                }
+            }
             // inner
             "--switch_uuid" => {
                 if let Some(switch_uuid) = args.next() {

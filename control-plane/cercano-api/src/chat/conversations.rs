@@ -1830,3 +1830,113 @@ async fn fetch_conversation_detail(
         other_last_read_at,
     })
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct EscalatePayload {
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EscalateResponse {
+    pub device_id: String,
+    pub trace_id: String,
+    pub url: String,
+}
+
+/// Escalates a conversation to an active remote support session (F4.5-12).
+///
+/// Emits audit event `chat.escalated` and generates deep link `cercano://connect?device=<device_id>&trace=<trace_id>`.
+pub async fn escalate_conversation_handler(
+    State(state): State<AppState>,
+    caller: ChatCaller,
+    Path(conv_id): Path<String>,
+    payload: Option<Json<EscalatePayload>>,
+) -> Result<Response, ChatConvError> {
+    if !state.config.chat_enabled {
+        return Err(ChatConvError::Forbidden(
+            "El servicio de chat está desactivado.".to_string(),
+        ));
+    }
+
+    let user = match caller {
+        ChatCaller::User(u) => u,
+        ChatCaller::Device(_) => {
+            return Err(ChatConvError::Forbidden(
+                "Solo los técnicos o administradores pueden escalar conversaciones.".to_string(),
+            ));
+        }
+    };
+
+    let has_attend =
+        permissions::user_has_permission(&state.db, &user.id, &user.role, permissions::CHAT_ATTEND)
+            .await;
+    let has_manage =
+        permissions::user_has_permission(&state.db, &user.id, &user.role, permissions::CHAT_MANAGE)
+            .await;
+
+    if !has_attend && !has_manage && user.role != "admin" {
+        return Err(ChatConvError::Forbidden(
+            "Permiso insuficiente para escalar la conversación.".to_string(),
+        ));
+    }
+
+    let row = sqlx::query(
+        "SELECT id, device_id, assigned_user_id, status FROM chat_conversations WHERE id = ?",
+    )
+    .bind(&conv_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| ChatConvError::Internal(e.to_string()))?;
+
+    let Some(r) = row else {
+        return Err(ChatConvError::NotFound(
+            "Conversación no encontrada.".to_string(),
+        ));
+    };
+
+    let device_id: String = r.try_get("device_id").unwrap_or_default();
+    let assigned_user_id: Option<String> = r.try_get("assigned_user_id").ok().flatten();
+
+    if let Some(ref assigned) = assigned_user_id {
+        if assigned != &user.id && !has_manage && user.role != "admin" {
+            return Err(ChatConvError::Forbidden(
+                "Conversación asignada a otro técnico.".to_string(),
+            ));
+        }
+    }
+
+    let trace_id = payload
+        .and_then(|p| p.0.trace_id)
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| conv_id.clone());
+
+    let actor = Actor::with_type(&user.id, "user");
+    let subject = Subject::with_type(&conv_id, "conversation");
+    let audit_input = EventInput::new(
+        conv_id.clone(),
+        Source::Api,
+        Category::Chat,
+        "chat.escalated",
+        actor,
+        Outcome::Success,
+        json!({
+            "device_id": &device_id,
+            "trace_id": &trace_id,
+        }),
+    )
+    .with_subject(subject);
+    let _ = state.audit.append(audit_input).await;
+
+    let url = format!("cercano://connect?device={}&trace={}", device_id, trace_id);
+
+    Ok((
+        StatusCode::OK,
+        Json(EscalateResponse {
+            device_id,
+            trace_id,
+            url,
+        }),
+    )
+        .into_response())
+}

@@ -418,6 +418,7 @@ Auth: dispositivo dueño o técnico con acceso. Cuerpo opcional `{ "reason": "re
 | `POST /api/chat/conversations/{id}/assign` | `chat:manage` | `{ "user_id": "..." }` → `200` |
 | `POST /api/chat/conversations/{id}/close` | `chat:attend` | `200` |
 | `POST /api/chat/conversations/{id}/reopen` | `chat:manage` | `200`; vuelve a `waiting` sin asignar |
+| `POST /api/chat/conversations/{id}/escalate` | asignado o `chat:manage` | `{ "trace_id"?: "..." }` → `200` `{ "device_id": "...", "trace_id": "...", "url": "cercano://connect?device=...&trace=..." }` |
 | `GET /api/chat/agents` | `chat:manage` | `{ "agents": [{ "id": "...", "username": "..." }] }` |
 | `GET /api/chat/summary` | `chat:attend` | `{ "waiting": 3, "assigned_to_me": 1, "active": 2, "unread": 4 }` |
 

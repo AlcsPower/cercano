@@ -862,3 +862,95 @@ async fn test_tc_f4_5_097_branding_put_validation_and_permissions() {
     assert_eq!(b_get["organization_name"], "Institución de Ejemplo");
     assert_eq!(b_get["accent_color"], "#0055AA");
 }
+
+#[tokio::test]
+async fn test_tc_f4_5_086_remote_session_escalation() {
+    let env = setup().await;
+    let (dev_tok, _sk) = create_authenticated_device(&env, "dev-escalate-1").await;
+    let admin_tok = bootstrap_admin_session(&env).await;
+    let op_tok = create_technician_session(&env, &admin_tok, "tech_escalate").await;
+    let other_op_tok = create_technician_session(&env, &admin_tok, "other_tech").await;
+
+    // 1. Device creates conversation
+    let (status, conv) = request_raw(
+        &env,
+        "POST",
+        "/api/chat/conversations",
+        Some(&dev_tok),
+        Some(json!({
+            "contact_first_name": "Luis",
+            "contact_last_name": "Gómez",
+            "body": "Necesito ayuda remota con el sistema.",
+            "client_message_id": "msg-esc-1"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let conv_id = conv["id"].as_str().unwrap();
+
+    // 2. Device cannot escalate -> 403 Forbidden
+    let (s_dev, _) = request_raw(
+        &env,
+        "POST",
+        &format!("/api/chat/conversations/{conv_id}/escalate"),
+        Some(&dev_tok),
+        None,
+    )
+    .await;
+    assert_eq!(s_dev, StatusCode::FORBIDDEN);
+
+    // 3. Technician claims conversation
+    let (s_claim, _) = request_raw(
+        &env,
+        "POST",
+        &format!("/api/chat/conversations/{conv_id}/claim"),
+        Some(&op_tok),
+        None,
+    )
+    .await;
+    assert_eq!(s_claim, StatusCode::OK);
+
+    // 4. Another technician without manage/admin cannot escalate assigned conversation -> 403 Forbidden
+    let (s_other, _) = request_raw(
+        &env,
+        "POST",
+        &format!("/api/chat/conversations/{conv_id}/escalate"),
+        Some(&other_op_tok),
+        None,
+    )
+    .await;
+    assert_eq!(s_other, StatusCode::FORBIDDEN);
+
+    // 5. Assigned technician escalates conversation -> 200 OK
+    let (s_esc, esc_res) = request_raw(
+        &env,
+        "POST",
+        &format!("/api/chat/conversations/{conv_id}/escalate"),
+        Some(&op_tok),
+        Some(json!({
+            "trace_id": conv_id
+        })),
+    )
+    .await;
+    assert_eq!(s_esc, StatusCode::OK);
+    assert_eq!(esc_res["device_id"], "dev-escalate-1");
+    assert_eq!(esc_res["trace_id"], conv_id);
+    let expected_url = format!("cercano://connect?device=dev-escalate-1&trace={conv_id}");
+    assert_eq!(esc_res["url"], expected_url);
+
+    // 6. Admin can also escalate -> 200 OK
+    let (s_admin, admin_esc) = request_raw(
+        &env,
+        "POST",
+        &format!("/api/chat/conversations/{conv_id}/escalate"),
+        Some(&admin_tok),
+        None,
+    )
+    .await;
+    assert_eq!(s_admin, StatusCode::OK);
+    assert_eq!(admin_esc["device_id"], "dev-escalate-1");
+    assert!(admin_esc["url"]
+        .as_str()
+        .unwrap()
+        .starts_with("cercano://connect"));
+}

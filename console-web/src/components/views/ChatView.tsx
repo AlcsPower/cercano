@@ -9,9 +9,11 @@ import {
   Check,
   CheckCheck,
   CheckCircle2,
+  Copy,
   Inbox,
   Lock,
   MessageCircle,
+  Monitor,
   Paperclip,
   RefreshCw,
   Search,
@@ -321,6 +323,32 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUserId, canManageBran
     detail || conversations.find((conversation) => conversation.id === selectedId) || null;
   const isClosed = selectedConversation?.status === 'closed';
   const live = apiClient.isLiveMode();
+
+  const [escalating, setEscalating] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+  const [escalateDialog, setEscalateDialog] = useState<{
+    open: boolean;
+    deviceId: string;
+    url: string;
+  } | null>(null);
+
+  const handleEscalate = async (convId: string) => {
+    try {
+      setEscalating(true);
+      setError(null);
+      const res = await chatApi.escalate(convId);
+      window.location.href = res.url;
+      setEscalateDialog({
+        open: true,
+        deviceId: res.device_id,
+        url: res.url,
+      });
+    } catch (err: any) {
+      setError(err?.message || 'Error al escalar a sesión remota.');
+    } finally {
+      setEscalating(false);
+    }
+  };
 
   const runAction = async (action: () => Promise<unknown>) => {
     setError(null);
@@ -725,6 +753,33 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUserId, canManageBran
                       Cerrar
                     </AppleButton>
                   )}
+                  {!isClosed && (
+                    <>
+                      <AppleButton
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleEscalate(selectedConversation.id)}
+                        disabled={escalating}
+                        title="Abrir sesión remota en el cliente Cercano"
+                      >
+                        <Monitor size={14} className="mr-1.5" />
+                        {escalating ? 'Abriendo...' : 'Abrir sesión remota'}
+                      </AppleButton>
+                      <AppleButton
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedConversation.device_id);
+                          setCopiedId(true);
+                          setTimeout(() => setCopiedId(false), 2000);
+                        }}
+                        title="Copiar ID del dispositivo remoto"
+                      >
+                        <Copy size={14} className="mr-1.5" />
+                        {copiedId ? '¡Copiado!' : 'Copiar ID'}
+                      </AppleButton>
+                    </>
+                  )}
                   {isClosed && canManageBranding && (
                     <AppleButton
                       size="sm"
@@ -735,6 +790,41 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUserId, canManageBran
                     </AppleButton>
                   )}
                 </div>
+
+                {escalateDialog?.open && (
+                  <div className="mt-3 p-3 rounded-xl bg-cercano-blue/10 dark:bg-cercano-blue/20 border border-cercano-blue/20 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-cercano-slate dark:text-gray-200">
+                      <Monitor size={16} className="text-cercano-blue shrink-0" />
+                      <span>
+                        Sesión remota solicitada. Si tu cliente no se abrió automáticamente, conecta al ID:{' '}
+                        <strong className="font-mono text-sm text-gray-900 dark:text-white">
+                          {escalateDialog.deviceId}
+                        </strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <AppleButton
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          navigator.clipboard.writeText(escalateDialog.deviceId);
+                          setCopiedId(true);
+                          setTimeout(() => setCopiedId(false), 2000);
+                        }}
+                      >
+                        <Copy size={12} className="mr-1" />
+                        {copiedId ? '¡Copiado!' : 'Copiar ID'}
+                      </AppleButton>
+                      <AppleButton
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEscalateDialog(null)}
+                      >
+                        Cerrar
+                      </AppleButton>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="px-4 py-2.5 bg-black/[0.02] dark:bg-white/[0.03] border-b border-black/5 dark:border-white/[0.04]">

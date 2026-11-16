@@ -86,10 +86,27 @@ pub mod printer_service;
 pub type Childs = Arc<Mutex<Vec<std::process::Child>>>;
 type ConnMap = HashMap<i32, ConnInner>;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ConnectionMeta {
     pub control_permissions: Option<ControlPermissions>,
     pub controlled_context: Option<ControlledContext>,
+}
+
+impl Default for ConnectionMeta {
+    fn default() -> Self {
+        let mut controlled_context = None;
+        if let Ok(trace) = std::env::var("CERCANO_CONN_AUDIT_REF") {
+            if !trace.trim().is_empty() {
+                let mut ctx = ControlledContext::new();
+                ctx.conn_audit_ref = trace;
+                controlled_context = Some(ctx);
+            }
+        }
+        Self {
+            control_permissions: None,
+            controlled_context,
+        }
+    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

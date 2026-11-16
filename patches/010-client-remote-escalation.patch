@@ -1,0 +1,138 @@
+From: Agente-Cliente <cercano-dev@local>
+Subject: [PATCH] feat(client): F4.5-12 escalado a sesion remota cercano:// y propagacion de trace
+Date: 2026-11-16
+Component: vendor/client
+Task: F4.5-12
+
+Implementa en el cliente Cercano (vendor/client/):
+- Soporte para URI scheme cercano://connect?device=<id>&trace=<trace> y cercano://connect/<id>?trace=<trace>
+- Propagacion de trace_id hacia CERCANO_CONN_AUDIT_REF en args de CLI, unilinks y entorno
+- Conexion de trace_id con ControlledContext y ConnectionMeta para correlacion en eventos de auditoria
+
+---
+diff --git a/vendor/client/flutter/lib/common.dart b/vendor/client/flutter/lib/common.dart
+index b80e0b5..04f071e 100644
+--- a/vendor/client/flutter/lib/common.dart
++++ b/vendor/client/flutter/lib/common.dart
+@@ -2336,6 +2336,14 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
+       case '--relay':
+         forceRelay = true;
+         break;
++      case '--trace':
++      case '--trace_id':
++        if (i + 1 < args.length) {
++          final traceId = args[i + 1];
++          bind.mainSetEnv(key: 'CERCANO_CONN_AUDIT_REF', value: traceId);
++          i++;
++        }
++        break;
+       default:
+         break;
+     }
+@@ -2474,6 +2482,18 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
+   var queryParameters =
+       uri.queryParameters.map((k, v) => MapEntry(k.toLowerCase(), v));
+ 
++  // Cercano F4.5-12: Support cercano://connect?device=<id>&trace=<trace>
++  if (id == null && (command == '--connect' || uri.authority == 'connect')) {
++    id = queryParameters["device"] ?? queryParameters["id"];
++    command = '--connect';
++  }
++
++  // Cercano F4.5-12: Propagate trace_id to CERCANO_CONN_AUDIT_REF for session audit correlation
++  final trace = queryParameters["trace"] ?? queryParameters["trace_id"];
++  if (trace != null && trace.isNotEmpty) {
++    bind.mainSetEnv(key: 'CERCANO_CONN_AUDIT_REF', value: trace);
++  }
++
+   var key = queryParameters["key"];
+   if (id != null) {
+     if (key != null) {
+@@ -2516,6 +2536,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
+     String? switch_uuid = param["switch_uuid"];
+     if (switch_uuid != null) args.addAll(['--switch_uuid', switch_uuid]);
+     if (param["relay"] != null) args.add("--relay");
++    String? traceParam = param["trace"] ?? param["trace_id"];
++    if (traceParam != null && traceParam.isNotEmpty) args.addAll(['--trace', traceParam]);
+     return args;
+   }
+ 
+diff --git a/vendor/client/src/core_main.rs b/vendor/client/src/core_main.rs
+index 19a2670..2b2065a 100644
+--- a/vendor/client/src/core_main.rs
++++ b/vendor/client/src/core_main.rs
+@@ -775,6 +775,12 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
+             "--relay" => {
+                 param_array.push(format!("relay=true"));
+             }
++            "--trace" | "--trace_id" => {
++                if let Some(trace) = args.next() {
++                    std::env::set_var("CERCANO_CONN_AUDIT_REF", &trace);
++                    param_array.push(format!("trace={trace}"));
++                }
++            }
+             // inner
+             "--switch_uuid" => {
+                 if let Some(switch_uuid) = args.next() {
+diff --git a/vendor/client/src/rendezvous_mediator.rs b/vendor/client/src/rendezvous_mediator.rs
+index b418951..bbd8bcb 100644
+--- a/vendor/client/src/rendezvous_mediator.rs
++++ b/vendor/client/src/rendezvous_mediator.rs
+@@ -41,8 +41,21 @@ type Message = RendezvousMessage;
+ 
+ fn connection_meta(
+     control_permissions: Option<ControlPermissions>,
+-    controlled_context: Option<ControlledContext>,
++    mut controlled_context: Option<ControlledContext>,
+ ) -> ConnectionMeta {
++    if let Ok(trace) = std::env::var("CERCANO_CONN_AUDIT_REF") {
++        if !trace.trim().is_empty() {
++            if let Some(ref mut ctx) = controlled_context {
++                if ctx.conn_audit_ref.is_empty() {
++                    ctx.conn_audit_ref = trace;
++                }
++            } else {
++                let mut ctx = ControlledContext::new();
++                ctx.conn_audit_ref = trace;
++                controlled_context = Some(ctx);
++            }
++        }
++    }
+     ConnectionMeta {
+         control_permissions,
+         controlled_context,
+diff --git a/vendor/client/src/server.rs b/vendor/client/src/server.rs
+index 8e4c56c..2de8e06 100644
+--- a/vendor/client/src/server.rs
++++ b/vendor/client/src/server.rs
+@@ -86,12 +86,29 @@ pub mod printer_service;
+ pub type Childs = Arc<Mutex<Vec<std::process::Child>>>;
+ type ConnMap = HashMap<i32, ConnInner>;
+ 
+-#[derive(Clone, Default)]
++#[derive(Clone)]
+ pub struct ConnectionMeta {
+     pub control_permissions: Option<ControlPermissions>,
+     pub controlled_context: Option<ControlledContext>,
+ }
+ 
++impl Default for ConnectionMeta {
++    fn default() -> Self {
++        let mut controlled_context = None;
++        if let Ok(trace) = std::env::var("CERCANO_CONN_AUDIT_REF") {
++            if !trace.trim().is_empty() {
++                let mut ctx = ControlledContext::new();
++                ctx.conn_audit_ref = trace;
++                controlled_context = Some(ctx);
++            }
++        }
++        Self {
++            control_permissions: None,
++            controlled_context,
++        }
++    }
++}
++
+ #[cfg(any(target_os = "macos", target_os = "linux"))]
+ const CONFIG_SYNC_INTERVAL_SECS: f32 = 0.3;
+ #[cfg(any(target_os = "macos", target_os = "linux"))]

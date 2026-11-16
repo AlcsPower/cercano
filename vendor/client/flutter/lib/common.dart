@@ -2336,6 +2336,14 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
       case '--relay':
         forceRelay = true;
         break;
+      case '--trace':
+      case '--trace_id':
+        if (i + 1 < args.length) {
+          final traceId = args[i + 1];
+          bind.mainSetEnv(key: 'CERCANO_CONN_AUDIT_REF', value: traceId);
+          i++;
+        }
+        break;
       default:
         break;
     }
@@ -2474,6 +2482,18 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   var queryParameters =
       uri.queryParameters.map((k, v) => MapEntry(k.toLowerCase(), v));
 
+  // Cercano F4.5-12: Support cercano://connect?device=<id>&trace=<trace>
+  if (id == null && (command == '--connect' || uri.authority == 'connect')) {
+    id = queryParameters["device"] ?? queryParameters["id"];
+    command = '--connect';
+  }
+
+  // Cercano F4.5-12: Propagate trace_id to CERCANO_CONN_AUDIT_REF for session audit correlation
+  final trace = queryParameters["trace"] ?? queryParameters["trace_id"];
+  if (trace != null && trace.isNotEmpty) {
+    bind.mainSetEnv(key: 'CERCANO_CONN_AUDIT_REF', value: trace);
+  }
+
   var key = queryParameters["key"];
   if (id != null) {
     if (key != null) {
@@ -2516,6 +2536,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     String? switch_uuid = param["switch_uuid"];
     if (switch_uuid != null) args.addAll(['--switch_uuid', switch_uuid]);
     if (param["relay"] != null) args.add("--relay");
+    String? traceParam = param["trace"] ?? param["trace_id"];
+    if (traceParam != null && traceParam.isNotEmpty) args.addAll(['--trace', traceParam]);
     return args;
   }
 

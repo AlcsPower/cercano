@@ -276,6 +276,10 @@ pub fn create_app(state: AppState) -> Router {
             post(chat::conversations::reopen_conversation_handler),
         )
         .route(
+            "/api/chat/conversations/:id/escalate",
+            post(chat::conversations::escalate_conversation_handler),
+        )
+        .route(
             "/api/chat/conversations/:id/attachments",
             post(chat::attachments::upload_attachment_handler)
                 .layer(axum::extract::DefaultBodyLimit::max(12 * 1024 * 1024)),

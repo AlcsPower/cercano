@@ -26,6 +26,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `007-client-elevation.patch` | F3-16 | `vendor/client` | Flujo de elevación supervisada con credenciales: consentimiento obligatorio, `SecureElevationCredential` con zeroize, límite de 3 fallos y un solo uso | `src/cercano_profile.rs`, `src/platform/windows.rs`, `src/server/portable_service.rs` | 2026-11-10 | Agente-Cliente |
 | `008-client-support-chat.patch` | F4.5-10 | `vendor/client` | Módulo `cercano_chat.rs`, autenticación Ed25519 con reto/firma, REST, SSE con feature stream, reconexión, toast Windows y FFI Flutter | `Cargo.toml`, `src/cercano_chat.rs`, `src/lib.rs`, `src/flutter_ffi.rs` | 2026-11-16 | Agente-Cliente |
 | `009-client-flutter-chat.patch` | F4.5-11 | `vendor/client` | Interfaz Flutter de Cercano Chat, modelo, vista de bienvenida y onboarding (nombre/apellido), hilo de mensajes, composer, adjuntos, botón en panel soporte e i18n | `flutter/lib/cercano_chat/*`, `flutter/lib/desktop/pages/*`, `flutter/test/*`, `src/lang/*` | 2026-11-16 | Agente-Cliente |
+| `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
 
 ---
 
@@ -231,6 +232,26 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/lang/es.rs`
   - `src/lang/template.rs`
 - **Estrategia de actualización (upstream sync):** La funcionalidad reside casi en su totalidad dentro del directorio aislado `lib/cercano_chat/`. En `desktop_home_page.dart` y `desktop_tab_page.dart` solo se insertan widgets autocontenidos.
+
+---
+
+### [010-client-remote-escalation.patch] Tarea F4.5-12: Escalado a sesión remota `cercano://` y propagación de traza
+
+- **Archivo:** `patches/010-client-remote-escalation.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F4.5-12`
+- **Fecha:** `2026-11-16`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** Implementa el escalado a sesión remota desde la consola de chat hacia el cliente técnico:
+  - **Mapeo de esquema URI:** Añade soporte para el formato `cercano://connect?device=<device_id>&trace=<trace_id>` en `urlLinkToCmdArgs` de `common.dart`, extrayendo el ID de dispositivo tanto del path como de query params, así como el identificador de correlación `trace`.
+  - **Manejo en CLI:** Permite flags `--trace` y `--trace_id` en `core_main_invoke_new_connection` de `core_main.rs`, alimentando la variable de entorno de sesión `CERCANO_CONN_AUDIT_REF`.
+  - **Inyección en auditoría de conexión:** Actualiza `ConnectionMeta::default()` en `server.rs` y `connection_meta` en `rendezvous_mediator.rs` para asignar el `conn_audit_ref` en el `ControlledContext` de la sesión cuando `CERCANO_CONN_AUDIT_REF` está presente. Con ello, todos los eventos de auditoría remota (`conn.new`, `conn.end`, etc.) heredan el `trace_id` de la conversación para correlación en `cercano-audit`.
+- **Archivos modificados:**
+  - `flutter/lib/common.dart`
+  - `src/core_main.rs`
+  - `src/rendezvous_mediator.rs`
+  - `src/server.rs`
+- **Estrategia de actualización (upstream sync):** Modificaciones mínimas y quirúrgicas en los puntos de entrada de unilinks/CLI y en la construcción del contexto de conexión. En futuras versiones de upstream, verificar únicamente que los argumentos de línea de comandos en `core_main.rs` y `common.dart` no colisionen.
 
 ---
 
