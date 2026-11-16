@@ -484,14 +484,13 @@ mod tests {
         let json_soporte = include_str!("../../../docs/specs/examples/profile-soporte-valido.json");
         let prof_soporte: CercanoProfile = serde_json::from_str(json_soporte).expect("Valid JSON");
         assert!(prof_soporte.policy.chat.is_none());
-        assert_eq!(
+        assert!(
             prof_soporte
                 .policy
                 .chat
                 .as_ref()
                 .map(|c| c.is_enabled_for_role("soporte"))
-                .unwrap_or(true),
-            true
+                .unwrap_or(true)
         );
 
         let mut val: serde_json::Value = serde_json::from_str(json_soporte).unwrap();
@@ -504,9 +503,9 @@ mod tests {
             serde_json::from_value(val.clone()).expect("Valid with chat");
         let chat = prof_chat.policy.chat.expect("Chat policy exists");
         assert_eq!(chat.enabled, Some(false));
-        assert_eq!(chat.allow_attachments, false);
-        assert_eq!(chat.allow_remote_escalation, false);
-        assert_eq!(chat.is_enabled_for_role("soporte"), false);
+        assert!(!chat.allow_attachments);
+        assert!(!chat.allow_remote_escalation);
+        assert!(!chat.is_enabled_for_role("soporte"));
 
         val["policy"]["chat"]["unrecognized_field"] = serde_json::json!(true);
         let err: Result<CercanoProfile, _> = serde_json::from_value(val);

@@ -121,11 +121,18 @@ jobs:
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsodium-dev pkg-config
+
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
         continue-on-error: true
 
       - name: Build server binary
+        env:
+          SODIUM_USE_PKG_CONFIG: 1
         run: |
           if [ -d vendor/server ] && [ -f vendor/server/Cargo.toml ]; then
             cargo build --release --manifest-path vendor/server/Cargo.toml
@@ -136,3 +143,29 @@ jobs:
           else
             echo "Server crate not present yet. Skipping server build."
           fi
+
+  client-check:
+    name: Client Check (Linux cargo check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-randr0-dev libxdo-dev libxfixes-dev libpam0g-dev libasound2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsodium-dev pkg-config
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+        with:
+          workspaces: vendor/client -> target
+
+      - name: Cargo check client
+        env:
+          SODIUM_USE_PKG_CONFIG: 1
+        run: cargo check --manifest-path vendor/client/Cargo.toml

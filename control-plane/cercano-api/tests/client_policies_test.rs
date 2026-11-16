@@ -402,9 +402,9 @@ async fn test_tc_f5_025_client_local_tampering_rejected_and_p0_ceiling_enforced(
         .unwrap();
 
     // P0 Ceiling clamped all sensitive fields back to false
-    assert_eq!(applied.get_bool("unattended_access", true), false);
-    assert_eq!(applied.get_bool("allow_outgoing", true), false);
-    assert_eq!(applied.get_bool("enable_elevation", true), false);
+    assert!(!applied.get_bool("unattended_access", true));
+    assert!(!applied.get_bool("allow_outgoing", true));
+    assert!(!applied.get_bool("enable_elevation", true));
 
     // Outgoing connection is rejected for soporte regardless of forged JSON
     let out_err = client

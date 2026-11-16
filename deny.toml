@@ -34,7 +34,7 @@ wildcards = "allow"
 
 [advisories]
 vulnerability = "deny"
-unmaintained = "warn"
+unmaintained = "all"
 
 [sources]
 unknown-registry = "deny"
