@@ -131,23 +131,21 @@ pub fn check_https_url(url: &str) -> Result<(), String> {
 }
 
 pub fn get_chat_api_server() -> String {
-    let api = crate::flutter_ffi::main_get_api_server();
-    if api.is_empty() {
-        "https://127.0.0.1:21114".to_string()
-    } else {
-        api
+    #[cfg(feature = "flutter")]
+    {
+        let api = crate::flutter_ffi::main_get_api_server();
+        if !api.is_empty() {
+            return api;
+        }
     }
+    "https://127.0.0.1:21114".to_string()
 }
 
 pub fn sign_challenge_nonce(raw_nonce: &[u8], sk_bytes: &[u8]) -> Result<String, String> {
-    if sk_bytes.len() != 64 {
-        return Err("Clave secreta inválida: se esperan 64 bytes.".to_string());
-    }
-    let mut sk_arr = [0u8; 64];
-    sk_arr.copy_from_slice(sk_bytes);
-    let sk = SecretKey(sk_arr);
+    let sk = SecretKey::from_slice(sk_bytes)
+        .ok_or_else(|| "Clave secreta inválida: se esperan 64 bytes.".to_string())?;
     let sig = sign::sign_detached(raw_nonce, &sk);
-    Ok(BASE64.encode(sig.0))
+    Ok(BASE64.encode(sig.as_ref()))
 }
 
 pub fn register_device_if_needed(api_server: &str, ingest_token: &str) -> Result<(), String> {
@@ -156,7 +154,7 @@ pub fn register_device_if_needed(api_server: &str, ingest_token: &str) -> Result
     let device_id = Config::get_id();
     let keypair = Config::get_key_pair();
     let pubkey_b64 = BASE64.encode(&keypair.1);
-    let display_name = Config::get_hostname();
+    let display_name = crate::common::hostname();
 
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -625,12 +623,10 @@ mod tests {
 
         let (pk, sk) = sign::gen_keypair();
         let raw_nonce = b"cercano_test_nonce_32_bytes_len!";
-        let sig_b64 = sign_challenge_nonce(raw_nonce, &sk.0).expect("Firma válida");
+        let sig_b64 = sign_challenge_nonce(raw_nonce, sk.as_ref()).expect("Firma válida");
 
         let sig_bytes = BASE64.decode(sig_b64).expect("Base64 decoding");
-        let mut sig_arr = [0u8; 64];
-        sig_arr.copy_from_slice(&sig_bytes);
-        let signature = sign::Signature(sig_arr);
+        let signature = sign::Signature::from_slice(&sig_bytes).expect("Valid signature length");
 
         assert!(sign::verify_detached(&signature, raw_nonce, &pk));
     }

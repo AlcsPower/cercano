@@ -528,18 +528,15 @@ pub fn verify_signed_profile_bytes(
     let sig_raw = BASE64
         .decode(envelope.signature.trim())
         .context("invalid signature base64")?;
-    if sig_raw.len() != 64 {
-        return Err(anyhow!("signature must be 64 bytes"));
-    }
-    let mut sig_arr = [0u8; 64];
-    sig_arr.copy_from_slice(&sig_raw);
-    let signature = Signature(sig_arr);
+    let signature = Signature::from_slice(&sig_raw)
+        .ok_or_else(|| anyhow!("signature must be 64 bytes"))?;
 
     // Canonicalize profile JSON for deterministic verification
     let canonical_bytes = canonical_json_bytes(&envelope.profile)?;
 
     // Verify Ed25519 signature
-    let pub_key = PublicKey(*trusted_public_key_bytes);
+    let pub_key = PublicKey::from_slice(trusted_public_key_bytes)
+        .ok_or_else(|| anyhow!("invalid trusted public key bytes"))?;
     if !verify_detached(&signature, &canonical_bytes, &pub_key) {
         return Err(anyhow!(
             "invalid profile signature: profile was tampered or signed with different key"
