@@ -626,7 +626,9 @@ mod tests {
         let sig_b64 = sign_challenge_nonce(raw_nonce, sk.as_ref()).expect("Firma válida");
 
         let sig_bytes = BASE64.decode(sig_b64).expect("Base64 decoding");
-        let signature = sign::Signature::from_slice(&sig_bytes).expect("Valid signature length");
+        let mut sig_arr = [0u8; 64];
+        sig_arr.copy_from_slice(&sig_bytes);
+        let signature = sign::Signature::from_bytes(&sig_arr).expect("Valid signature length");
 
         assert!(sign::verify_detached(&signature, raw_nonce, &pk));
     }
