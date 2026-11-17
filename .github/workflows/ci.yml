@@ -118,18 +118,25 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsodium-dev pkg-config
+          sudo apt-get install -y libsodium-dev pkg-config sqlite3
 
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
         continue-on-error: true
 
+      - name: Prepare server database schema
+        run: |
+          if [ -d vendor/server ] && [ -f vendor/server/schema.sql ]; then
+            sqlite3 vendor/server/db_v2.sqlite3 < vendor/server/schema.sql
+          fi
+
       - name: Build server binary
         env:
           SODIUM_USE_PKG_CONFIG: 1
+          DATABASE_URL: sqlite://./db_v2.sqlite3
         run: |
           if [ -d vendor/server ] && [ -f vendor/server/Cargo.toml ]; then
-            cargo build --release --manifest-path vendor/server/Cargo.toml
+            cd vendor/server && cargo build --release
           elif [ -d server ] && [ -f server/Cargo.toml ]; then
             cargo build --release --manifest-path server/Cargo.toml
           elif [ -f Cargo.toml ] && cargo metadata --no-deps --format-version 1 | grep -q '"name":"cercano-server"'; then
@@ -151,7 +158,25 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libxcb-randr0-dev libxdo-dev libxfixes-dev libpam0g-dev libasound2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsodium-dev pkg-config
+          sudo apt-get install -y \
+            libgtk-3-dev libxcb-randr0-dev libxdo-dev libxfixes-dev libpam0g-dev \
+            libasound2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libsodium-dev pkg-config \
+            libvpx-dev libyuv-dev libaom-dev libopus-dev clang libclang-dev
+          if [ ! -f /usr/share/pkgconfig/libyuv.pc ] && [ ! -f /usr/lib/x86_64-linux-gnu/pkgconfig/libyuv.pc ]; then
+            sudo tee /usr/share/pkgconfig/libyuv.pc << 'EOF'
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+
+Name: libyuv
+Description: Library for YUV scaling and conversion
+Version: 0.0.1
+Libs: -L${libdir} -lyuv
+Cflags: -I${includedir}
+EOF
+          fi
 
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
@@ -163,4 +188,4 @@ jobs:
         env:
           SODIUM_USE_PKG_CONFIG: 1
           CXXFLAGS: "-include cstdint"
-        run: cargo check --manifest-path vendor/client/Cargo.toml
+        run: cargo check --manifest-path vendor/client/Cargo.toml --features linux-pkg-config

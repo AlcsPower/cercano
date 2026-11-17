@@ -1,3 +1,6 @@
+[env]
+DATABASE_URL = "sqlite://./db_v2.sqlite3"
+
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-Ctarget-feature=+crt-static"]
 [target.i686-pc-windows-msvc]
