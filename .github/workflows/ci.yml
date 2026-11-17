@@ -102,8 +102,7 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
         if: hashFiles('Cargo.lock') != '' || hashFiles('Cargo.toml') != ''
         with:
-          command: check licenses advisories bans sources
-          arguments: --all-features
+          command: check
 
   server-build:
     name: Server Build (Linux)

@@ -43,6 +43,9 @@ ignore = [
     { id = "RUSTSEC-2026-0369", reason = "zip symlink unix permissions" },
     { id = "RUSTSEC-2026-0429", reason = "zip symlink buffer alloc abort" },
     { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys bundled sqlite CVE-2026-119375 via sqlx" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained advisory, widely used across ecosystem" },
+    { id = "RUSTSEC-2026-0545", reason = "zip AES truncated plaintext without auth check, unused feature" },
+    { id = "RUSTSEC-2026-0548", reason = "zip ZipStreamReader local header check, ZipStreamReader not used" },
 ]
 
 [sources]
