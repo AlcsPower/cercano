@@ -61,22 +61,56 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      - name: Cache bridge codegen binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-expand
+            ~/.cargo/bin/flutter_rust_bridge_codegen
+          key: frb-codegen-${{ runner.os }}-${{ runner.arch }}-rust-${{ env.RUST_VERSION }}-expand-${{ env.CARGO_EXPAND_VERSION }}-frb-${{ env.FLUTTER_RUST_BRIDGE_VERSION }}
+
       - name: Generate Bridge files
         shell: bash
         run: |
+          set -euo pipefail
           cd vendor/client
-          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          # Verificar consistencia exacta entre Cargo.lock y FLUTTER_RUST_BRIDGE_VERSION
+          LOCK_FRB="$(awk '{gsub(/\r/, "")} /^name = "flutter_rust_bridge"$/{getline; gsub(/\r/, ""); gsub(/"/, "", $3); print $3; exit}' Cargo.lock)"
+          if [ "$LOCK_FRB" != "${{ env.FLUTTER_RUST_BRIDGE_VERSION }}" ]; then
+            echo "ERROR: Cargo.lock tiene flutter_rust_bridge=$LOCK_FRB pero workflow usa ${{ env.FLUTTER_RUST_BRIDGE_VERSION }}" >&2
+            exit 1
+          fi
+          if [ ! -x "$HOME/.cargo/bin/cargo-expand" ]; then
+            cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          fi
+          if [ ! -x "$HOME/.cargo/bin/flutter_rust_bridge_codegen" ]; then
+            cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          fi
+          "$HOME/.cargo/bin/cargo-expand" --version
+          "$HOME/.cargo/bin/flutter_rust_bridge_codegen" --version
           pushd flutter && flutter pub get && popd
-          ~/.cargo/bin/flutter_rust_bridge_codegen \
+          "$HOME/.cargo/bin/flutter_rust_bridge_codegen" \
             --rust-input ./src/flutter_ffi.rs \
             --dart-output ./flutter/lib/generated_bridge.dart \
             --c-output ./flutter/macos/Runner/bridge_generated.h
+          for f in \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart; do
+            test -s "$f" || { echo "ERROR: Archivo de bridge ausente o vacio: vendor/client/$f" >&2; exit 1; }
+          done
+          sha256sum \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart
 
       - name: Upload Bridge Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: bridge-artifact
+          if-no-files-found: error
           path: |
             vendor/client/src/bridge_generated.rs
             vendor/client/src/bridge_generated.io.rs
@@ -100,11 +134,31 @@ jobs:
           name: bridge-artifact
           path: vendor/client
 
+      - name: Validate restored Bridge files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd vendor/client
+          for f in \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart; do
+            test -s "$f" || { echo "ERROR: Archivo de bridge no restaurado en vendor/client/$f" >&2; exit 1; }
+          done
+          grep -q "EventToUI" src/bridge_generated.rs || {
+            echo "ERROR: src/bridge_generated.rs no contiene bindings para EventToUI" >&2
+            exit 1
+          }
+          sha256sum \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart
+
       - name: Apply Cercano patches to upstream
         shell: bash
         run: |
-          test -f vendor/client/src/bridge_generated.rs
-          test -f vendor/client/flutter/lib/generated_bridge.dart
           bash tools/check-license.sh
           bash tools/apply-patches
 
