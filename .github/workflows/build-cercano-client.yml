@@ -98,11 +98,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: bridge-artifact
-          path: ./
+          path: vendor/client
 
       - name: Apply Cercano patches to upstream
         shell: bash
         run: |
+          test -f vendor/client/src/bridge_generated.rs
+          test -f vendor/client/flutter/lib/generated_bridge.dart
           bash tools/check-license.sh
           bash tools/apply-patches
 
