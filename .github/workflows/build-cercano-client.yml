@@ -139,6 +139,8 @@ jobs:
 
       - name: Install vcpkg dependencies (x64-windows-static)
         shell: bash
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
         run: |
           cd vendor/client
           $VCPKG_ROOT/vcpkg install \
@@ -148,6 +150,13 @@ jobs:
       - name: Build Full Cercano Client Executable
         shell: bash
         run: |
+          VCPKG_INSTALLED="$VCPKG_ROOT/installed/x64-windows-static"
+          printf 'VCPKG_ROOT=%s\n' "$VCPKG_ROOT"
+          find "$VCPKG_INSTALLED/include" \( -path '*libavcodec*' -o -path '*libavutil*' \) | head -20
+          test -f "$VCPKG_INSTALLED/include/libavcodec/avcodec.h"
+          test -f "$VCPKG_INSTALLED/include/libavutil/attributes.h"
+          test -d "$VCPKG_INSTALLED/lib"
+          ls -la "$VCPKG_INSTALLED/lib"/av*.lib
           cd vendor/client
           python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 
@@ -161,6 +170,11 @@ jobs:
           fi
           echo "OK: Binario base staged en dist/base/cercano.exe"
           ls -la dist/base/
+
+      - name: Switch to Rust stable for cercano-build
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
       - name: Generate Signed Installers with cercano-build
         shell: bash
