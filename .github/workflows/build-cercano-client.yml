@@ -180,7 +180,7 @@ jobs:
           if grep -q "class CercanoImpl" flutter/lib/generated_bridge.dart; then
             echo "ERROR: flutter/lib/generated_bridge.dart contiene class CercanoImpl como implementacion" >&2
             exit 1
-          }
+          fi
           sha256sum \
             src/bridge_generated.rs \
             src/bridge_generated.io.rs \
