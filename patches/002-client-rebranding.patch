@@ -32,8 +32,7 @@ index 1002586..28e8b1f 100644
  rust-version = "1.75"
  
  [lib]
--name = "librustdesk"
-+name = "libcercano"
+ name = "librustdesk"
  crate-type = ["cdylib", "staticlib", "rlib"]
  
  [[bin]]

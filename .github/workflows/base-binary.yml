@@ -49,6 +49,28 @@ jobs:
         uses: Swatinem/rust-cache@v2
         continue-on-error: true
 
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev libxcb-randr0-dev libxdo-dev libxfixes-dev libpam0g-dev \
+            libasound2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libsodium-dev pkg-config \
+            libvpx-dev libyuv-dev libaom-dev libopus-dev clang libclang-dev
+          if [ ! -f /usr/share/pkgconfig/libyuv.pc ] && [ ! -f /usr/lib/x86_64-linux-gnu/pkgconfig/libyuv.pc ]; then
+            printf '%s\n' \
+              'prefix=/usr' \
+              'exec_prefix=${prefix}' \
+              'libdir=${prefix}/lib/x86_64-linux-gnu' \
+              'includedir=${prefix}/include' \
+              '' \
+              'Name: libyuv' \
+              'Description: Library for YUV scaling and conversion' \
+              'Version: 0.0.1' \
+              'Libs: -L${libdir} -lyuv' \
+              'Cflags: -I${includedir}' | sudo tee /usr/share/pkgconfig/libyuv.pc
+          fi
+
       - name: Verify license headers
         run: bash tools/check-license-headers.sh
 

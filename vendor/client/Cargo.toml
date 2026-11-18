@@ -9,7 +9,7 @@ default-run = "cercano"
 rust-version = "1.75"
 
 [lib]
-name = "libcercano"
+name = "librustdesk"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]

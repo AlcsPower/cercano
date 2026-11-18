@@ -140,6 +140,7 @@ jobs:
       - name: Install vcpkg dependencies (x64-windows-static)
         shell: bash
         run: |
+          cd vendor/client
           $VCPKG_ROOT/vcpkg install \
             --triplet x64-windows-static \
             --x-install-root="$VCPKG_ROOT/installed"
