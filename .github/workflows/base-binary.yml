@@ -78,6 +78,9 @@ jobs:
         run: bash tools/apply-patches
 
       - name: Build reproducible base binary and SBOM
+        env:
+          CXXFLAGS: "-include cstdint"
+          SODIUM_USE_PKG_CONFIG: 1
         run: |
           BUILD_FLAGS="--out-dir dist/base --sbom"
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.verify_reproducibility }}" = "true" ]; then

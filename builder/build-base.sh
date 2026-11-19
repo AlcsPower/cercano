@@ -186,6 +186,15 @@ else
   unset RUSTFLAGS || true
 fi
 
+# 3.1 Inyección defensiva de CXXFLAGS para dependencias C++ heredadas (ej. webm-sys / mkvparser.cc)
+if [[ -z "${CXXFLAGS:-}" ]]; then
+  if [[ "${TARGET_TRIPLE:-}" =~ msvc ]]; then
+    export CXXFLAGS="/FIcstdint"
+  else
+    export CXXFLAGS="-include cstdint"
+  fi
+fi
+
 # 4. Inyección de clave pública de perfil si se suministró
 if [[ -n "$PROFILE_PUBLIC_KEY" ]]; then
   export CERCANO_PROFILE_PUBLIC_KEY="$PROFILE_PUBLIC_KEY"
