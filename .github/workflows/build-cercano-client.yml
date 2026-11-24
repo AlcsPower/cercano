@@ -237,7 +237,7 @@ jobs:
       - name: Build Full Cercano Client Executable
         shell: bash
         env:
-          CXXFLAGS: "/FIcstdint"
+          CXXFLAGS: "-FIcstdint"
         run: |
           VCPKG_INSTALLED="$VCPKG_ROOT/installed/x64-windows-static"
           printf 'VCPKG_ROOT=%s\n' "$VCPKG_ROOT"
