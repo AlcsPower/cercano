@@ -175,10 +175,12 @@ bash builder/build-base.sh --verify
 ```
 
 El script realiza de manera autónoma:
-1. Crea un directorio temporal aislado `/tmp/cercano-repro-1-XXXXXX`.
+1. Vacía `target/repro` (siempre la misma ruta: las rutas de `OUT_DIR` de los build scripts acaban en el binario, así que dos rutas distintas producen hashes distintos).
 2. Compila el binario en Release y calcula el hash $H_1$.
-3. Crea un segundo directorio temporal aislado `/tmp/cercano-repro-2-XXXXXX`.
-4. Compila nuevamente el binario en Release y calcula el hash $H_2$.
+3. Vuelve a vaciar `target/repro`.
+4. Compila de nuevo desde cero en la misma ruta y calcula el hash $H_2$. Si no coinciden, muestra cuántos bytes difieren y las cadenas distintas (`strings`).
+
+El código C/C++ de los build scripts recibe `-ffile-prefix-map` (en `CFLAGS`/`CXXFLAGS`) con las mismas equivalencias que `--remap-path-prefix`.
 5. Compara $H_1$ y $H_2$:
    - Si $H_1 == H_2$, confirma la reproducibilidad bit-a-bit con código de salida `0`.
    - Si $H_1 \ne H_2$, reporta el error y detiene el proceso con código `1`.

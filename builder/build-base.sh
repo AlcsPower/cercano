@@ -190,6 +190,14 @@ fi
 # GCC >= 13 ya no la arrastra de forma transitiva. Flag constante: no afecta al determinismo.
 export CXXFLAGS="-include cstdint${CXXFLAGS:+ $CXXFLAGS}"
 
+# 3c. El código C/C++ de los build scripts (cc-rs) incrusta rutas en __FILE__; mismo remapeo que en Rust.
+# shortcut: se omite si alguna ruta tiene espacios (cc-rs separa CFLAGS por espacios); en ese caso el build local no es reproducible.
+if [[ ! "$ROOT_DIR$CARGO_HOME_DIR" =~ [[:space:]] ]]; then
+  PREFIX_MAP="-ffile-prefix-map=${ROOT_DIR}=/cercano -ffile-prefix-map=${CARGO_HOME_DIR}=/cargo"
+  export CFLAGS="${PREFIX_MAP}${CFLAGS:+ $CFLAGS}"
+  export CXXFLAGS="${PREFIX_MAP} ${CXXFLAGS}"
+fi
+
 # 4. Inyección de clave pública de perfil si se suministró
 if [[ -n "$PROFILE_PUBLIC_KEY" ]]; then
   export CERCANO_PROFILE_PUBLIC_KEY="$PROFILE_PUBLIC_KEY"
@@ -284,25 +292,36 @@ calc_sha256() {
 if [[ $DO_VERIFY -eq 1 ]]; then
   echo ""
   echo "--- INICIANDO VERIFICACIÓN DE REPRODUCIBILIDAD (TC-F3-021) ---"
-  TMP_DIR_1="$(mktemp -d /tmp/cercano-repro-1-XXXXXX)"
-  TMP_DIR_2="$(mktemp -d /tmp/cercano-repro-2-XXXXXX)"
+  # Ambas pasadas usan la misma ruta (bajo ROOT_DIR, ya remapeada a /cercano), vaciada entre una y otra:
+  # las rutas de OUT_DIR acaban en el binario y una ruta aleatoria por pasada rompía TC-F3-021.
+  REPRO_TARGET="$ROOT_DIR/target/repro"
+  KEEP_DIR="$(mktemp -d /tmp/cercano-repro-XXXXXX)"
+  trap 'rm -rf "$REPRO_TARGET" "$KEEP_DIR"' EXIT
 
-  trap 'rm -rf "$TMP_DIR_1" "$TMP_DIR_2"' EXIT
-
-  echo "[Pasada 1/2] Compilando en $TMP_DIR_1..."
-  BIN_PASS_1="$(compile_binary "$TMP_DIR_1")"
+  echo "[Pasada 1/2] Compilando en $REPRO_TARGET..."
+  rm -rf "$REPRO_TARGET"
+  BUILT_BIN="$(compile_binary "$REPRO_TARGET")"
+  FINAL_BIN_NAME="$(basename "$BUILT_BIN")"
+  BIN_PASS_1="$KEEP_DIR/pass1-$FINAL_BIN_NAME"
+  cp -f "$BUILT_BIN" "$BIN_PASS_1"
   HASH_PASS_1="$(calc_sha256 "$BIN_PASS_1")"
   echo "Hash Pasada 1: $HASH_PASS_1"
 
-  echo "[Pasada 2/2] Compilando en directorio independiente $TMP_DIR_2..."
-  BIN_PASS_2="$(compile_binary "$TMP_DIR_2")"
+  echo "[Pasada 2/2] Compilando desde cero en la misma ruta $REPRO_TARGET..."
+  rm -rf "$REPRO_TARGET"
+  BUILT_BIN="$(compile_binary "$REPRO_TARGET")"
+  BIN_PASS_2="$KEEP_DIR/pass2-$FINAL_BIN_NAME"
+  cp -f "$BUILT_BIN" "$BIN_PASS_2"
   HASH_PASS_2="$(calc_sha256 "$BIN_PASS_2")"
   echo "Hash Pasada 2: $HASH_PASS_2"
 
   if [[ "$HASH_PASS_1" != "$HASH_PASS_2" ]]; then
     echo "ERROR: Las compilaciones no son idénticas (Fallo TC-F3-021)." >&2
-    echo "  Pasada 1: $HASH_PASS_1 ($BIN_PASS_1)" >&2
-    echo "  Pasada 2: $HASH_PASS_2 ($BIN_PASS_2)" >&2
+    echo "  Pasada 1: $HASH_PASS_1" >&2
+    echo "  Pasada 2: $HASH_PASS_2" >&2
+    echo "--- Diagnóstico: bytes distintos (cmp) y cadenas distintas (strings) ---" >&2
+    echo "Bytes distintos: $(cmp -l "$BIN_PASS_1" "$BIN_PASS_2" | wc -l)" >&2
+    diff <(strings -a -n 8 "$BIN_PASS_1") <(strings -a -n 8 "$BIN_PASS_2") | head -n 60 >&2 || true
     exit 1
   fi
 
@@ -310,7 +329,6 @@ if [[ $DO_VERIFY -eq 1 ]]; then
   echo "    Ambas compilaciones independientes produjeron el mismo hash SHA-256: $HASH_PASS_1"
 
   # Copiar el binario verificado al directorio de salida
-  FINAL_BIN_NAME="$(basename "$BIN_PASS_1")"
   cp -f "$BIN_PASS_1" "$OUT_DIR/$FINAL_BIN_NAME"
   PRIMARY_BIN="$OUT_DIR/$FINAL_BIN_NAME"
 else
