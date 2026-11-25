@@ -2643,7 +2643,7 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Cercano Contributors.\nLicensed under GNU AGPL-3.0.\nBased on RustDesk (AGPL-3.0).\nSource code: https://github.com/cercano/cercano',
+                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Cercano Contributors.\nLicensed under GNU AGPL-3.0.\nIncludes upstream AGPL-3.0 code; its notices are kept in the source code.\nSource code: https://github.com/cercano/cercano',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(

@@ -261,10 +261,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
             s = s.replace("{}", &value);
         }
         if !crate::is_rustdesk() {
-            if s.contains("RustDesk")
-                && !name.starts_with("upgrade_rustdesk_server_pro")
-                && name != "powered_by_me"
-            {
+            if s.contains("RustDesk") && !name.starts_with("upgrade_rustdesk_server_pro") {
                 let app_name = crate::get_app_name();
                 if !app_name.contains("RustDesk") {
                     s = s.replace("RustDesk", &app_name);
@@ -408,6 +405,16 @@ mod test {
                     assert!(value.contains("{}"), "{key:?} => {value:?}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_cercano_powered_by_does_not_name_upstream() {
+        use super::*;
+
+        for table in [&*en::T, &*es::T] {
+            let value = table.get("powered_by_me").copied().unwrap_or_default();
+            assert_eq!(value, "Powered by Cercano · AGPL-3.0");
         }
     }
 }

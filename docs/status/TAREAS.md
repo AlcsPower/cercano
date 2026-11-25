@@ -80,7 +80,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-22 | Marca visible: empresa (logo y nombre), «Powered by Cercano», Acerca de (sustituida por F3.5-10, ADR-015) | F3-19a, F3-02 | Cliente | QA | Diferida |
 | F3-20 | Fail-closed: sin binario base real no se empaqueta (`--allow-stub`) | F3-05, F3-07 | Builder + ControlPlane | Seguridad | Pendiente |
 | F3-21 | Prueba de humo en Windows 10/11 | F3-19, F3-20 | QA | Coordinador | Pendiente |
-| F3-23 | Interfaz de escritorio según el diseño objetivo (`docs/diseno/`); sin «Con tecnología de RustDesk» | F3-14, F3-15, F3-19 | Cliente | QA | Pendiente |
+| F3-23 | Interfaz de escritorio según el diseño objetivo (`docs/diseno/`); sin «Con tecnología de RustDesk» | F3-14, F3-15, F3-19 | Cliente | QA | En verificación |
 
 ## F3.5 — Agente Cercano y aplicación genérica
 

@@ -29,6 +29,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
+| `013-client-desktop-ui-design.patch` | F3-23 | `vendor/client` | Interfaz según el diseño objetivo: pantalla de soporte sin conexión saliente, diálogo de consentimiento con permisos, pie «Powered by Cercano · AGPL-3.0» y sin cadenas visibles con RustDesk | `flutter/lib/cercano_ui/*`, `flutter/lib/desktop/*`, `src/cercano_profile.rs`, `src/lang*` | 2026-11-25 | Agente-Cliente |
 
 ---
 
@@ -291,6 +292,26 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Archivos modificados:**
   - `src/cercano_profile.rs`
 - **Estrategia de actualización (upstream sync):** Funcionalidad contenida en `cercano_profile.rs` sin alterar código base heredado de RustDesk.
+
+---
+
+### [013-client-desktop-ui-design.patch] Tarea F3-23: Interfaz de escritorio según el diseño objetivo
+
+- **Archivo:** `patches/013-client-desktop-ui-design.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-23`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** El Dueño aprobó `docs/diseno/app-soporte.html` como diseño objetivo. La interfaz heredada muestra a la persona usuaria el panel de conexión saliente y el texto «Con tecnología de RustDesk», que incumple AGENTS.md §6. La pantalla de soporte y el diálogo de consentimiento viven en un módulo nuevo (`cercano_ui.dart`); el código heredado solo recibe enganches de una línea: rol `soporte` → pantalla nueva, solicitud entrante pendiente con aprobación por clic → diálogo nuevo, pie en los demás roles. El rol llega a Flutter como opción integrada `cercano-role`, escrita al aplicar el perfil firmado (sin FFI nueva ni IPC).
+- **Archivos modificados:**
+  - `flutter/lib/cercano_ui/cercano_ui.dart` (nuevo)
+  - `flutter/lib/desktop/pages/desktop_home_page.dart`
+  - `flutter/lib/desktop/pages/server_page.dart`
+  - `flutter/lib/desktop/pages/desktop_setting_page.dart`
+  - `flutter/lib/desktop/widgets/tabbar_widget.dart`
+  - `src/cercano_profile.rs`
+  - `src/lang.rs`, `src/lang/en.rs`, `src/lang/es.rs`, `src/lang/template.rs`
+- **Estrategia de actualización (upstream sync):** Reaplicar los enganches en `_DesktopHomePageState.build` y `buildConnectionCard`; si upstream cambia `Client` o `ServerModel.sendLoginResponse`, ajustar `CercanoConsentCard`. Comprobar que `translate` siga sustituyendo «RustDesk» por el nombre de la app y que `powered_by_me` no vuelva a quedar excluida.
 
 ---
 
