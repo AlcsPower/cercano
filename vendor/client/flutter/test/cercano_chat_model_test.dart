@@ -143,6 +143,14 @@ void main() {
       expect(technicianLabel(null, 'Acme'), equals('un técnico de Acme'));
       expect(technicianLabel('  ', 'Acme'), equals('un técnico de Acme'));
       expect(technicianLabel(null, ''), equals('un técnico de soporte'));
+      expect(
+          ChatBranding.fromJson({'support_name': 'Mesa TI', 'organization_name': null})
+              .teamName,
+          equals('Mesa TI'));
+      expect(
+          technicianLabel(null,
+              ChatBranding.fromJson({'support_name': '', 'organization_name': ''}).teamName),
+          equals('un técnico de soporte'));
 
       expect(reassignmentNotice(null, conv('u-1', 'Juan'), 'Acme'), isNull);
       expect(reassignmentNotice(conv('u-1', 'Juan'), conv('u-1', 'Juan'), 'Acme'),

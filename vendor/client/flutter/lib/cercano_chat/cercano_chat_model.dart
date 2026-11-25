@@ -25,6 +25,10 @@ class ChatBranding {
     required this.privacyText,
   });
 
+  /// Respaldo del nombre del técnico: organization_name o, si falta, support_name (F4.5-17).
+  String get teamName =>
+      organizationName.trim().isNotEmpty ? organizationName : supportName;
+
   factory ChatBranding.defaultBranding() {
     return ChatBranding(
       supportName: 'Cercano Soporte',
@@ -208,7 +212,7 @@ class CercanoChatModel extends ChangeNotifier {
   String? technicianNotice;
 
   String get assignedTechnicianLabel => technicianLabel(
-      conversation?.assignedDisplayName, branding.organizationName);
+      conversation?.assignedDisplayName, branding.teamName);
 
   bool get hasSavedContact =>
       contactFirstName.trim().isNotEmpty && contactLastName.trim().isNotEmpty;
@@ -352,7 +356,7 @@ class CercanoChatModel extends ChangeNotifier {
       if (parsed['error'] == null) {
         final next = ChatConversation.fromJson(parsed);
         technicianNotice =
-            reassignmentNotice(conversation, next, branding.organizationName) ??
+            reassignmentNotice(conversation, next, branding.teamName) ??
                 technicianNotice;
         conversation = next;
         notifyListeners();
