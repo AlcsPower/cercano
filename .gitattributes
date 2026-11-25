@@ -3,3 +3,6 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 tools/apply-patches text eol=lf
+
+# Parche binario: sin conversion CRLF en Windows o git apply no lo reconoce
+patches/014-client-portable-label.patch -text
