@@ -191,6 +191,12 @@ String technicianLabel(String? displayName, String organizationName) {
   return org.isNotEmpty ? 'un técnico de $org' : 'un técnico de soporte';
 }
 
+/// Remitente de un mensaje del técnico; los anteriores a la migración 010 llegan sin nombre.
+String messageSenderLabel(String? senderName) {
+  final name = senderName?.trim() ?? '';
+  return name.isNotEmpty ? name : 'Técnico';
+}
+
 /// Aviso «Ahora te atiende …» cuando cambia el técnico asignado; null si no cambió.
 String? reassignmentNotice(
     ChatConversation? previous, ChatConversation next, String organizationName) {

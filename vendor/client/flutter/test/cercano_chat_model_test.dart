@@ -143,6 +143,9 @@ void main() {
       expect(technicianLabel(null, 'Acme'), equals('un técnico de Acme'));
       expect(technicianLabel('  ', 'Acme'), equals('un técnico de Acme'));
       expect(technicianLabel(null, ''), equals('un técnico de soporte'));
+      expect(messageSenderLabel('Juan Pérez'), equals('Juan Pérez'));
+      expect(messageSenderLabel(null), equals('Técnico'));
+      expect(messageSenderLabel('  '), equals('Técnico'));
       expect(
           ChatBranding.fromJson({'support_name': 'Mesa TI', 'organization_name': null})
               .teamName,

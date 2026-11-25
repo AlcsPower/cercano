@@ -354,7 +354,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Text(
-                      technicianLabel(msg.senderName, model.branding.teamName),
+                      messageSenderLabel(msg.senderName),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,

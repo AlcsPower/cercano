@@ -29,7 +29,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
-| `013-client-technician-display-name.patch` | F4.5-17 | `vendor/client` | El chat muestra el nombre visible del técnico asignado («Atendido por», remitente y aviso de reasignación) con respaldo «un técnico de <organización>»; nunca el login | `flutter/lib/cercano_chat/*`, `flutter/test/cercano_chat_model_test.dart`, `src/cercano_chat.rs` | 2026-11-25 | Agente-Cliente |
+| `014-client-technician-display-name.patch` | F4.5-17 | `vendor/client` | El chat muestra el nombre visible del técnico asignado («Atendido por», remitente y aviso de reasignación) con respaldo «un técnico de <organización>»; nunca el login | `flutter/lib/cercano_chat/*`, `flutter/test/cercano_chat_model_test.dart`, `src/cercano_chat.rs` | 2026-11-25 | Agente-Cliente |
 
 ---
 
@@ -295,9 +295,9 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 
 ---
 
-### [013-client-technician-display-name.patch] Tarea F4.5-17: Nombre visible del técnico en el chat
+### [014-client-technician-display-name.patch] Tarea F4.5-17: Nombre visible del técnico en el chat
 
-- **Archivo:** `patches/013-client-technician-display-name.patch`
+- **Archivo:** `patches/014-client-technician-display-name.patch`
 - **Componente:** `vendor/client`
 - **Tarea:** `F4.5-17`
 - **Fecha:** `2026-11-25`
