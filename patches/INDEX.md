@@ -29,6 +29,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
+| `013-client-reproducible-build-date.patch` | F3-03 | `vendor/client` | `BUILD_DATE` toma `SOURCE_DATE_EPOCH` (UTC) si está definido, en lugar de la hora local de compilación (TC-F3-021) | `libs/hbb_common/src/lib.rs` | 2026-11-25 | Agente-Builder |
 
 ---
 
@@ -291,6 +292,18 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Archivos modificados:**
   - `src/cercano_profile.rs`
 - **Estrategia de actualización (upstream sync):** Funcionalidad contenida en `cercano_profile.rs` sin alterar código base heredado de RustDesk.
+
+### [013-client-reproducible-build-date.patch] Tarea F3-03: BUILD_DATE reproducible
+
+- **Archivo:** `patches/013-client-reproducible-build-date.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-03`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Builder`
+- **Motivo / Justificación:** `hbb_common::gen_version()` (llamada desde `vendor/client/build.rs`) escribía `chrono::Local::now()` con precisión de minuto en `BUILD_DATE`. Por eso dos compilaciones del mismo commit daban hashes distintos y fallaba TC-F3-021 en el job del binario base. No hay punto de extensión: la constante se genera dentro de esa función. Con `SOURCE_DATE_EPOCH` definido (lo fija `builder/build-base.sh` a la fecha del commit) se usa esa fecha en UTC; sin él, el comportamiento no cambia.
+- **Archivos modificados:**
+  - `libs/hbb_common/src/lib.rs`
+- **Estrategia de actualización (upstream sync):** Cambio de una sola expresión en `gen_version()`. Si upstream añade soporte para `SOURCE_DATE_EPOCH`, este parche se elimina.
 
 ---
 
