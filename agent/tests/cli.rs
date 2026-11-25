@@ -113,7 +113,7 @@ fn export_diagnostics_has_no_secrets() {
     std::fs::write(
         logs.join("agent.log"),
         format!(
-            "2026-11-25T10:00:00Z INFO servicio iniciado\n\
+            "2026-11-25T10:00:00Z INFO servicio iniciado (versión 0.1.0), almacén C:\\Users\\José\n\
              2026-11-25T10:00:01Z INFO enroll_token={}\n\
              2026-11-25T10:00:02Z INFO clave fijada {}\n\
              2026-11-25T10:00:03Z WARN Authorization: Bearer {}\n\

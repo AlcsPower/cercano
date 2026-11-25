@@ -104,7 +104,11 @@ fn redact_pairs(input: &str) -> String {
     let mut copied = 0;
     let mut i = 0;
     while i < bytes.len() {
-        let Some(key) = SECRET_KEYS.iter().find(|k| lower[i..].starts_with(*k)) else {
+        // Compare bytes: `i` advances byte by byte and may fall inside a multi-byte char.
+        let Some(key) = SECRET_KEYS
+            .iter()
+            .find(|k| lower.as_bytes()[i..].starts_with(k.as_bytes()))
+        else {
             i += 1;
             continue;
         };
@@ -132,7 +136,7 @@ fn redact_pairs(input: &str) -> String {
         };
         let mut k = value_end(j);
         // `Authorization: Bearer <value>`: the secret is the word after the scheme.
-        if &lower[j..k] == "bearer" {
+        if &lower.as_bytes()[j..k] == b"bearer" {
             while k < bytes.len() && bytes[k] == b' ' {
                 k += 1;
             }
@@ -203,6 +207,11 @@ mod tests {
             ("Authorization: Bearer xyz", "Authorization: [REDACTED]"),
             ("header Bearer xyz.abc", "header Bearer [REDACTED]"),
             ("password = hunter2;", "password = [REDACTED];"),
+            (
+                "contraseña password=ñandú1",
+                "contraseña password=[REDACTED]",
+            ),
+            ("tóken token=ñ€😀x fin", "tóken token=[REDACTED] fin"),
         ];
         for (input, expected) in cases {
             assert_eq!(redact(input), expected, "input: {input}");
@@ -221,6 +230,8 @@ mod tests {
             "profile 0192e300-1111-7111-8111-000000000001 loaded",
             "tokens are never logged",
             "estado: sin vincular",
+            "servicio iniciado (versión 0.1.0), almacén C:\\Users\\José",
+            "año ñ€😀 Ünïcödé sin secretos",
         ] {
             assert_eq!(redact(s), s);
         }
