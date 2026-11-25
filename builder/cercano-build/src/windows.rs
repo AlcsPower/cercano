@@ -139,6 +139,9 @@ pub struct RoleIsolationInfo {
     pub warning_message: String,
 }
 
+/// Marca del perfil firmado anexado al final del `.exe`; la lee el portable packer (parche 013).
+pub const PROFILE_TRAILER_MAGIC: &[u8; 8] = b"CERCPROF";
+
 /// Opciones de configuración para generar el empaquetado de Windows.
 #[derive(Debug, Clone)]
 pub struct WindowsPackagingOptions {
@@ -390,19 +393,6 @@ fn build_windows_exe_installer(
                 source,
             })?;
 
-        // Binario ejecutable si existe
-        if let Some(bin_bytes) = base_binary_bytes {
-            zip.start_file("cercano.exe", options)
-                .map_err(|e| BuildError::Io {
-                    path: target_path.to_path_buf(),
-                    source: std::io::Error::other(e.to_string()),
-                })?;
-            zip.write_all(bin_bytes).map_err(|source| BuildError::Io {
-                path: target_path.to_path_buf(),
-                source,
-            })?;
-        }
-
         // Metadatos del instalador
         let metadata_bytes = serde_json::to_vec_pretty(metadata)?;
         zip.start_file("installer-metadata.json", options)
@@ -462,6 +452,12 @@ fn build_windows_exe_installer(
     exe_data.extend_from_slice(&zip_offset.to_le_bytes());
     exe_data.extend_from_slice(&zip_len.to_le_bytes());
     exe_data.extend_from_slice(b"CERCANO_EXE_INSTALLER_V1\0");
+
+    // Perfil firmado al final para que el portable packer lo extraiga sin parsear ZIP
+    // (parche 013): [perfil][u32 LE longitud][PROFILE_TRAILER_MAGIC].
+    exe_data.extend_from_slice(signed_profile_bytes);
+    exe_data.extend_from_slice(&(signed_profile_bytes.len() as u32).to_le_bytes());
+    exe_data.extend_from_slice(PROFILE_TRAILER_MAGIC);
 
     fs::write(target_path, &exe_data).map_err(|source| BuildError::Io {
         path: target_path.to_path_buf(),

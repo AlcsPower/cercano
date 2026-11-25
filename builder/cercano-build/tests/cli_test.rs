@@ -616,6 +616,20 @@ fn test_windows_packaging_tecnico_with_base_binary() {
     assert!(exe_file.is_file());
     assert!(msi_file.is_file());
 
+    // El .exe arranca con el binario base y termina con el perfil firmado (parche 013)
+    let exe = fs::read(&exe_file).unwrap();
+    assert!(exe.starts_with(base_bin_content));
+    let (rest, magic) = exe.split_at(exe.len() - 8);
+    assert_eq!(magic, b"CERCPROF");
+    let (rest, len) = rest.split_at(rest.len() - 4);
+    let len = u32::from_le_bytes(len.try_into().unwrap()) as usize;
+    let trailer: serde_json::Value = serde_json::from_slice(&rest[rest.len() - len..]).unwrap();
+    let signed_profile: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(bundle_dir.join("cercano-profile.signed.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(trailer, signed_profile);
+
     // Validar aislamiento de roles
     let meta_file = bundle_dir.join("installer-metadata.json");
     let meta: serde_json::Value =

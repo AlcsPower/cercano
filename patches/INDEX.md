@@ -29,6 +29,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
+| `013-client-portable-profile-trailer.patch` | F3-05 | `vendor/client` | El portable packer extrae el perfil firmado que `cercano-build` anexa al final del `.exe` (`[perfil][u32 LE][CERCPROF]`) y lo deja junto al cliente; un instalador por rol sin recompilar | `libs/portable/src/main.rs` | 2026-11-25 | Agente-Builder |
 
 ---
 
@@ -311,3 +312,15 @@ Al añadir un parche, agregar una fila en la tabla superior y documentar la secc
   - `<ruta/al/archivo>`
 - **Estrategia de actualización (upstream sync):** `<Cómo conciliar este parche cuando se actualice la versión de upstream>`
 ```
+
+### [013-client-portable-profile-trailer.patch] Tarea F3-05: Perfil firmado anexado al instalador portable
+
+- **Archivo:** `patches/013-client-portable-profile-trailer.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-05`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Builder`
+- **Motivo / Justificación:** El packer de `libs/portable` incrusta su contenido al compilar; sin este parche cada perfil (soporte, técnico o personalizado) exigiría recompilarlo. Con él, CI compila un único `.exe` base y `cercano-build` anexa el perfil en segundos. El perfil no se considera confiable aquí: el cliente verifica su firma Ed25519.
+- **Archivos modificados:**
+  - `vendor/client/libs/portable/src/main.rs`
+- **Estrategia de actualización (upstream sync):** Función autocontenida `write_cercano_profile` más una llamada antes de `execute`; si upstream cambia `main`, basta con volver a insertar esa llamada.

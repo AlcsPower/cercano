@@ -310,9 +310,49 @@ fn main() -> Result<(), String> {
         } else if quick_support {
             args = vec!["--quick_support".to_owned()];
         }
+        write_cercano_profile(&exe);
         execute(exe, args, ui);
     }
     Ok(())
+}
+
+// Cercano (parche 013): cercano-build anexa el perfil firmado al final de este .exe como
+// [perfil][u32 LE longitud]["CERCPROF"]. Se copia junto al cliente extraido, donde
+// cercano_profile::locate_profile_path lo busca; el cliente verifica la firma, asi que
+// aqui no se confia en su contenido. Se busca en el ultimo MiB porque la firma
+// Authenticode se agrega despues y deja de estar al final exacto.
+fn write_cercano_profile(app_exe: &Path) {
+    use std::io::{Read, Seek, SeekFrom};
+    const MAGIC: &[u8] = b"CERCPROF";
+    const WINDOW: u64 = 1024 * 1024;
+    let Some(dir) = app_exe.parent() else { return };
+    let Ok(mut file) = std::env::current_exe().and_then(std::fs::File::open) else {
+        return;
+    };
+    let Ok(size) = file.seek(SeekFrom::End(0)) else {
+        return;
+    };
+    let start = size.saturating_sub(WINDOW);
+    let mut tail = Vec::new();
+    if file.seek(SeekFrom::Start(start)).is_err() || file.read_to_end(&mut tail).is_err() {
+        return;
+    }
+    let Some(pos) = tail.windows(MAGIC.len()).rposition(|w| w == MAGIC) else {
+        return;
+    };
+    if pos < 4 {
+        return;
+    }
+    let len = u32::from_le_bytes([tail[pos - 4], tail[pos - 3], tail[pos - 2], tail[pos - 1]]);
+    let Some(begin) = (pos - 4).checked_sub(len as usize) else {
+        return;
+    };
+    if let Err(e) = std::fs::write(
+        dir.join("cercano-profile.signed.json"),
+        &tail[begin..pos - 4],
+    ) {
+        eprintln!("cercano: no se pudo escribir el perfil: {e}");
+    }
 }
 
 #[cfg(windows)]

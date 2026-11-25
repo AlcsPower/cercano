@@ -270,7 +270,19 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Sign profiles and stage one folder per role
+      - name: Pack base installer once (RustDesk portable packer + patch 013)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE"
+          cd vendor/client/libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f "$ROOT/dist/base" -o . -e "$ROOT/dist/base/cercano.exe"
+          mkdir -p "$ROOT/dist/installer-base"
+          cp ../../target/release/rustdesk-portable-packer.exe "$ROOT/dist/installer-base/cercano.exe"
+          ls -la "$ROOT/dist/installer-base"
+
+      - name: Generate role installers (soporte y tecnico) with cercano-build
         shell: bash
         run: |
           set -euo pipefail
@@ -278,31 +290,11 @@ jobs:
           for role in soporte tecnico; do
             target/release/cercano-build \
               --profile "docs/specs/examples/profile-$role-lan.json" \
-              --out "dist/profiles/$role"
-            signed="$(find "dist/profiles/$role" -name cercano-profile.signed.json | head -1)"
-            test -s "$signed" || { echo "ERROR: no se genero perfil firmado para $role" >&2; exit 1; }
-            mkdir -p "dist/stage/$role"
-            cp -r dist/base/. "dist/stage/$role/"
-            cp "$signed" "dist/stage/$role/cercano-profile.signed.json"
+              --base-binary dist/installer-base/cercano.exe \
+              --out dist/builds \
+              --package-windows
+            ls -la "dist/builds/cercano-$role-1.0.0/"
           done
-
-      - name: Pack self-extracting .exe per role (RustDesk portable packer)
-        shell: bash
-        run: |
-          set -euo pipefail
-          ROOT="$GITHUB_WORKSPACE"
-          mkdir -p "$ROOT/dist/installers"
-          cd vendor/client/libs/portable
-          pip3 install -r requirements.txt
-          for role in soporte tecnico; do
-            python3 ./generate.py \
-              -f "$ROOT/dist/stage/$role" \
-              -o . \
-              -e "$ROOT/dist/stage/$role/cercano.exe"
-            cp ../../target/release/rustdesk-portable-packer.exe \
-              "$ROOT/dist/installers/cercano-$role-1.0.0.exe"
-          done
-          ls -la "$ROOT/dist/installers"
 
       - name: Upload Windows Client Installer Artifacts
         uses: actions/upload-artifact@v4
@@ -310,5 +302,7 @@ jobs:
           name: cercano-windows-production-installers
           if-no-files-found: error
           path: |
-            dist/installers/
+            dist/builds/*/*.exe
+            dist/builds/*/installer-metadata.json
+            dist/installer-base/cercano.exe
           retention-days: 14
