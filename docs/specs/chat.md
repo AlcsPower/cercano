@@ -503,6 +503,8 @@ Permiso: `chat:manage_branding` (solo `admin`; ver `PLAN-F4-CONSOLA.md` §3). Va
 }
 ```
 
+`assigned_username` solo se devuelve a técnicos y administradores. Cuando quien llama es el dispositivo, la respuesta lleva `assigned_display_name` (nombre visible del técnico, o `null`) y no lleva `assigned_username`. En los mensajes que recibe el dispositivo, `sender_name` de un técnico es también su nombre visible, nunca su usuario de inicio de sesión (F4.5-17).
+
 **`ConversationDetail`** = `ConversationSummary` + `closed_at`, `closed_by`, `messages` (máx. 50), `next_before` y `other_last_read_at` (última lectura del otro participante, para el doble check; `null` si no hay).
 
 **`Message`**
@@ -711,7 +713,7 @@ La ventana de chat es una **ventana dedicada** del mismo cliente Cercano (multi-
 
 | Zona | Comportamiento v1 |
 |---|---|
-| **Cabecera** | Usa `support_name`/`organization_name`/`logo_url`/`accent_color` de la configuración admin (`GET /api/chat/branding`). Muestra logo (si hay `logo_url`) o icono del perfil; título «Soporte <support_name>»; subtítulo con `organization_name` si está definido. Estado del servicio: «En línea» (API alcanzable y chat habilitado), «Reconectando» (SSE/REST caídos) o «Atendido por <técnico>» cuando está asignada. <técnico> es el **nombre visible** del técnico asignado (`assigned_display_name`, F4.5-17), nunca su nombre de usuario de inicio de sesión; si no tiene nombre visible, «Atendido por un técnico de <organization_name>». El punto verde va acompañado de texto, nunca solo color. |
+| **Cabecera** | Usa `support_name`/`organization_name`/`logo_url`/`accent_color` de la configuración admin (`GET /api/chat/branding`). Muestra logo (si hay `logo_url`) o icono del perfil; título «Soporte <support_name>»; subtítulo con `organization_name` si está definido. Estado del servicio: «En línea» (API alcanzable y chat habilitado), «Reconectando» (SSE/REST caídos) o «Atendido por <técnico>» cuando está asignada. <técnico> es el **nombre visible** del técnico asignado (`assigned_display_name`, F4.5-17), nunca su nombre de usuario de inicio de sesión; si no tiene nombre visible, «Atendido por un técnico de <organization_name o support_name>», y si tampoco hay ninguno de los dos, «Atendido por un técnico de soporte». El punto verde va acompañado de texto, nunca solo color. |
 | **Aviso** | Tarjeta informativa con `info_text` de la configuración; si no hay, «Está conversando con un técnico de soporte de <organization_name o support_name>.» Se muestra al inicio de la conversación y se puede colapsar; no ocupa espacio si ya hay historial. |
 | **Hilo** | Burbujas del cliente a la derecha (color `accent_color`, texto blanco) y del técnico a la izquierda (superficie neutra). Avatar del cliente con icono/iniciales; del técnico, icono genérico de soporte o iniciales (sin foto). Hora local en cada mensaje. Separadores de fecha. Adjuntos como miniatura (imagen) o tarjeta con nombre/tamaño (PDF). Mensajes de sistema centrados. |
 | **Leído** | Un check = enviado; doble check = el otro participante marcó leído (`other_last_read_at >= created_at`). No se muestra el doble check en mensajes propios de sistema. |
