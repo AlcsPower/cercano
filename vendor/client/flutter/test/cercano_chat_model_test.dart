@@ -142,6 +142,7 @@ void main() {
       expect(technicianLabel('Juan Pérez', 'Acme'), equals('Juan Pérez'));
       expect(technicianLabel(null, 'Acme'), equals('un técnico de Acme'));
       expect(technicianLabel('  ', 'Acme'), equals('un técnico de Acme'));
+      expect(technicianLabel(null, ''), equals('un técnico de soporte'));
 
       expect(reassignmentNotice(null, conv('u-1', 'Juan'), 'Acme'), isNull);
       expect(reassignmentNotice(conv('u-1', 'Juan'), conv('u-1', 'Juan'), 'Acme'),

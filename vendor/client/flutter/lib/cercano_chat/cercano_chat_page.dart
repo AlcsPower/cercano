@@ -141,6 +141,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (model.branding.organizationName.isNotEmpty)
                 Text(
                   model.branding.organizationName,
                   style: TextStyle(

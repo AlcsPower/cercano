@@ -28,7 +28,7 @@ class ChatBranding {
   factory ChatBranding.defaultBranding() {
     return ChatBranding(
       supportName: 'Cercano Soporte',
-      organizationName: 'Soporte interno',
+      organizationName: '',
       logoUrl: null,
       accentColor: '#3B5BFF',
       welcomeText: 'Cuéntanos qué necesitas y un técnico te atenderá.',
@@ -40,7 +40,7 @@ class ChatBranding {
   factory ChatBranding.fromJson(Map<String, dynamic> json) {
     return ChatBranding(
       supportName: json['support_name'] ?? 'Cercano Soporte',
-      organizationName: json['organization_name'] ?? 'Soporte interno',
+      organizationName: json['organization_name'] ?? '',
       logoUrl: json['logo_url'],
       accentColor: json['accent_color'] ?? '#3B5BFF',
       welcomeText: json['welcome_text'] ??
@@ -182,7 +182,9 @@ class ChatConversation {
 /// F4.5-17: nombre visible del técnico o respaldo genérico; nunca su login.
 String technicianLabel(String? displayName, String organizationName) {
   final name = displayName?.trim() ?? '';
-  return name.isNotEmpty ? name : 'un técnico de $organizationName';
+  if (name.isNotEmpty) return name;
+  final org = organizationName.trim();
+  return org.isNotEmpty ? 'un técnico de $org' : 'un técnico de soporte';
 }
 
 /// Aviso «Ahora te atiende …» cuando cambia el técnico asignado; null si no cambió.
