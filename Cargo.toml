@@ -5,4 +5,5 @@ members = [
     "control-plane/audit-core",
     "control-plane/cercano-audit",
     "builder/cercano-build",
+    "agent",
 ]

@@ -90,8 +90,8 @@ Fuente: `docs/PLAN-F3.5-AGENTE.md` y `docs/adr/015-agente-y-cliente-generico.md`
 |---|---|---|---|---|---|
 | F3.5-01 | ADR-015, plan y casos de prueba propuestos | — | Coordinador | Dueño + Seguridad | En verificación |
 | F3.5-02 | Spike S9: etiquetado de paquetes (fuera del plan: se usa configuración aparte) | — | Builder | Seguridad | Diferida |
-| F3.5-03 | Contrato del canal local y formato de la configuración | F3.5-01 | Coordinador + Cliente + ControlPlane | Seguridad | En curso |
-| F3.5-04 | Esqueleto de `agent/`: servicio, almacén fijado, logs y CLI | F3.5-03 | Cliente | QA | En curso |
+| F3.5-03 | Contrato del canal local y formato de la configuración | F3.5-01 | Coordinador + Cliente + ControlPlane | Seguridad | En verificación |
+| F3.5-04 | Esqueleto de `agent/`: servicio, almacén fijado, logs y CLI | F3.5-03 | Cliente | QA | En verificación |
 | F3.5-05 | Vinculación `POST /api/agent/enroll` y lado del agente | F3.5-04, F3-09, F3-13, F4.5-03 | ControlPlane + Cliente | Seguridad | Pendiente |
 | F3.5-06 | Canal local con verificación mutua de firma | F3.5-04 | Cliente | Seguridad | Pendiente |
 | F3.5-07 | Política, latido y cola de auditoría en el agente | F3.5-05, F3.5-06 | Cliente | QA | Pendiente |

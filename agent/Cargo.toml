@@ -1,0 +1,34 @@
+# Copyright (C) 2026 Cercano Contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "cercano-agent"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "Agente Cercano: servicio de Windows que vincula el equipo con el servidor de la organización (ADR-015)"
+publish = false
+
+[[bin]]
+name = "cercano-agent"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8"
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+] }
+
+[dev-dependencies]
+base64 = "0.22"
+jsonschema = { version = "0.63", default-features = false }
+tempfile = "3"
