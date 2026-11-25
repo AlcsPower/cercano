@@ -7,7 +7,7 @@
     "rendezvous_server": "172.16.8.163:21116",
     "relay_server": "172.16.8.163:21117",
     "api_server": "http://172.16.8.163:21114",
-    "server_public_key": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+    "server_public_key": "lRHZiVhN0oDD1fsuACtV6S2FOneftReV7m4eUnIEzIQ="
   },
   "identity": {
     "app_name": "Cercano Técnico",
