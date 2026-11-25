@@ -1,0 +1,211 @@
+From: Agente-Cliente <cercano-dev@local>
+Subject: [PATCH] feat(client): F4.5-17 nombre visible del tecnico en el chat
+Date: 2026-11-25
+Component: vendor/client
+Task: F4.5-17
+
+El cliente muestra el nombre visible del tecnico asignado (assigned_display_name)
+y nunca su login:
+- Cabecera: «Atendido por <tecnico>» cuando la conversacion esta asignada.
+- Mensajes del tecnico: su nombre visible como remitente.
+- Respaldo: «un tecnico de <organization_name>» si no tiene nombre visible.
+- Aviso «Ahora te atiende <tecnico>» al cambiar assigned_user_id.
+- DTO Rust y modelo Dart: assigned_username -> assigned_display_name.
+diff --git a/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart b/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart
+index 4511dbe..b223dcf 100644
+--- a/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart
++++ b/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart
+@@ -133,7 +133,7 @@ class ChatConversation {
+   final String contactFirstName;
+   final String contactLastName;
+   final String? assignedUserId;
+-  final String? assignedUsername;
++  final String? assignedDisplayName;
+   final String? otherLastReadAt;
+   final String createdAt;
+   final String updatedAt;
+@@ -146,7 +146,7 @@ class ChatConversation {
+     required this.contactFirstName,
+     required this.contactLastName,
+     this.assignedUserId,
+-    this.assignedUsername,
++    this.assignedDisplayName,
+     this.otherLastReadAt,
+     required this.createdAt,
+     required this.updatedAt,
+@@ -167,7 +167,7 @@ class ChatConversation {
+       contactFirstName: json['contact_first_name'] ?? '',
+       contactLastName: json['contact_last_name'] ?? '',
+       assignedUserId: json['assigned_user_id'],
+-      assignedUsername: json['assigned_username'],
++      assignedDisplayName: json['assigned_display_name'],
+       otherLastReadAt: json['other_last_read_at'],
+       createdAt: json['created_at'] ?? DateTime.now().toIso8601String(),
+       updatedAt: json['updated_at'] ?? DateTime.now().toIso8601String(),
+@@ -179,6 +179,21 @@ class ChatConversation {
+   bool get isAssigned => status == 'assigned' || status == 'active';
+ }
+ 
++/// F4.5-17: nombre visible del técnico o respaldo genérico; nunca su login.
++String technicianLabel(String? displayName, String organizationName) {
++  final name = displayName?.trim() ?? '';
++  return name.isNotEmpty ? name : 'un técnico de $organizationName';
++}
++
++/// Aviso «Ahora te atiende …» cuando cambia el técnico asignado; null si no cambió.
++String? reassignmentNotice(
++    ChatConversation? previous, ChatConversation next, String organizationName) {
++  final before = previous?.assignedUserId;
++  final after = next.assignedUserId;
++  if (before == null || after == null || before == after) return null;
++  return 'Ahora te atiende ${technicianLabel(next.assignedDisplayName, organizationName)}';
++}
++
+ class CercanoChatModel extends ChangeNotifier {
+   ChatBranding branding = ChatBranding.defaultBranding();
+   ChatConversation? conversation;
+@@ -188,6 +203,10 @@ class CercanoChatModel extends ChangeNotifier {
+   bool isSending = false;
+   bool isOnline = true;
+   String? errorMessage;
++  String? technicianNotice;
++
++  String get assignedTechnicianLabel => technicianLabel(
++      conversation?.assignedDisplayName, branding.organizationName);
+ 
+   bool get hasSavedContact =>
+       contactFirstName.trim().isNotEmpty && contactLastName.trim().isNotEmpty;
+@@ -304,7 +323,7 @@ class CercanoChatModel extends ChangeNotifier {
+           contactFirstName: conversation!.contactFirstName,
+           contactLastName: conversation!.contactLastName,
+           assignedUserId: conversation!.assignedUserId,
+-          assignedUsername: conversation!.assignedUsername,
++          assignedDisplayName: conversation!.assignedDisplayName,
+           otherLastReadAt: conversation!.otherLastReadAt,
+           createdAt: conversation!.createdAt,
+           updatedAt: DateTime.now().toIso8601String(),
+@@ -329,7 +348,11 @@ class CercanoChatModel extends ChangeNotifier {
+       );
+       final parsed = jsonDecode(resJson);
+       if (parsed['error'] == null) {
+-        conversation = ChatConversation.fromJson(parsed);
++        final next = ChatConversation.fromJson(parsed);
++        technicianNotice =
++            reassignmentNotice(conversation, next, branding.organizationName) ??
++                technicianNotice;
++        conversation = next;
+         notifyListeners();
+       }
+     } catch (_) {}
+diff --git a/vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart b/vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart
+index f3c0b84..0a666cd 100644
+--- a/vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart
++++ b/vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart
+@@ -79,6 +79,18 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
+               children: [
+                 _buildHeader(context, model, accentColor),
+                 if (_showNotice) _buildNotice(context, model),
++                if (model.technicianNotice != null)
++                  Semantics(
++                    liveRegion: true,
++                    child: Padding(
++                      padding: const EdgeInsets.symmetric(vertical: 4),
++                      child: Text(
++                        model.technicianNotice!,
++                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
++                        textAlign: TextAlign.center,
++                      ),
++                    ),
++                  ),
+                 Expanded(
+                   child: model.isLoading
+                       ? const Center(child: CircularProgressIndicator())
+@@ -152,7 +164,11 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
+               ),
+               const SizedBox(width: 6),
+               Text(
+-                model.isOnline ? 'En línea' : 'Reconectando',
++                !model.isOnline
++                    ? 'Reconectando'
++                    : model.conversation?.isAssigned == true
++                        ? 'Atendido por ${model.assignedTechnicianLabel}'
++                        : 'En línea',
+                 style: TextStyle(
+                   fontSize: 12,
+                   fontWeight: FontWeight.w600,
+@@ -333,11 +349,11 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
+               crossAxisAlignment:
+                   isMine ? CrossCrossAlignment.end : CrossCrossAlignment.start,
+               children: [
+-                if (!isMine && msg.senderName != null)
++                if (!isMine)
+                   Padding(
+                     padding: const EdgeInsets.only(bottom: 2),
+                     child: Text(
+-                      msg.senderName!,
++                      technicianLabel(msg.senderName, model.branding.organizationName),
+                       style: TextStyle(
+                         fontSize: 11,
+                         fontWeight: FontWeight.bold,
+diff --git a/vendor/client/flutter/test/cercano_chat_model_test.dart b/vendor/client/flutter/test/cercano_chat_model_test.dart
+index 1c291d2..513b58e 100644
+--- a/vendor/client/flutter/test/cercano_chat_model_test.dart
++++ b/vendor/client/flutter/test/cercano_chat_model_test.dart
+@@ -89,7 +89,7 @@ void main() {
+         'contact_first_name': 'Maria',
+         'contact_last_name': 'Lopez',
+         'assigned_user_id': 'u-2',
+-        'assigned_username': 'Tecnico 2',
++        'assigned_display_name': 'Tecnico 2',
+         'other_last_read_at': '2026-11-16T10:05:00Z',
+         'created_at': '2026-11-16T10:00:00Z',
+         'updated_at': '2026-11-16T10:05:00Z',
+@@ -125,5 +125,35 @@ void main() {
+       expect(model.isMessageRead(conv.messages[0]), isTrue);
+       expect(model.isMessageRead(conv.messages[1]), isFalse);
+     });
++
++    // F4.5-17: nombre visible del técnico, respaldo y aviso de reasignación.
++    test('Technician display name, fallback and reassignment notice', () {
++      ChatConversation conv(String? userId, String? name) =>
++          ChatConversation.fromJson({
++            'id': 'c-1',
++            'status': 'assigned',
++            'assigned_user_id': userId,
++            'assigned_display_name': name,
++            // El servidor ya no lo envía; aunque llegara, no se usa.
++            'assigned_username': 'login_secreto',
++          });
++
++      expect(conv('u-1', 'Juan Pérez').assignedDisplayName, equals('Juan Pérez'));
++      expect(technicianLabel('Juan Pérez', 'Acme'), equals('Juan Pérez'));
++      expect(technicianLabel(null, 'Acme'), equals('un técnico de Acme'));
++      expect(technicianLabel('  ', 'Acme'), equals('un técnico de Acme'));
++
++      expect(reassignmentNotice(null, conv('u-1', 'Juan'), 'Acme'), isNull);
++      expect(reassignmentNotice(conv('u-1', 'Juan'), conv('u-1', 'Juan'), 'Acme'),
++          isNull);
++      expect(reassignmentNotice(conv('u-1', 'Juan'), conv('u-2', 'Ana'), 'Acme'),
++          equals('Ahora te atiende Ana'));
++      expect(reassignmentNotice(conv('u-1', 'Juan'), conv('u-2', null), 'Acme'),
++          equals('Ahora te atiende un técnico de Acme'));
++
++      final model = CercanoChatModel();
++      model.conversation = conv('u-1', null);
++      expect(model.assignedTechnicianLabel, isNot(contains('login_secreto')));
++    });
+   });
+ }
+diff --git a/vendor/client/src/cercano_chat.rs b/vendor/client/src/cercano_chat.rs
+index 4b3bab2..c36bfdd 100644
+--- a/vendor/client/src/cercano_chat.rs
++++ b/vendor/client/src/cercano_chat.rs
+@@ -110,7 +110,7 @@ pub struct ChatConversation {
+     pub contact_first_name: String,
+     pub contact_last_name: String,
+     pub assigned_user_id: Option<String>,
+-    pub assigned_username: Option<String>,
++    pub assigned_display_name: Option<String>,
+     pub other_last_read_at: Option<String>,
+     pub created_at: String,
+     pub updated_at: String,

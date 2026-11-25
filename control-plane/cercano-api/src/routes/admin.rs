@@ -102,6 +102,7 @@ impl IntoResponse for AdminError {
 pub struct UserView {
     pub id: String,
     pub username: String,
+    pub display_name: Option<String>,
     pub role: String,
     pub is_active: bool,
     pub totp_enabled: bool,
@@ -114,6 +115,7 @@ impl UserView {
         Self {
             id: row.get("id"),
             username: row.get("username"),
+            display_name: row.get("display_name"),
             role: row.get("role"),
             is_active: row.get::<i64, _>("is_active") != 0,
             totp_enabled: row.get::<i64, _>("totp_enabled") != 0,
@@ -128,10 +130,14 @@ pub struct CreateUserRequest {
     pub username: String,
     pub password: String,
     pub role: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateUserRequest {
+    /// Cadena vacía borra el nombre visible.
+    pub display_name: Option<String>,
     pub password: Option<String>,
     pub role: Option<String>,
     pub is_active: Option<bool>,
@@ -205,6 +211,29 @@ fn validate_username(raw: &str) -> Result<String, AdminError> {
     Ok(value.to_string())
 }
 
+/// F4.5-17: nombre visible que ve la persona usuaria del chat. Vacío = sin nombre.
+fn validate_display_name(raw: &str) -> Result<Option<String>, AdminError> {
+    let value = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.chars().count() > 64 {
+        return Err(AdminError::Validation(
+            "El nombre visible admite como máximo 64 caracteres.".to_string(),
+        ));
+    }
+    if !value
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '.' | '\'' | '-' | '’'))
+    {
+        return Err(AdminError::Validation(
+            "El nombre visible solo admite letras, números, espacios, punto, apóstrofo y guion."
+                .to_string(),
+        ));
+    }
+    Ok(Some(value))
+}
+
 fn validate_password(raw: &str) -> Result<(), AdminError> {
     if raw.len() < 8 || raw.len() > 128 {
         return Err(AdminError::Validation(
@@ -235,7 +264,7 @@ fn map_constraint_error(err: sqlx::Error, conflict_message: &str) -> AdminError 
 
 async fn fetch_user(pool: &SqlitePool, id: &str) -> Result<UserView, AdminError> {
     let row = sqlx::query(
-        "SELECT id, username, role, is_active, totp_enabled, is_2fa_required, created_at FROM users WHERE id = ?",
+        "SELECT id, username, display_name, role, is_active, totp_enabled, is_2fa_required, created_at FROM users WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -280,11 +309,11 @@ pub async fn list_users_handler(
 ) -> Result<Json<Vec<UserView>>, AdminError> {
     require_permission(&state, &user, permissions::USERS_READ, None).await?;
     let rows = if permissions::is_admin(&user.role) {
-        sqlx::query("SELECT id, username, role, is_active, totp_enabled, is_2fa_required, created_at FROM users ORDER BY username")
+        sqlx::query("SELECT id, username, display_name, role, is_active, totp_enabled, is_2fa_required, created_at FROM users ORDER BY username")
             .fetch_all(&state.db)
             .await?
     } else {
-        sqlx::query("SELECT id, username, role, is_active, totp_enabled, is_2fa_required, created_at FROM users WHERE id = ?")
+        sqlx::query("SELECT id, username, display_name, role, is_active, totp_enabled, is_2fa_required, created_at FROM users WHERE id = ?")
             .bind(&user.id)
             .fetch_all(&state.db)
             .await?
@@ -317,14 +346,19 @@ pub async fn create_user_handler(
     let username = validate_username(&payload.username)?;
     validate_password(&payload.password)?;
     let role = validate_role(&payload.role)?;
+    let display_name = match payload.display_name.as_deref() {
+        Some(raw) => validate_display_name(raw)?,
+        None => None,
+    };
     let password_hash =
         hash_password(&payload.password).map_err(|e| AdminError::Hash(e.to_string()))?;
     let id = Uuid::now_v7().to_string();
     sqlx::query(
-        "INSERT INTO users (id, username, password_hash, role, is_active) VALUES (?, ?, ?, ?, 1)",
+        "INSERT INTO users (id, username, display_name, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?, 1)",
     )
     .bind(&id)
     .bind(&username)
+    .bind(&display_name)
     .bind(&password_hash)
     .bind(&role)
     .execute(&state.db)
@@ -367,6 +401,18 @@ pub async fn update_user_handler(
     }
     let current = fetch_user(&state.db, &id).await?;
     let mut changed_fields: Vec<&str> = Vec::new();
+
+    if let Some(raw) = payload.display_name.as_deref() {
+        let display_name = validate_display_name(raw)?;
+        if display_name != current.display_name {
+            sqlx::query("UPDATE users SET display_name = ? WHERE id = ?")
+                .bind(&display_name)
+                .bind(&id)
+                .execute(&state.db)
+                .await?;
+            changed_fields.push("display_name");
+        }
+    }
 
     if let Some(role) = payload.role.as_deref() {
         let role = validate_role(role)?;

@@ -524,18 +524,25 @@ pub async fn upload_attachment_handler(
         &status
     };
 
+    let sender_display_name = if sender_type == SenderType::Technician {
+        super::conversations::user_display_name(&state.db, &sender_id).await
+    } else {
+        None
+    };
+
     let insert_result = async {
         let mut tx = state.db.begin().await?;
 
         sqlx::query(
-            "INSERT INTO chat_messages (id, conversation_id, sender_type, sender_id, sender_name, body, client_message_id, created_at)
-             VALUES (?, ?, ?, ?, ?, '', ?, ?)",
+            "INSERT INTO chat_messages (id, conversation_id, sender_type, sender_id, sender_name, sender_display_name, body, client_message_id, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)",
         )
         .bind(&message_id)
         .bind(&conv_id)
         .bind(sender_type.as_str())
         .bind(&sender_id)
         .bind(&sender_name)
+        .bind(&sender_display_name)
         .bind(client_msg_id)
         .bind(&now_str)
         .execute(&mut *tx)

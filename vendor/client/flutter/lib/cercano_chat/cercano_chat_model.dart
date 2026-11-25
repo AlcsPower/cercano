@@ -133,7 +133,7 @@ class ChatConversation {
   final String contactFirstName;
   final String contactLastName;
   final String? assignedUserId;
-  final String? assignedUsername;
+  final String? assignedDisplayName;
   final String? otherLastReadAt;
   final String createdAt;
   final String updatedAt;
@@ -146,7 +146,7 @@ class ChatConversation {
     required this.contactFirstName,
     required this.contactLastName,
     this.assignedUserId,
-    this.assignedUsername,
+    this.assignedDisplayName,
     this.otherLastReadAt,
     required this.createdAt,
     required this.updatedAt,
@@ -167,7 +167,7 @@ class ChatConversation {
       contactFirstName: json['contact_first_name'] ?? '',
       contactLastName: json['contact_last_name'] ?? '',
       assignedUserId: json['assigned_user_id'],
-      assignedUsername: json['assigned_username'],
+      assignedDisplayName: json['assigned_display_name'],
       otherLastReadAt: json['other_last_read_at'],
       createdAt: json['created_at'] ?? DateTime.now().toIso8601String(),
       updatedAt: json['updated_at'] ?? DateTime.now().toIso8601String(),
@@ -179,6 +179,21 @@ class ChatConversation {
   bool get isAssigned => status == 'assigned' || status == 'active';
 }
 
+/// F4.5-17: nombre visible del técnico o respaldo genérico; nunca su login.
+String technicianLabel(String? displayName, String organizationName) {
+  final name = displayName?.trim() ?? '';
+  return name.isNotEmpty ? name : 'un técnico de $organizationName';
+}
+
+/// Aviso «Ahora te atiende …» cuando cambia el técnico asignado; null si no cambió.
+String? reassignmentNotice(
+    ChatConversation? previous, ChatConversation next, String organizationName) {
+  final before = previous?.assignedUserId;
+  final after = next.assignedUserId;
+  if (before == null || after == null || before == after) return null;
+  return 'Ahora te atiende ${technicianLabel(next.assignedDisplayName, organizationName)}';
+}
+
 class CercanoChatModel extends ChangeNotifier {
   ChatBranding branding = ChatBranding.defaultBranding();
   ChatConversation? conversation;
@@ -188,6 +203,10 @@ class CercanoChatModel extends ChangeNotifier {
   bool isSending = false;
   bool isOnline = true;
   String? errorMessage;
+  String? technicianNotice;
+
+  String get assignedTechnicianLabel => technicianLabel(
+      conversation?.assignedDisplayName, branding.organizationName);
 
   bool get hasSavedContact =>
       contactFirstName.trim().isNotEmpty && contactLastName.trim().isNotEmpty;
@@ -304,7 +323,7 @@ class CercanoChatModel extends ChangeNotifier {
           contactFirstName: conversation!.contactFirstName,
           contactLastName: conversation!.contactLastName,
           assignedUserId: conversation!.assignedUserId,
-          assignedUsername: conversation!.assignedUsername,
+          assignedDisplayName: conversation!.assignedDisplayName,
           otherLastReadAt: conversation!.otherLastReadAt,
           createdAt: conversation!.createdAt,
           updatedAt: DateTime.now().toIso8601String(),
@@ -329,7 +348,11 @@ class CercanoChatModel extends ChangeNotifier {
       );
       final parsed = jsonDecode(resJson);
       if (parsed['error'] == null) {
-        conversation = ChatConversation.fromJson(parsed);
+        final next = ChatConversation.fromJson(parsed);
+        technicianNotice =
+            reassignmentNotice(conversation, next, branding.organizationName) ??
+                technicianNotice;
+        conversation = next;
         notifyListeners();
       }
     } catch (_) {}

@@ -166,7 +166,11 @@ pub struct ConversationSummary {
     pub device_os: Option<String>,
     pub status: String,
     pub assigned_user_id: Option<String>,
+    /// Login del técnico: solo para la consola; nunca se envía a un dispositivo (F4.5-17).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assigned_username: Option<String>,
+    /// Nombre visible del técnico asignado; `null` si no lo tiene.
+    pub assigned_display_name: Option<String>,
     pub contact_first_name: Option<String>,
     pub contact_last_name: Option<String>,
     pub created_at: String,
@@ -174,6 +178,26 @@ pub struct ConversationSummary {
     pub last_message_at: Option<String>,
     pub last_message_preview: Option<String>,
     pub unread_count: i64,
+}
+
+impl ConversationSummary {
+    /// Vista para el dispositivo: sin el login del técnico (F4.5-17).
+    fn for_device(mut self) -> Self {
+        self.assigned_username = None;
+        self
+    }
+}
+
+/// Nombre visible actual de un usuario de consola, si lo tiene.
+pub(crate) async fn user_display_name(pool: &sqlx::SqlitePool, user_id: &str) -> Option<String> {
+    sqlx::query_scalar::<_, Option<String>>("SELECT display_name FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .flatten()
+        .filter(|s| !s.trim().is_empty())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -797,16 +821,22 @@ pub async fn send_message_handler(
 
     let msg_id = Uuid::now_v7().to_string();
     let now_str = Utc::now().to_rfc3339();
+    let sender_display_name = if sender_type == SenderType::Technician {
+        user_display_name(&state.db, &sender_id).await
+    } else {
+        None
+    };
 
     sqlx::query(
-        "INSERT INTO chat_messages (id, conversation_id, sender_type, sender_id, sender_name, body, client_message_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO chat_messages (id, conversation_id, sender_type, sender_id, sender_name, sender_display_name, body, client_message_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&msg_id)
     .bind(&conv_id)
     .bind(sender_type.as_str())
     .bind(&sender_id)
     .bind(&sender_name)
+    .bind(&sender_display_name)
     .bind(&body)
     .bind(payload.client_message_id.as_deref())
     .bind(&now_str)
@@ -1171,10 +1201,13 @@ pub async fn close_conversation_handler(
     let current_status: String = row.try_get("status").unwrap_or_default();
     let assigned: Option<String> = row.try_get("assigned_user_id").ok().flatten();
 
+    let is_device = matches!(caller, ChatCaller::Device(_));
+    let view = |s: ConversationSummary| if is_device { s.for_device() } else { s };
+
     // Idempotent: already closed returns summary immediately
     if current_status == "closed" {
         let summary = fetch_conversation_summary(&state.db, &conv_id).await?;
-        return Ok((StatusCode::OK, Json(summary)).into_response());
+        return Ok((StatusCode::OK, Json(view(summary))).into_response());
     }
 
     let closed_by_str = match caller {
@@ -1262,7 +1295,7 @@ pub async fn close_conversation_handler(
     ));
 
     let summary = fetch_conversation_summary(&state.db, &conv_id).await?;
-    Ok((StatusCode::OK, Json(summary)).into_response())
+    Ok((StatusCode::OK, Json(view(summary))).into_response())
 }
 
 // ----------------------------------------------------------------------------
@@ -1411,7 +1444,7 @@ pub async fn list_conversations_handler(
     // Build dynamic query
     let mut sql = String::from(
         "SELECT c.id, c.device_id, c.device_name, c.device_hostname, c.device_os, c.status,
-                c.assigned_user_id, u.username as assigned_username,
+                c.assigned_user_id, u.username as assigned_username, u.display_name as assigned_display_name,
                 c.contact_first_name, c.contact_last_name, c.created_at, c.updated_at, c.last_message_at
          FROM chat_conversations c
          LEFT JOIN users u ON c.assigned_user_id = u.id
@@ -1494,6 +1527,7 @@ pub async fn list_conversations_handler(
             status: r.try_get("status").unwrap_or_default(),
             assigned_user_id: opt_string(r, "assigned_user_id"),
             assigned_username: opt_string(r, "assigned_username"),
+            assigned_display_name: opt_string(r, "assigned_display_name"),
             contact_first_name: opt_string(r, "contact_first_name"),
             contact_last_name: opt_string(r, "contact_last_name"),
             created_at: r.try_get("created_at").unwrap_or_default(),
@@ -1613,7 +1647,7 @@ async fn fetch_conversation_summary(
 ) -> Result<ConversationSummary, ChatConvError> {
     let row = sqlx::query(
         "SELECT c.id, c.device_id, c.device_name, c.device_hostname, c.device_os, c.status,
-                c.assigned_user_id, u.username as assigned_username,
+                c.assigned_user_id, u.username as assigned_username, u.display_name as assigned_display_name,
                 c.contact_first_name, c.contact_last_name, c.created_at, c.updated_at, c.last_message_at
          FROM chat_conversations c
          LEFT JOIN users u ON c.assigned_user_id = u.id
@@ -1649,6 +1683,7 @@ async fn fetch_conversation_summary(
         status: r.try_get("status").unwrap_or_default(),
         assigned_user_id: opt_string(&r, "assigned_user_id"),
         assigned_username: opt_string(&r, "assigned_username"),
+        assigned_display_name: opt_string(&r, "assigned_display_name"),
         contact_first_name: opt_string(&r, "contact_first_name"),
         contact_last_name: opt_string(&r, "contact_last_name"),
         created_at: r.try_get("created_at").unwrap_or_default(),
@@ -1669,7 +1704,7 @@ async fn fetch_conversation_detail(
 ) -> Result<ConversationDetail, ChatConvError> {
     let row = sqlx::query(
         "SELECT c.id, c.device_id, c.device_name, c.device_hostname, c.device_os, c.status,
-                c.assigned_user_id, u.username as assigned_username,
+                c.assigned_user_id, u.username as assigned_username, u.display_name as assigned_display_name,
                 c.contact_first_name, c.contact_last_name, c.created_at, c.updated_at, c.last_message_at,
                 c.closed_at, c.closed_by
          FROM chat_conversations c
@@ -1726,7 +1761,7 @@ async fn fetch_conversation_detail(
 
     // Fetch messages: newest first, cursor by before
     let mut msg_sql = String::from(
-        "SELECT id, conversation_id, sender_type, sender_id, sender_name, body, created_at
+        "SELECT id, conversation_id, sender_type, sender_id, sender_name, sender_display_name, body, created_at
          FROM chat_messages
          WHERE conversation_id = ?",
     );
@@ -1776,12 +1811,20 @@ async fn fetch_conversation_detail(
             sha256: ar.try_get("sha256").unwrap_or_default(),
         });
 
+        let sender_type: String = m.try_get("sender_type").unwrap_or_default();
+        // F4.5-17: el dispositivo ve el nombre visible del técnico, nunca su login.
+        let sender_name =
+            if caller_device.is_some() && sender_type == SenderType::Technician.as_str() {
+                opt_string(m, "sender_display_name")
+            } else {
+                m.try_get("sender_name").ok()
+            };
         messages.push(MessageDto {
             id: m_id,
             conversation_id: m.try_get("conversation_id").unwrap_or_default(),
-            sender_type: m.try_get("sender_type").unwrap_or_default(),
+            sender_type,
             sender_id: m.try_get("sender_id").ok(),
-            sender_name: m.try_get("sender_name").ok(),
+            sender_name,
             body: m.try_get("body").unwrap_or_default(),
             attachment,
             created_at: m.try_get("created_at").unwrap_or_default(),
@@ -1819,6 +1862,7 @@ async fn fetch_conversation_detail(
         status: r.try_get("status").unwrap_or_default(),
         assigned_user_id,
         assigned_username: opt_string(&r, "assigned_username"),
+        assigned_display_name: opt_string(&r, "assigned_display_name"),
         contact_first_name: opt_string(&r, "contact_first_name"),
         contact_last_name: opt_string(&r, "contact_last_name"),
         created_at: r.try_get("created_at").unwrap_or_default(),
@@ -1826,6 +1870,11 @@ async fn fetch_conversation_detail(
         last_message_at: opt_string(&r, "last_message_at"),
         last_message_preview: messages.last().map(|m| make_preview(&m.body)),
         unread_count: 0,
+    };
+    let summary = if caller_device.is_some() {
+        summary.for_device()
+    } else {
+        summary
     };
 
     Ok(ConversationDetail {
