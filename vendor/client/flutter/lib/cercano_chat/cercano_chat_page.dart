@@ -146,7 +146,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: model.isOnline ? Colors.emerald : Colors.amber,
+                  color: model.isOnline ? Colors.green : Colors.amber,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -156,7 +156,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: model.isOnline ? Colors.emerald.shade700 : Colors.amber.shade800,
+                  color: model.isOnline ? Colors.green.shade700 : Colors.amber.shade800,
                 ),
               ),
             ],
@@ -331,7 +331,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
             ),
             child: Column(
               crossAxisAlignment:
-                  isMine ? CrossCrossAlignment.end : CrossCrossAlignment.start,
+                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 if (!isMine && msg.senderName != null)
                   Padding(

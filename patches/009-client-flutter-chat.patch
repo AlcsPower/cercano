@@ -145,13 +145,14 @@ new file mode 100644
 index 0000000..4511dbe
 --- /dev/null
 +++ b/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,349 @@
 +// Copyright (C) 2026 Cercano Contributors
 +// SPDX-License-Identifier: AGPL-3.0-only
 +
 +import 'dart:convert';
 +import 'package:flutter/foundation.dart';
 +import 'package:flutter_hbb/common.dart';
++import 'package:flutter_hbb/models/platform_model.dart';
 +import 'cercano_chat_ffi_bridge.dart';
 +
 +class ChatBranding {
@@ -648,7 +649,7 @@ index 0000000..f3c0b84
 +                width: 8,
 +                height: 8,
 +                decoration: BoxDecoration(
-+                  color: model.isOnline ? Colors.emerald : Colors.amber,
++                  color: model.isOnline ? Colors.green : Colors.amber,
 +                  shape: BoxShape.circle,
 +                ),
 +              ),
@@ -658,7 +659,7 @@ index 0000000..f3c0b84
 +                style: TextStyle(
 +                  fontSize: 12,
 +                  fontWeight: FontWeight.w600,
-+                  color: model.isOnline ? Colors.emerald.shade700 : Colors.amber.shade800,
++                  color: model.isOnline ? Colors.green.shade700 : Colors.amber.shade800,
 +                ),
 +              ),
 +            ],
@@ -833,7 +834,7 @@ index 0000000..f3c0b84
 +            ),
 +            child: Column(
 +              crossAxisAlignment:
-+                  isMine ? CrossCrossAlignment.end : CrossCrossAlignment.start,
++                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
 +              children: [
 +                if (!isMine && msg.senderName != null)
 +                  Padding(

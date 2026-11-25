@@ -224,6 +224,30 @@ En CI (`windows-latest`): instalar el `.msi` en silencio, lanzar `cercano.exe` y
 
 **Gate F3 (M2):** flujo completo demostrado en el laboratorio para ambos roles; la matriz de la sección 1 verificada por QA; ninguna clave privada ni credencial presente en artefactos, repositorio ni auditoría (verificación automática); revisión de seguridad sin hallazgos altos; SBOM y firmas verificables; elevación entregada desactivada por defecto; **instalador que abre y funciona en Windows 10/11 con el cliente real (F3-19…21)**.
 
+### 6.1 Registro de incidencias técnicas resueltas: dependencia C++ `webm-sys` y variables `CXXFLAGS`
+
+Durante la ejecución de las tareas F3-03 (binario reproducible) y F3-19/F3-19a (pipeline de compilación del cliente Windows/Linux), se identificó y resolvió el siguiente bloqueo en toolchains C++ modernos:
+
+1. **Incidencia y diagnóstico:**
+   - La dependencia nativa C++ heredada `webm-sys v1.0.4` (submódulo `libwebm`, archivo `libwebm/mkvparser/mkvparser.cc`), importada transitivamente por `scrap` (`vendor/client/libs/scrap/Cargo.toml`) desde `https://github.com/rustdesk-org/rust-webm`, utiliza tipos enteros de ancho fijo `uint32_t` y `uint64_t` sin incluir explícitamente `<cstdint>`.
+   - Compiladores C++ modernos (GCC 13+, Clang 15+, MSVC) ya no incluyen `<cstdint>` de manera indirecta, provocando fallo de compilación con código de salida 1 en `cc-rs` al compilar `mkvparser.o`.
+   - Como consecuencia, Cargo abortaba la compilación y el script determinista informaba: `ERROR: No se encontró el binario compilado 'cercano'`.
+2. **Evaluación de dependencias upstream (Prioridad 1):**
+   - Se verificó que `vendor/client/Cargo.lock` apunta al commit `d2c4d3ac133c7b0e4c0f656da710b48391981e64`, el cual es el `HEAD` de la rama `master` del repositorio oficial de RustDesk `rustdesk-org/rust-webm`. No existen versiones más recientes publicadas ni compatibles que resuelvan la omisión de la cabecera.
+3. **Correcciones aplicadas (Prioridad 2):**
+   - **Compilación en Windows (MSVC):** En `.github/workflows/build-cercano-client.yml` (paso `Build Full Cercano Client Executable`), se inyectó la variable de entorno `CXXFLAGS: "/FIcstdint"`, forzando al compilador `cl.exe` a incluir `<cstdint>` en cada unidad de traducción.
+   - **Compilación en Linux (GCC / Clang):** En `.github/workflows/base-binary.yml` (paso `Build reproducible base binary and SBOM`), se inyectaron `CXXFLAGS: "-include cstdint"` y `SODIUM_USE_PKG_CONFIG: 1`, alineando el entorno con `.github/workflows/ci.yml`.
+   - **Resiliencia en script autónomo:** En `builder/build-base.sh`, se agregó detección automática condicional: si `CXXFLAGS` no está definido en el entorno, se exporta `/FIcstdint` si el target triple corresponde a MSVC o `-include cstdint` para otros targets.
+4. **Verificación de rutas de binarios e instaladores (Prioridad 3):**
+   - Se constató que `cercano-build` consume el binario base desde `--base-binary dist/base/cercano.exe`.
+   - En el workflow de Windows, `build.py` genera el ejecutable en `vendor/client/flutter/build/windows/x64/runner/Release/rustdesk.exe`, el cual es copiado y renombrado a `dist/base/cercano.exe` antes de que `cercano-build` genere los instaladores `cercano-soporte-1.0.0.exe`, `cercano-soporte-1.0.0.msi`, `cercano-tecnico-1.0.0.exe` y `cercano-tecnico-1.0.0.msi`.
+   - En `builder/build-base.sh`, la compilación `--bin cercano` copia el artefacto a `$OUT_DIR/cercano` o `$OUT_DIR/cercano.exe` (`dist/base/`), cumpliendo con la entrada esperada.
+5. **Evidencia y verificación:**
+   - Commit: `08980ef` en rama `feat/windows-build-pipeline-opt`.
+   - Pipeline CI: Run `#44555589148` en verde (`Client Check` superado en 2m 18s).
+   - Pipeline Base Binary: Run `#44555589223`.
+   - Pipeline Windows Production: Run `#44360069052` (instaladores generados) y Run `#44555589177`.
+
 ## 7. Fuera de alcance en F3
 
 Generación para Linux y macOS (se planifica al cierre de F3), interfaz web del generador (F4), notarización de macOS, bóveda propia de credenciales (opción C), integración con Windows LAPS (opción B, F5) y elevación en equipos que no sean Windows.

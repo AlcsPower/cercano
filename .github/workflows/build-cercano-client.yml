@@ -61,22 +61,79 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      - name: Cache bridge codegen binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-expand
+            ~/.cargo/bin/flutter_rust_bridge_codegen
+          key: frb-codegen-${{ runner.os }}-${{ runner.arch }}-rust-${{ env.RUST_VERSION }}-expand-${{ env.CARGO_EXPAND_VERSION }}-frb-${{ env.FLUTTER_RUST_BRIDGE_VERSION }}
+
       - name: Generate Bridge files
         shell: bash
         run: |
+          set -euo pipefail
+          bash tools/check-license.sh
+          bash tools/apply-patches
           cd vendor/client
-          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          # Verificar consistencia exacta entre Cargo.lock y FLUTTER_RUST_BRIDGE_VERSION
+          LOCK_FRB="$(awk '{gsub(/\r/, "")} /^name = "flutter_rust_bridge"$/{getline; gsub(/\r/, ""); gsub(/"/, "", $3); print $3; exit}' Cargo.lock)"
+          if [ "$LOCK_FRB" != "${{ env.FLUTTER_RUST_BRIDGE_VERSION }}" ]; then
+            echo "ERROR: Cargo.lock tiene flutter_rust_bridge=$LOCK_FRB pero workflow usa ${{ env.FLUTTER_RUST_BRIDGE_VERSION }}" >&2
+            exit 1
+          fi
+          if [ ! -x "$HOME/.cargo/bin/cargo-expand" ]; then
+            cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          fi
+          if [ ! -x "$HOME/.cargo/bin/flutter_rust_bridge_codegen" ]; then
+            cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          fi
+          "$HOME/.cargo/bin/cargo-expand" --version
+          "$HOME/.cargo/bin/flutter_rust_bridge_codegen" --version
+          "$HOME/.cargo/bin/flutter_rust_bridge_codegen" --help | grep -q -- '--class-name' || {
+            echo "ERROR: flutter_rust_bridge_codegen ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} no soporta --class-name" >&2
+            exit 1
+          }
           pushd flutter && flutter pub get && popd
-          ~/.cargo/bin/flutter_rust_bridge_codegen \
+          "$HOME/.cargo/bin/flutter_rust_bridge_codegen" \
             --rust-input ./src/flutter_ffi.rs \
             --dart-output ./flutter/lib/generated_bridge.dart \
-            --c-output ./flutter/macos/Runner/bridge_generated.h
+            --c-output ./flutter/macos/Runner/bridge_generated.h \
+            --class-name Rustdesk
+          for f in \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart; do
+            test -s "$f" || { echo "ERROR: Archivo de bridge ausente o vacio: vendor/client/$f" >&2; exit 1; }
+          done
+          grep -q "class RustdeskImpl" flutter/lib/generated_bridge.dart || {
+            echo "ERROR: flutter/lib/generated_bridge.dart no contiene class RustdeskImpl" >&2
+            exit 1
+          }
+          if grep -q "class CercanoImpl" flutter/lib/generated_bridge.dart; then
+            echo "ERROR: flutter/lib/generated_bridge.dart contiene class CercanoImpl como implementacion" >&2
+            exit 1
+          fi
+          sha256sum \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart
+
+      - name: Analyze Flutter Dart code
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd vendor/client/flutter
+          flutter --version
+          flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Upload Bridge Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: bridge-artifact
+          if-no-files-found: error
           path: |
             vendor/client/src/bridge_generated.rs
             vendor/client/src/bridge_generated.io.rs
@@ -100,11 +157,39 @@ jobs:
           name: bridge-artifact
           path: vendor/client
 
+      - name: Validate restored Bridge files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd vendor/client
+          for f in \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart; do
+            test -s "$f" || { echo "ERROR: Archivo de bridge no restaurado en vendor/client/$f" >&2; exit 1; }
+          done
+          grep -q "EventToUI" src/bridge_generated.rs || {
+            echo "ERROR: src/bridge_generated.rs no contiene bindings para EventToUI" >&2
+            exit 1
+          }
+          grep -q "class RustdeskImpl" flutter/lib/generated_bridge.dart || {
+            echo "ERROR: flutter/lib/generated_bridge.dart no contiene class RustdeskImpl" >&2
+            exit 1
+          }
+          if grep -q "class CercanoImpl" flutter/lib/generated_bridge.dart; then
+            echo "ERROR: flutter/lib/generated_bridge.dart contiene class CercanoImpl como implementacion" >&2
+            exit 1
+          fi
+          sha256sum \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart
+
       - name: Apply Cercano patches to upstream
         shell: bash
         run: |
-          test -f vendor/client/src/bridge_generated.rs
-          test -f vendor/client/flutter/lib/generated_bridge.dart
           bash tools/check-license.sh
           bash tools/apply-patches
 
@@ -151,6 +236,8 @@ jobs:
 
       - name: Build Full Cercano Client Executable
         shell: bash
+        env:
+          CXXFLAGS: "-FIcstdint"
         run: |
           VCPKG_INSTALLED="$VCPKG_ROOT/installed/x64-windows-static"
           printf 'VCPKG_ROOT=%s\n' "$VCPKG_ROOT"
@@ -162,53 +249,60 @@ jobs:
           cd vendor/client
           python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 
-      - name: Stage Client Base Binary into dist/base
+      - name: Stage Client Base folder into dist/base
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist/base
-          cp -r vendor/client/flutter/build/windows/x64/runner/Release/* dist/base/
+          cp -r vendor/client/flutter/build/windows/x64/runner/Release/. dist/base/
           if [ -f dist/base/rustdesk.exe ]; then
             mv -f dist/base/rustdesk.exe dist/base/cercano.exe
           fi
-          echo "OK: Binario base staged en dist/base/cercano.exe"
+          # Falla si falta algo, en vez de producir un instalador vacio
+          for f in cercano.exe librustdesk.dll flutter_windows.dll data/icudtl.dat; do
+            test -e "dist/base/$f" || { echo "ERROR: falta dist/base/$f" >&2; exit 1; }
+          done
           ls -la dist/base/
+          du -sh dist/base
 
       - name: Switch to Rust stable for cercano-build
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Generate Signed Installers with cercano-build
+      - name: Pack base installer once (RustDesk portable packer + patch 013)
         shell: bash
         run: |
-          SERVER_IP="${{ github.event.inputs.target_server_ip || '172.16.8.163' }}"
-          echo "Generando instaladores apuntando al servidor: $SERVER_IP"
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE"
+          cd vendor/client/libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f "$ROOT/dist/base" -o . -e "$ROOT/dist/base/cercano.exe"
+          mkdir -p "$ROOT/dist/installer-base"
+          cp ../../target/release/rustdesk-portable-packer.exe "$ROOT/dist/installer-base/cercano.exe"
+          ls -la "$ROOT/dist/installer-base"
 
-          # Compilar generador cercano-build
+      - name: Generate role installers (soporte y tecnico) with cercano-build
+        shell: bash
+        run: |
+          set -euo pipefail
           cargo build --release -p cercano-build
-
-          # Generar paquete Soporte
-          target/release/cercano-build \
-            --profile docs/specs/examples/profile-soporte-lan.json \
-            --base-binary dist/base/cercano.exe \
-            --out dist/builds \
-            --package-windows
-
-          # Generar paquete Técnico
-          target/release/cercano-build \
-            --profile docs/specs/examples/profile-tecnico-lan.json \
-            --base-binary dist/base/cercano.exe \
-            --out dist/builds \
-            --package-windows
-
-          ls -la dist/builds/cercano-soporte-1.0.0/
-          ls -la dist/builds/cercano-tecnico-1.0.0/
+          for role in soporte tecnico; do
+            target/release/cercano-build \
+              --profile "docs/specs/examples/profile-$role-lan.json" \
+              --base-binary dist/installer-base/cercano.exe \
+              --out dist/builds \
+              --package-windows
+            ls -la "dist/builds/cercano-$role-1.0.0/"
+          done
 
       - name: Upload Windows Client Installer Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: cercano-windows-production-installers
+          if-no-files-found: error
           path: |
-            dist/builds/
-            dist/base/cercano.exe
+            dist/builds/*/*.exe
+            dist/builds/*/installer-metadata.json
+            dist/installer-base/cercano.exe
           retention-days: 14

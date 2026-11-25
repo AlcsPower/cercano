@@ -1,0 +1,48 @@
+From: Agente-Builder <cercano-dev@local>
+Subject: [PATCH] fix(client): F3-05 recurso label.png del portable packer con marca Cercano
+Date: 2026-11-25
+Component: vendor/client
+Task: F3-05
+
+libs/portable/src/ui.rs incrusta ./res/label.png, que nunca se importo porque
+vendor/client/.gitignore ignora *png; sin el, el packer no compila. Se usa el
+icono de Cercano (branding/png/cercano-icon-32.png) en lugar del original de
+RustDesk (AGENTS.md §6, marca).
+---
+diff --git a/vendor/client/libs/portable/src/res/label.png b/vendor/client/libs/portable/src/res/label.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..55b0152d408f0fa8b45e5d47fae29fd1f9900487
+GIT binary patch
+literal 1397
+zcmV-*1&aEKP)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F8000FlNkl<ZcmceZ
+zdyr3M7{@>7_p?`nbss82OuI3LNo#gDbiovVbTOl3Wr$gcG&MF&G7_3Z7b=4oM%pHt
+zl3}8YF^EBz9frh8WYW4byX@|7cTdlA_VS+FUaDEYIq!R(+xtA<_c_lw@AHe```wdm
+zXJn1GmuF?$J7ruD-u^#BeaP4;K9<SI@P(rmz<uNFL@``|&2Gyg$AW<}+WHs#TV8$0
+z7%1x|sc+fboBeX^IN_bk0We^U-6s|!UkqQuB1%*JETXcx8HvRl(3r^20Z>`VlR~G;
+zxLH@9>X<|_N7-4j>)ggfj!24nc85{JVfuJjI31SEgt^mT+8DSuy)j;@Z7gy%3z0~a
+zvEtXsM71h#i^@Y8F$6Y!2rK5m)Y0(hV94wXcijp1_lL(Hg89$GXK%wWec}NxUV+B6
+zZ6<4AapP6Gxz;V=BMJKAI7kuNtqY@X=?F6?!Mih{T}qgRkqLmbh)zc2rEV2xtKWb-
+zx_afxl~+K)X*gT}v2vAoM|y8qIvYB)@ydN%T12X{l~3rfihl7c-dzY-)_w(}rD7hC
+zjEocgq}O1`1kn464Nw+ymOE4D_VB?hNJ?<nz$CFd>LUnKus{l|V_Ty-Q)q&mJ`0t$
+z(N#z`G!qJL%3QcwWONE*(A|djQ=tHcW<jbe?H8{=&TKex!oNJo|N1*jlwB)G)s~jQ
+zkB5~CAE5xWqTS|mmcljHuG~7M?F3ieMR4|f6^JG4;DrUC8xV2m6#$@BoYu|Q=52<b
+zj~L!h#d@El=$XxwcaSu>l-EmO{Z=^mn@bo%1^^7s@LH|k=H<gUJGq1#BX?4k`e&HB
+zUReM@s%!UJ(HAb)yS`Rwx4cft(4Q#Hs3%>u)`kcGXr5%0HHBm(4Nxsg1i(>l4Byv)
+zp-~3_=&ozj@wJC$jieFxq%vYXPf?t`9Xndt;DP{vOIOXBE}bAD-tdj3>}Hje-*%3o
+zDVrKx5&%$e%Dcv06JCvvs}NVkiH<OOrY*@E29dZ$PANxH_av*l%KeAD{KyBrd?*)-
+z5_hmG(eqWOkKM9_$hBnRPIL}6cMAgmwD1Zq8WTNg2i5l}Eo@D*L)}Q)+MoFSsaQAS
+zv0D{W*}s6t<Op|v&W%??1pufjZ;Q@m<US28nj79tMbD*>ye-`k#hvJcRb2HNwdq^P
+zgr`c$TPO!wYeyYAg#!5UTR8TIv3Gic*P&MrBdd$*cRZawiS1d`Et8aJ0$RlVde&u)
+z>5APZdeXhR*!vCF-e8#=NI4@x-;Ri7R<x5HJ~0fZTUs@-9UpfeOs~YMM&R!Yu;YNS
+z^;6oA$U*BD!(Zp&x%uG!63Y3_*hg^Ex_u3-k!EG3WM<?0Vw(-xFS<Qx@Tv1aPeix8
+zhL--KP#-~ljlh4`f*dbR=h2gX4K#~Fk1mjQdr+s61M)UKE8rA_@^y^-h$!j=AUZBz
+z!|8V3ksV(VT4nW(L&sp=GMr=h+@<;~9bJAznweFS3TYc0LFl9%&llgp!&9ojEd3NV
+zeh+&Ex*pY^e*^QE!-#1xS$4g3cc>e$(5A?aurjhQ&pK{fNO^hnVVoAHwqE+0E?Nz_
+zi{$@+)WLge;p<({h#ecZ7PI!QvkLSPu(ynbl7(N4wrMGemH$H-Qo2;Xh8wJk_;|8J
+zp?^;0sWcG)n+oY=-;!9FNKB35WI%}>YpjwzdDhGFH*J9M%f)b)4A)0lr2pYkA2N2y
+z=2ochJ)c-JG**qPe*gdg|NqXr$=d(`00v1!K~w_(QMt7*JwKt600000NkvXXu0mjf
+D)UKv*
+
+literal 0
+HcmV?d00001
+
