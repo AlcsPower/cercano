@@ -36,13 +36,13 @@ Ofrece las capacidades empresariales que tradicionalmente se reservan a versione
 
 **Consola web de administración** (capturas reales en modo demo, con datos de ejemplo):
 
-| Panel general | Cercano Chat |
+| Panel general | Dispositivos |
 |---|---|
-| <img src="docs/img/consola-panel.png" alt="Panel general de la consola web" width="440"> | <img src="docs/img/consola-chat.png" alt="Conversaciones de Cercano Chat en la consola" width="440"> |
+| <img src="docs/img/consola-panel.png" alt="Panel general de la consola web" width="440"> | <img src="docs/img/consola-dispositivos.png" alt="Directorio de dispositivos de la consola web" width="440"> |
 
-| Personalizador de instaladores |
-|---|
-| <img src="docs/img/consola-personalizador.png" alt="Personalizador de instaladores con vista previa de la aplicación" width="890"> |
+| Cercano Chat | Personalizador de instaladores |
+|---|---|
+| <img src="docs/img/consola-chat.png" alt="Conversaciones de Cercano Chat en la consola" width="440"> | <img src="docs/img/consola-personalizador.png" alt="Personalizador de instaladores con vista previa de la aplicación" width="440"> |
 
 Para ver la consola en local sin servidor: `VITE_DEMO_MODE=true npm run dev` dentro de `console-web/`.
 
