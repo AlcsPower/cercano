@@ -30,9 +30,13 @@ Ofrece las capacidades empresariales que tradicionalmente se reservan a versione
 
 ## Así se ve
 
-**Aplicación de escritorio Cercano Soporte** (maqueta de diseño: el cliente Windows real todavía no se compila, F3-19). La persona usuaria ve su ID, chatea con soporte y aprueba cada sesión remota.
+**Aplicación de escritorio Cercano Soporte: diseño objetivo (en desarrollo, F3-23).** La persona usuaria ve su ID, chatea con soporte y aprueba cada sesión remota. Especificación en [`docs/diseno/`](docs/diseno/README.md).
 
-<p align="center"><img src="docs/img/app-escritorio-maqueta.png" alt="Maqueta de la aplicación de escritorio Cercano Soporte con la solicitud de sesión remota" width="900"></p>
+<p align="center"><img src="docs/img/app-escritorio-maqueta.png" alt="Diseño objetivo de la aplicación de escritorio Cercano Soporte con la solicitud de sesión remota" width="900"></p>
+
+**Cómo se ve hoy.** Es la interfaz heredada con el nombre cambiado y el botón de chat. Todavía muestra el panel para controlar otros equipos y la mención a RustDesk; F3-23 la sustituye por el diseño objetivo. En la captura, el ID y la contraseña están tapados.
+
+<p align="center"><img src="docs/img/app-escritorio-real.png" alt="Interfaz actual de la aplicación de escritorio, con ID y contraseña tapados" width="520"></p>
 
 **Consola web de administración** (capturas reales en modo demo, con datos de ejemplo):
 
