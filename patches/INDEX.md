@@ -30,6 +30,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `013-client-portable-profile-trailer.patch` | F3-05 | `vendor/client` | El portable packer extrae el perfil firmado que `cercano-build` anexa al final del `.exe` (`[perfil][u32 LE][CERCPROF]`) y lo deja junto al cliente; un instalador por rol sin recompilar | `libs/portable/src/main.rs` | 2026-11-25 | Agente-Builder |
+| `014-client-portable-label.patch` | F3-05 | `vendor/client` | Añade `libs/portable/src/res/label.png` (no importado por la regla `*png` del `.gitignore`) con el icono de Cercano; sin él el packer no compila | `libs/portable/src/res/label.png` | 2026-11-25 | Agente-Builder |
 
 ---
 
@@ -324,3 +325,15 @@ Al añadir un parche, agregar una fila en la tabla superior y documentar la secc
 - **Archivos modificados:**
   - `vendor/client/libs/portable/src/main.rs`
 - **Estrategia de actualización (upstream sync):** Función autocontenida `write_cercano_profile` más una llamada antes de `execute`; si upstream cambia `main`, basta con volver a insertar esa llamada.
+
+### [014-client-portable-label.patch] Tarea F3-05: Recurso label.png del portable packer
+
+- **Archivo:** `patches/014-client-portable-label.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-05`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Builder`
+- **Motivo / Justificación:** `ui.rs` incrusta `./res/label.png` con `include_bytes!`; el archivo no llegó al repositorio porque `vendor/client/.gitignore` ignora `*png`. Se usa el icono de Cercano en vez del original de RustDesk (regla de marca, AGENTS.md §6).
+- **Archivos modificados:**
+  - `vendor/client/libs/portable/src/res/label.png` (nuevo, binario; copia de `branding/png/cercano-icon-32.png`)
+- **Estrategia de actualización (upstream sync):** Mantener el archivo; si upstream cambia el tamaño de la etiqueta en `ui.rs`, regenerarlo desde `branding/`.
