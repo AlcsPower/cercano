@@ -29,6 +29,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
+| `016-client-wpwd-mut.patch` | F3-16 | `vendor/client` | `wpwd` mutable en `create_process_with_logon` para que compile el borrado seguro de 007 (E0596 en el build de Windows) | `src/platform/windows.rs` | 2026-11-25 | Agente-Cliente |
 
 ---
 
@@ -291,6 +292,20 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Archivos modificados:**
   - `src/cercano_profile.rs`
 - **Estrategia de actualización (upstream sync):** Funcionalidad contenida en `cercano_profile.rs` sin alterar código base heredado de RustDesk.
+
+---
+
+### [016-client-wpwd-mut.patch] Tarea F3-16: `wpwd` mutable para el borrado seguro
+
+- **Archivo:** `patches/016-client-wpwd-mut.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-16`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** El parche 007 sobrescribe con ceros y vacía `wpwd` (la contraseña en UTF-16) tras `CreateProcessWithLogonW`, pero la variable se declaraba sin `mut` y el build de Windows fallaba con E0596. Se numera 016 porque 013, 014 y 015 están reservados por PR abiertos.
+- **Archivos modificados:**
+  - `src/platform/windows.rs` (una línea: `let wpwd` → `let mut wpwd`)
+- **Estrategia de actualización (upstream sync):** Va junto con 007; si upstream cambia `create_process_with_logon`, reaplicar ambos.
 
 ---
 
