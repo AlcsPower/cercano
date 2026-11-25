@@ -104,7 +104,35 @@ flowchart LR
 
 Instalación del servidor paso a paso en [`deploy/README.md`](deploy/README.md).
 
-> **Propuesta en revisión (ADR-015, F3.5).** Hoy cada instalador lleva el servidor de su organización dentro del perfil firmado. El [ADR-015](https://github.com/AlcsPower/cercano/pull/2) propone una **aplicación genérica**, descargable y usable con cualquier servidor (modo libre), y un **agente Cercano** por organización que la vincula con una configuración firmada. Cuando se apruebe, este diagrama se actualizará.
+### Hacia dónde va: una sola aplicación para cualquier servidor (ADR-015)
+
+Hoy cada instalador lleva el servidor de su organización dentro del perfil firmado. El [ADR-015](docs/adr/015-agente-y-cliente-generico.md), aprobado por el Dueño del producto el 2026-11-25 y pendiente de ratificar por el Coordinador y Seguridad, cambia el modelo. La fase F3.5 ([plan](docs/PLAN-F3.5-AGENTE.md)) lo implementa:
+
+- **Aplicación Cercano genérica.** El mismo binario firmado para todo el mundo. Sin agente funciona en **modo libre**, con el servidor configurado a mano, como el proyecto del que deriva.
+- **Agente Cercano.** Servicio de Windows sin interfaz que vincula el equipo con el servidor de su organización. Gestiona política, auditoría, latido, chat y marca, y se diagnostica con comandos desde PowerShell.
+- **Configuración firmada.** El servidor ya no compila ni firma binarios: genera un `cercano-org.json` (o un código para `msiexec … CERCANO_CONFIG=`) que acompaña al instalador genérico.
+
+```mermaid
+flowchart LR
+  subgraph EQUIPO["Equipo Windows"]
+    APP["Aplicación Cercano<br/>genérica · interfaz"]
+    AG["Agente Cercano<br/>servicio sin interfaz"]
+  end
+  CFG["cercano-org.json<br/>configuración firmada"]
+  subgraph SRV["Servidor de la organización"]
+    API["cercano-api"]
+    HB["hbbs / hbbr"]
+  end
+  CON["Consola web"]
+
+  CON -->|"genera"| CFG
+  CFG -->|"al instalar"| AG
+  APP <-->|"canal local<br/>firma verificada"| AG
+  AG -->|"vinculación, política,<br/>auditoría, chat"| API
+  APP -->|"sesión remota"| HB
+```
+
+Si el agente está instalado pero no responde, la aplicación **falla cerrado**: no acepta sesiones nuevas y no cae a modo libre.
 
 ---
 

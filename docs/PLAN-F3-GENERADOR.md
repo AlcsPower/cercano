@@ -122,7 +122,7 @@ Se compila un binario base por versión. El generador añade/empaqueta un *perfi
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador |
 | F3-19a | Reconciliar `hbb_common` y el manifiesto del cliente; `cargo check` de `vendor/client` en Linux dentro del CI; CI general en verde | F3-03 | Builder + Cliente | QA |
 | F3-19 | Cliente Windows real: workflow `windows-latest` que compila `vendor/client` (Flutter + Rust + vcpkg) y publica la base | F3-19a | Builder + Cliente | QA |
-| F3-22 | Marca visible: logo y nombre de la empresa desde el perfil, «Powered by Cercano» y Acerca de con repo y versión | F3-19a, F3-02 | Cliente | QA |
+| F3-22 | Marca visible: logo y nombre de la empresa desde el perfil, «Powered by Cercano» y Acerca de con repo y versión. **Diferida: la sustituye F3.5-10 (ADR-015)** | F3-19a, F3-02 | Cliente | QA |
 | F3-20 | Fail-closed: el generador y la API rechazan empaquetar sin binario base real; el stub solo con `--allow-stub` y marcado | F3-05, F3-07 | Builder + ControlPlane | Seguridad |
 | F3-21 | Prueba de humo en Windows 10/11: instalar `.exe`/`.msi`, abrir, perfil verificado, conexión, desinstalar | F3-19, F3-20 | QA | Coordinador |
 

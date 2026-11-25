@@ -31,7 +31,7 @@ Se conservan los puertos por defecto de upstream (TCP 21114–21119, UDP 21116) 
 | `control-plane/` (`cercano-api`) | Nuevo | Rust (axum, sqlx) | Equivale funcionalmente al API de Server Pro, implementado clean-room. Incluye Cercano Chat (F4.5): conversaciones, mensajes, adjuntos, SSE y auditoría `chat.*`. |
 | `audit-core/` | Nuevo | Rust (crate) | Núcleo reutilizable: esquema, cadena de hashes, verificación |
 | `builder/` (`cercano-builder`) | Nuevo | Rust + scripts CI | Generador de instaladores |
-| `agent/` (`cercano-agent`) | Nuevo (propuesto, ADR-015) | Rust | Servicio por organización: vinculación, política, auditoría, latido, transporte del chat, marca y diagnóstico por CLI; canal local con la aplicación |
+| `agent/` (`cercano-agent`) | Nuevo (ADR-015, F3.5) | Rust | Servicio por organización: vinculación, política, auditoría, latido, transporte del chat, marca y diagnóstico por CLI; canal local con la aplicación |
 | `console-web/` | Nuevo | TypeScript (SPA) | F4; en F4.5 añade la pestaña «Conversaciones» |
 | `deploy/` | Nuevo | Docker, systemd | Compose y unidades |
 | `tests/` | Nuevo | Rust/Python/Bash | e2e y laboratorio LAN |
@@ -62,14 +62,14 @@ cercano/
 | 002 | Control plane en Rust (axum + sqlx) | Mismo lenguaje que el servidor; un solo toolchain; binarios estáticos | Propuesto |
 | 003 | SQLite por defecto, PostgreSQL opcional | Despliegues LAN pequeños sin dependencias | Propuesto |
 | 004 | Auditoría append-only con cadena de hashes y checkpoints firmados Ed25519 | Evidencia de manipulación verificable offline | Propuesto |
-| 005 | Generador: «compilar una vez, configurar muchas» con perfil firmado embebido; recompilación solo para cambios de recursos | Rapidez (segundos en vez de minutos) | Propuesto, depende de S4; **se reemplaza en parte por ADR-015 si se aprueba** (el perfil pasa del cliente al agente) |
+| 005 | Generador: «compilar una vez, configurar muchas» con perfil firmado embebido; recompilación solo para cambios de recursos | Rapidez (segundos en vez de minutos) | **Reemplazado en parte por ADR-015** (2026-11-25): el perfil firmado pasa del cliente al agente y viaja como configuración aparte |
 | 006 | `trace_id` (UUIDv7) generado por el cliente controlador al iniciar sesión y propagado a todos los eventos | Traza extremo a extremo | Propuesto, depende de S5 |
 | 007 | Todo el código nuevo bajo AGPL-3.0; clean-room para funciones Pro | Cumplimiento de licencia | Firme |
 | 008 | Dos roles de instalador (`soporte` y `tecnico`) dentro del perfil firmado; el rol se registra con el `installer_id` y el servidor lo aplica en cada operación de técnico | El instalador por sí solo no es una barrera: un cliente modificado no debe poder actuar como técnico | Propuesto, depende de S4 |
 | 009 | Elevación con credenciales: consentimiento por solicitud, canal cifrado de la sesión, un solo uso, sin persistencia y sin pasar por `cercano-api`; desactivada por defecto hasta tener 2FA | Reducir el impacto de manejar credenciales de administrador | Propuesto, depende de S6 |
 | 010 | Cercano Chat: chat embebido en el cliente, gestión en `console-web`, mensajes persistidos en `cercano-api`, SSE para avisos, adjuntos en disco y sin E2E en v1; identidad de dispositivo por Ed25519 y nombre natural del contacto como snapshot | Resolver problemas pequeños sin sesión remota y con trazabilidad, reutilizando el cliente y la consola | Aceptado, F4.5 |
 | 011 | Portabilidad de BD: `db-core` (SQLite/PostgreSQL/SQL Server, SQL portable y migraciones por motor) y un único archivo firmado para respaldo, restauración y migración desde la consola | Salir del encierro en SQLite sin reescribir el control plane y dar respaldo/restauración verificables y reversibles | Propuesto, F8 (ratifica en F8-01) |
-| 015 | Agente Cercano por organización (servicio sin interfaz; el servidor solo genera una configuración firmada que acompaña al instalador genérico) y aplicación de escritorio genérica con modos gestionado, libre y bloqueado; canal local con verificación mutua de firma; marca en tiempo de ejecución | Un mismo binario de aplicación para cualquier servidor (uso libre) sin recompilar ni volver a firmar por organización | Propuesto, F3.5 ([`adr/015-agente-y-cliente-generico.md`](adr/015-agente-y-cliente-generico.md)) |
+| 015 | Agente Cercano por organización (servicio sin interfaz; el servidor solo genera una configuración firmada que acompaña al instalador genérico) y aplicación de escritorio genérica con modos gestionado, libre y bloqueado; canal local con verificación mutua de firma; marca en tiempo de ejecución | Un mismo binario de aplicación para cualquier servidor (uso libre) sin recompilar ni volver a firmar por organización | Aprobado por el Dueño (2026-11-25); pendiente de ratificación del Coordinador y Seguridad. F3.5 ([`adr/015-agente-y-cliente-generico.md`](adr/015-agente-y-cliente-generico.md)) |
 
 Los ADR se formalizan en `docs/adr/NNN-titulo.md` al ratificarse en F0-10.
 

@@ -1,7 +1,7 @@
 # Plan de trabajo — F3.5: Agente Cercano y aplicación de escritorio genérica
 
-**Versión:** 0.1 (propuesta) · **Fecha:** 2026-11-25 · **Decisión:** [ADR-015](adr/015-agente-y-cliente-generico.md) (Propuesto)
-**Depende de:** aprobación de ADR-015; F3-19a y F3-19 (cliente Windows real compilado en la máquina propia); F3-07, F3-08, F3-09, F3-13; F4-07; F4.5-03.
+**Versión:** 0.2 · **Fecha:** 2026-11-25 · **Decisión:** [ADR-015](adr/015-agente-y-cliente-generico.md) (aprobado por el Dueño el 2026-11-25; falta ratificación del Coordinador y Seguridad)
+**Depende de:** ratificación de ADR-015; F3-19a y F3-19 (cliente Windows real compilado en la máquina propia); F3-07, F3-08, F3-09, F3-13; F4-07; F4.5-03.
 
 **Objetivo (M2.5):** una misma aplicación Cercano, descargable, funciona con cualquier servidor. Cada
 organización genera desde su consola web una **configuración firmada** (`cercano-org.json` o código)
@@ -28,7 +28,7 @@ cliente web; cualquier cambio del protocolo de sesión con hbbs/hbbr.
 | F3-19a, F3-19 | Siguen igual y son requisito: el paquete genérico necesita el cliente Windows real |
 | F3-20 | Sigue igual; se aplica también al paquete genérico (sin binarios reales no se publica) |
 | F3-21 | Se amplía en F3.5-15 con los estados gestionado, libre y bloqueado |
-| F3-22 | **Se sustituye por F3.5-10** (marca entregada por el agente). Queda `Diferida` al aprobarse ADR-015 |
+| F3-22 | **Sustituida por F3.5-10** (marca entregada por el agente). `Diferida` desde el 2026-11-25 |
 | F3-11 | Se actualiza en F3.5-13 |
 
 ## 3. Tareas

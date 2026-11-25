@@ -1,7 +1,7 @@
 # ADR-015 — Agente Cercano por organización y aplicación de escritorio genérica
 
-- **Estado:** Propuesto (pendiente de aprobación del Coordinador, el Dueño del producto y el Agente-Seguridad)
-- **Fecha:** 2026-11-25
+- **Estado:** Aprobado por el Dueño del producto (2026-11-25), con el alcance recortado a la configuración aparte (§2.3). Pendiente de ratificación del Coordinador y del Agente-Seguridad antes de cerrar F3.5-01.
+- **Fecha:** 2026-11-25 (aprobación del Dueño: 2026-11-25)
 - **Fase:** F3.5 (ver [`docs/PLAN-F3.5-AGENTE.md`](../PLAN-F3.5-AGENTE.md))
 - **Decisores:** Dueño del producto, Coordinador, Agente-Cliente, Agente-Builder, Agente-ControlPlane, Agente-Seguridad
 - **Reemplaza en parte:** ADR-005 («compilar una vez, configurar muchas» con perfil firmado **embebido en el cliente**)

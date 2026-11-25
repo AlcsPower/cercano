@@ -77,13 +77,13 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador | Hecho |
 | F3-19a | Reconciliar `hbb_common`/manifiesto del cliente; `cargo check` en CI; CI en verde | F3-03 | Builder + Cliente | QA | Pendiente |
 | F3-19 | Cliente Windows real (workflow `windows-latest`) | F3-19a | Builder + Cliente | QA | Pendiente |
-| F3-22 | Marca visible: empresa (logo y nombre), «Powered by Cercano», Acerca de | F3-19a, F3-02 | Cliente | QA | Pendiente |
+| F3-22 | Marca visible: empresa (logo y nombre), «Powered by Cercano», Acerca de (sustituida por F3.5-10, ADR-015) | F3-19a, F3-02 | Cliente | QA | Diferida |
 | F3-20 | Fail-closed: sin binario base real no se empaqueta (`--allow-stub`) | F3-05, F3-07 | Builder + ControlPlane | Seguridad | Pendiente |
 | F3-21 | Prueba de humo en Windows 10/11 | F3-19, F3-20 | QA | Coordinador | Pendiente |
 
-## F3.5 — Agente Cercano y aplicación genérica (propuesto)
+## F3.5 — Agente Cercano y aplicación genérica
 
-Fuente: `docs/PLAN-F3.5-AGENTE.md` y `docs/adr/015-agente-y-cliente-generico.md` (Propuesto). Nada pasa de `Pendiente` hasta aprobar ADR-015; al aprobarse, F3-22 queda `Diferida` (sustituida por F3.5-10).
+Fuente: `docs/PLAN-F3.5-AGENTE.md` y `docs/adr/015-agente-y-cliente-generico.md` (aprobado por el Dueño el 2026-11-25). F3-22 queda `Diferida` (sustituida por F3.5-10). F3.5-01 sigue en verificación hasta que lo ratifiquen el Coordinador y Seguridad; las demás tareas empiezan después.
 
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
