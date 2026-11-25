@@ -186,6 +186,10 @@ else
   unset RUSTFLAGS || true
 fi
 
+# 3b. libwebm (webm-sys, dependencia de vendor/client) usa uint32_t/uint64_t sin incluir <cstdint>;
+# GCC >= 13 ya no la arrastra de forma transitiva. Flag constante: no afecta al determinismo.
+export CXXFLAGS="-include cstdint${CXXFLAGS:+ $CXXFLAGS}"
+
 # 4. Inyección de clave pública de perfil si se suministró
 if [[ -n "$PROFILE_PUBLIC_KEY" ]]; then
   export CERCANO_PROFILE_PUBLIC_KEY="$PROFILE_PUBLIC_KEY"
@@ -201,6 +205,7 @@ echo "SOURCE_DATE_EPOCH:  $SOURCE_DATE_EPOCH ($BUILD_DATE_ISO)"
 echo "Target:             ${TARGET_TRIPLE:-host-default}"
 echo "Directorio salida:  $OUT_DIR"
 echo "Flags de build:     $RUSTFLAGS_STR"
+echo "CXXFLAGS:           $CXXFLAGS"
 echo "================================================================================"
 
 mkdir -p "$OUT_DIR"
@@ -352,6 +357,7 @@ cat << EOF > "$OUT_DIR/build-info.json"
   "cargo_version": "$CARGO_VER",
   "target": "${TARGET_TRIPLE:-host}",
   "rustflags": "$RUSTFLAGS_STR",
+  "cxxflags": "$CXXFLAGS",
   "reproducible": true
 }
 EOF

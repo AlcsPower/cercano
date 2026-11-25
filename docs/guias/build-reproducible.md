@@ -42,7 +42,8 @@ Para garantizar que dos compilaciones sucesivas produzcan el mismo hash en difer
 2. **Dependencias congeladas:**
    - El archivo `Cargo.lock` debe estar versionado y no modificarse. Las compilaciones en CI utilizan `--locked`.
 3. **Aislamiento de variables de entorno:**
-   - El script `builder/build-base.sh` unifica y normaliza las variables relevantes (`SOURCE_DATE_EPOCH`, `CARGO_INCREMENTAL`, `RUSTFLAGS`).
+   - El script `builder/build-base.sh` unifica y normaliza las variables relevantes (`SOURCE_DATE_EPOCH`, `CARGO_INCREMENTAL`, `RUSTFLAGS`, `CXXFLAGS`).
+   - `CXXFLAGS` siempre lleva `-include cstdint` (antepuesto a lo que ya tuviera el entorno): `libwebm`, compilada por la dependencia git `webm-sys` de `vendor/client`, usa `uint32_t`/`uint64_t` sin incluir `<cstdint>` y no compila con GCC ≥ 13. Es un flag constante, no introduce no-determinismo, y queda registrado en `build-info.json` (`cxxflags`). Se aplica en el script, no en el workflow, para que una compilación local reproduzca el mismo binario que CI.
 
 ---
 
