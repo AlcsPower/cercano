@@ -1,0 +1,58 @@
+{
+  "config_version": 1,
+  "organization_name": "Ministerio de Ejemplo",
+  "profile_signing_public_key": "Q2VyY2Fub0VqZW1wbG9DbGF2ZVB1YmxpY2EwMDAwMDE=",
+  "enroll_token": "EJEMPLO_token_de_registro_soporte_000000001",
+  "signed_profile": {
+    "profile": {
+      "schema_version": "1.0.0",
+      "profile_id": "0192e300-1111-7111-8111-000000000001",
+      "created_at": "2026-11-09T10:00:00Z",
+      "role": "soporte",
+      "server": {
+        "rendezvous_server": "cercano.lan:21116",
+        "relay_server": "relay.lan:21117",
+        "api_server": "https://cercano.lan:21114",
+        "server_public_key": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+      },
+      "identity": {
+        "app_name": "Cercano Soporte",
+        "about_text": "Cercano Soporte - Asistencia remota segura. Licenciado bajo AGPL-3.0.",
+        "icon": "logo.png"
+      },
+      "policy": {
+        "allow_incoming": true,
+        "allow_outgoing": false,
+        "unattended_access": false,
+        "require_approval": true,
+        "allow_file_transfer": true,
+        "allow_clipboard": true,
+        "allow_audio": true,
+        "allow_terminal": false,
+        "allow_port_forward": false,
+        "hide_network_settings": true,
+        "enable_elevation": false,
+        "unattended_elevation": false
+      },
+      "installation": {
+        "mode": "installed",
+        "install_path": "C:\\Program Files\\Cercano Soporte",
+        "auto_start": true,
+        "create_desktop_shortcut": true,
+        "silent": false
+      },
+      "identification": {
+        "device_group": "Contabilidad",
+        "default_owner": "soporte@cercano.lan"
+      },
+      "expiration": {
+        "expires_at": "2027-11-09T10:00:00Z",
+        "max_uses": 50
+      }
+    },
+    "signature": "Q2VyY2Fub0VqZW1wbG9GaXJtYU5vVmFsaWRhLTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA==",
+    "algorithm": "ed25519",
+    "key_id": "org-ejemplo-2026"
+  },
+  "config_signature": "Q2VyY2Fub0VqZW1wbG9GaXJtYU5vVmFsaWRhLTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA=="
+}
