@@ -225,6 +225,7 @@ El workflow de GitHub Actions está configurado en `.github/workflows/base-binar
 2. **Pasos:**
    - Comprobación de licencias AGPL-3.0 (`tools/check-license-headers.sh`).
    - Aplicación de parches ordenados (`tools/apply-patches`).
+   - Instalación de `libvpx`, `libyuv`, `opus` y `aom` (triplet `x64-linux`, estáticas) con vcpkg fijado al commit `9e593bb1…` (el mismo baseline de `vendor/client/vcpkg.json`) y sus overlay ports; exporta `VCPKG_ROOT`, que `scrap` y `magnum-opus` necesitan. En local hay que hacer lo mismo antes de `build-base.sh`.
    - Compilación con verificación doble (`--verify`) y generación de SBOM (`--sbom`).
    - Verificación de sumas SHA-256 (`sha256sum -c SHA256SUMS`).
    - Validación estructural del SBOM SPDX.
