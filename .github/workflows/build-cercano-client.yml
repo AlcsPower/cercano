@@ -249,53 +249,66 @@ jobs:
           cd vendor/client
           python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 
-      - name: Stage Client Base Binary into dist/base
+      - name: Stage Client Base folder into dist/base
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist/base
-          cp -r vendor/client/flutter/build/windows/x64/runner/Release/* dist/base/
+          cp -r vendor/client/flutter/build/windows/x64/runner/Release/. dist/base/
           if [ -f dist/base/rustdesk.exe ]; then
             mv -f dist/base/rustdesk.exe dist/base/cercano.exe
           fi
-          echo "OK: Binario base staged en dist/base/cercano.exe"
+          # Falla si falta algo, en vez de producir un instalador vacio
+          for f in cercano.exe librustdesk.dll flutter_windows.dll data/icudtl.dat; do
+            test -e "dist/base/$f" || { echo "ERROR: falta dist/base/$f" >&2; exit 1; }
+          done
           ls -la dist/base/
+          du -sh dist/base
 
       - name: Switch to Rust stable for cercano-build
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Generate Signed Installers with cercano-build
+      - name: Sign profiles and stage one folder per role
         shell: bash
         run: |
-          SERVER_IP="${{ github.event.inputs.target_server_ip || '172.16.8.163' }}"
-          echo "Generando instaladores apuntando al servidor: $SERVER_IP"
-
-          # Compilar generador cercano-build
+          set -euo pipefail
           cargo build --release -p cercano-build
+          for role in soporte tecnico; do
+            target/release/cercano-build \
+              --profile "docs/specs/examples/profile-$role-lan.json" \
+              --out "dist/profiles/$role"
+            signed="$(find "dist/profiles/$role" -name cercano-profile.signed.json | head -1)"
+            test -s "$signed" || { echo "ERROR: no se genero perfil firmado para $role" >&2; exit 1; }
+            mkdir -p "dist/stage/$role"
+            cp -r dist/base/. "dist/stage/$role/"
+            cp "$signed" "dist/stage/$role/cercano-profile.signed.json"
+          done
 
-          # Generar paquete Soporte
-          target/release/cercano-build \
-            --profile docs/specs/examples/profile-soporte-lan.json \
-            --base-binary dist/base/cercano.exe \
-            --out dist/builds \
-            --package-windows
-
-          # Generar paquete Técnico
-          target/release/cercano-build \
-            --profile docs/specs/examples/profile-tecnico-lan.json \
-            --base-binary dist/base/cercano.exe \
-            --out dist/builds \
-            --package-windows
-
-          ls -la dist/builds/cercano-soporte-1.0.0/
-          ls -la dist/builds/cercano-tecnico-1.0.0/
+      - name: Pack self-extracting .exe per role (RustDesk portable packer)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE"
+          mkdir -p "$ROOT/dist/installers"
+          cd vendor/client/libs/portable
+          pip3 install -r requirements.txt
+          for role in soporte tecnico; do
+            python3 ./generate.py \
+              -f "$ROOT/dist/stage/$role" \
+              -o . \
+              -e "$ROOT/dist/stage/$role/cercano.exe"
+            cp ../../target/release/rustdesk-portable-packer.exe \
+              "$ROOT/dist/installers/cercano-$role-1.0.0.exe"
+          done
+          ls -la "$ROOT/dist/installers"
 
       - name: Upload Windows Client Installer Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: cercano-windows-production-installers
+          if-no-files-found: error
           path: |
-            dist/builds/
-            dist/base/cercano.exe
+            dist/installers/
           retention-days: 14
