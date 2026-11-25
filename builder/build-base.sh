@@ -34,6 +34,7 @@ fi
 MANIFEST_PATH=""
 BIN_NAME=""
 PACKAGE_NAME=""
+FEATURES=""
 TARGET_TRIPLE=""
 OUT_DIR="$ROOT_DIR/dist/base"
 PROFILE_PUBLIC_KEY=""
@@ -52,6 +53,7 @@ Opciones:
   --manifest-path <RUTA>    Ruta al Cargo.toml a compilar (defecto: vendor/client/Cargo.toml si existe)
   --bin <NOMBRE>            Nombre del binario a generar (defecto: cercano)
   --package <NOMBRE>        Nombre del paquete Cargo (defecto: detectado de Cargo.toml)
+  --features <LISTA>        Lista de features de Cargo separadas por coma
   --target <TRIPLE>         Target de compilación (ej. x86_64-unknown-linux-gnu)
   --out-dir <DIRECTORIO>    Directorio de salida para binarios y metadatos (defecto: dist/base)
   --profile-public-key <KEY> Clave pública Ed25519 en Base64 para CERCANO_PROFILE_PUBLIC_KEY
@@ -80,6 +82,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --package)
       PACKAGE_NAME="$2"
+      shift 2
+      ;;
+    --features)
+      FEATURES="$2"
       shift 2
       ;;
     --target)
@@ -236,6 +242,10 @@ compile_binary() {
 
   if [[ -n "$BIN_NAME" ]]; then
     extra_args+=(--bin "$BIN_NAME")
+  fi
+
+  if [[ -n "$FEATURES" ]]; then
+    extra_args+=(--features "$FEATURES")
   fi
 
   echo "INFO: Ejecutando cargo build --release en $target_dir..." >&2

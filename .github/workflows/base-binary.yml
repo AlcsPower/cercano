@@ -82,7 +82,7 @@ jobs:
           CXXFLAGS: "-include cstdint"
           SODIUM_USE_PKG_CONFIG: 1
         run: |
-          BUILD_FLAGS="--out-dir dist/base --sbom"
+          BUILD_FLAGS="--out-dir dist/base --sbom --features linux-pkg-config"
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.verify_reproducibility }}" = "true" ]; then
             BUILD_FLAGS="$BUILD_FLAGS --verify"
           fi
