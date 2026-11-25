@@ -251,7 +251,7 @@
         "status": { "enum": ["waiting", "assigned", "active", "closed"] },
         "unread": { "type": "integer", "minimum": 0 },
         "last_message_at": { "oneOf": [{ "$ref": "#/definitions/timestamp" }, { "type": "null" }] },
-        "technician_name": { "oneOf": [{ "type": "string", "maxLength": 128 }, { "type": "null" }] }
+        "technician_name": { "description": "Nombre visible del técnico asignado (assigned_display_name, F4.5-17), nunca su usuario de inicio de sesión.", "oneOf": [{ "type": "string", "maxLength": 128 }, { "type": "null" }] }
       }
     },
 
@@ -263,7 +263,7 @@
         "seq": { "type": "integer", "minimum": 0 },
         "message_id": { "$ref": "#/definitions/uuid" },
         "sender_type": { "enum": ["client", "technician", "system"] },
-        "sender_name": { "oneOf": [{ "type": "string", "maxLength": 128 }, { "type": "null" }] },
+        "sender_name": { "description": "Para un técnico, su nombre visible; nunca su usuario de inicio de sesión (F4.5-17).", "oneOf": [{ "type": "string", "maxLength": 128 }, { "type": "null" }] },
         "body": { "type": "string", "maxLength": 4000 },
         "created_at": { "$ref": "#/definitions/timestamp" },
         "attachment": {

@@ -158,7 +158,8 @@ Notas:
 - **`get_policy`** sirve la política efectiva calculada por el agente con el perfil como techo
   (ADR-012). Si `valid_until` ya pasó y no hay red, responde `policy_expired` (fallo cerrado, TC-F3.5-010).
 - **Chat:** `chat.*` exige `policy.chat.enabled`; si no, `forbidden_by_policy`. El token del chat no
-  sale nunca del agente (F3.5-08). El envío de adjuntos desde la aplicación queda para F3.5-08 como
+  sale nunca del agente (F3.5-08). `technician_name` y `sender_name` de un técnico son su nombre
+  visible (`assigned_display_name`), nunca su usuario de inicio de sesión (F4.5-17, `chat.md`). El envío de adjuntos desde la aplicación queda para F3.5-08 como
   operación nueva compatible (§5.1).
 - **`audit.submit`:** la aplicación entrega `event_id`, `ts`, `action`, `outcome` y opcionalmente
   `trace_id`, `subject` y `details`. Solo acepta acciones `conn.*`, `elev.*`, `chat.*` y `client.*`. El
