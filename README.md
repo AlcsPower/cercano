@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Licencia-AGPL--3.0-blue.svg" alt="Licencia AGPL-3.0">
   <img src="https://img.shields.io/badge/Rust-1.75%2B-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/React-18-61dafb.svg" alt="React 18">
-  <img src="https://img.shields.io/badge/Tests-186%20Rust%20passing-brightgreen.svg" alt="Tests Status">
+  <a href="https://github.com/AlcsPower/cercano/actions/workflows/ci.yml"><img src="https://github.com/AlcsPower/cercano/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
 </p>
 
 ---
@@ -23,9 +23,88 @@ Ofrece las capacidades empresariales que tradicionalmente se reservan a versione
 3. **Generador y empaquetador de instaladores personalizados (Hito M2)**: Compilación reproducible de instaladores Windows (`.exe` y `.msi`) configurados por rol (`soporte` vs `tecnico`), con firma digital Authenticode enchufable, listas de materiales de software (SBOM CycloneDX/SPDX) y verificación de procedencia.
 4. **Seguridad y roles aplicados en el servidor (ADR-008)**: El servidor valida de forma inmutable el tipo de instalador (`installer_id`), bloqueando cualquier intento de inicio de conexiones o escalada no autorizada desde clientes de soporte y disparando alarmas de seguridad críticas.
 
-> 🚀 **Estado del Proyecto: Fase 3 con M2 reabierto.** El generador, los perfiles, la firma y los roles funcionan, pero **aún no existe un cliente Windows compilado**: los `.exe`/`.msi` generados hoy contienen un stub y no abren (bloqueo B-002; tareas F3-19…21).  
-> Fases 0 (Fundación), 1 (Núcleo y Paridad Básica), 2 (Auditoría y Traza Inmutable) y 3 (Generador y Roles de Instalador) completadas. Consulta el detalle en [`docs/status/F3-cierre.md`](docs/status/F3-cierre.md), [`docs/status/TAREAS.md`](docs/status/TAREAS.md) y [`docs/ROADMAP.md`](docs/ROADMAP.md).  
-> **Rama principal de trabajo y coordinación:** [`docs/F0-01-gobernanza`](https://github.com/AlcsPower/cercano/tree/docs/F0-01-gobernanza).
+> 🚀 **Estado del proyecto (2026-11-25).** Fases F0, F1, F4 (consola, RBAC y 2FA), F4.5 (Cercano Chat) y F5 (identidad y control de acceso) cerradas. F2 tiene tareas en verificación. F3 tiene el hito M2 reabierto: el generador, los perfiles, la firma y los roles funcionan, pero **el cliente Windows real aún no se compila de forma fiable** (F3-19…22, bloqueo B-002). F6, F7 y F8 están pendientes.  
+> Detalle en [`docs/status/TAREAS.md`](docs/status/TAREAS.md), los informes de cierre en [`docs/status/`](docs/status/) y el [`docs/ROADMAP.md`](docs/ROADMAP.md). La rama principal es `main`.
+
+---
+
+## Así se ve
+
+**Aplicación de escritorio Cercano Soporte** (maqueta de diseño: el cliente Windows real todavía no se compila, F3-19). La persona usuaria ve su ID, chatea con soporte y aprueba cada sesión remota.
+
+<p align="center"><img src="docs/img/app-escritorio-maqueta.png" alt="Maqueta de la aplicación de escritorio Cercano Soporte con la solicitud de sesión remota" width="900"></p>
+
+**Consola web de administración** (capturas reales en modo demo, con datos de ejemplo):
+
+| Panel general | Cercano Chat |
+|---|---|
+| <img src="docs/img/consola-panel.png" alt="Panel general de la consola web" width="440"> | <img src="docs/img/consola-chat.png" alt="Conversaciones de Cercano Chat en la consola" width="440"> |
+
+| Personalizador de instaladores |
+|---|
+| <img src="docs/img/consola-personalizador.png" alt="Personalizador de instaladores con vista previa de la aplicación" width="890"> |
+
+Para ver la consola en local sin servidor: `VITE_DEMO_MODE=true npm run dev` dentro de `console-web/`.
+
+---
+
+## Cómo funciona en producción
+
+Una organización instala **un servidor Cercano** (en sus instalaciones o en la nube) y reparte **dos aplicaciones de escritorio**: una para los equipos que reciben soporte y otra para el personal técnico. Todo se administra desde la **consola web**.
+
+```mermaid
+flowchart LR
+  subgraph EQUIPOS["Equipos de la organización"]
+    T["Cercano Técnico<br/>personal de TI"]
+    U["Cercano Soporte<br/>persona usuaria"]
+    A["Navegador<br/>consola web"]
+  end
+
+  subgraph SERVIDOR["Servidor Cercano · docker compose"]
+    HBBS["hbbs<br/>ID y señalización<br/>21115-21116"]
+    HBBR["hbbr<br/>relay · 21117"]
+    WEB["cercano-web<br/>nginx · 443 HTTPS"]
+    API["cercano-api<br/>control plane"]
+    DATA[("cercano-data<br/>SQLite · claves<br/>auditoría")]
+  end
+
+  SIEM["SIEM externo"]
+
+  T -->|"pide conectar al ID"| HBBS
+  U -->|"registra su ID"| HBBS
+  T <-.->|"sesión directa en LAN<br/>cifrada extremo a extremo"| U
+  T <-->|"o por relay"| HBBR
+  HBBR <--> U
+  T -->|"HTTPS /api"| WEB
+  U -->|"HTTPS /api"| WEB
+  A -->|"HTTPS"| WEB
+  WEB --> API --> DATA
+  API -.->|"exportación"| SIEM
+```
+
+**Una sesión de soporte, paso a paso**
+
+1. **Preparar.** Desde la consola, un administrador genera los instaladores `soporte` y `tecnico` con un perfil firmado (servidor, clave, política y marca de la organización) y los reparte, por ejemplo por GPO o Intune ([guía](docs/guias/despliegue-masivo.md)).
+2. **Registrar.** Al instalarse, cada equipo obtiene un ID en `hbbs` y envía su latido a `cercano-api`, así que aparece en la consola. `cercano-api` comprueba el `installer_id` y la revocación.
+3. **Pedir ayuda.** La persona usuaria escribe por **Cercano Chat** desde su aplicación; un técnico la atiende en la consola y, si hace falta, escala a sesión remota.
+4. **Conectar.** El técnico, con sesión iniciada en `cercano-api`, conecta al ID. `hbbs` coordina el encuentro: en la LAN la conexión es directa y, si no es posible, pasa por `hbbr`. En ambos casos va cifrada de extremo a extremo. El servidor rechaza que una aplicación `soporte` inicie sesiones (ADR-008).
+5. **Consentir y trabajar.** La persona usuaria aprueba la sesión y puede cortarla en cualquier momento. Si el técnico necesita permisos de administrador, pide una elevación que también requiere el consentimiento de la persona usuaria.
+6. **Auditar.** Conexión, archivos, elevación, chat y acciones de consola quedan como eventos encadenados con hash y checkpoints firmados, con alarmas en tiempo real. Se verifican fuera de línea con `cercano-audit` y se pueden exportar a un SIEM.
+
+**Puertos que hay que abrir en el servidor**
+
+| Puerto | Protocolo | Servicio | Uso |
+|---|---|---|---|
+| 443 (y 80 → redirige) | TCP | `cercano-web` | Consola web y API para las aplicaciones (HTTPS) |
+| 21115 | TCP | `hbbs` | Prueba de tipo de NAT |
+| 21116 | TCP y UDP | `hbbs` | Registro de ID, latido y señalización |
+| 21117 | TCP | `hbbr` | Relay de sesiones |
+| 21118 / 21119 | TCP | `hbbs` / `hbbr` | WebSocket (opcional) |
+| 21114 | TCP | `cercano-api` | Solo `127.0.0.1` y red interna; no se publica |
+
+Instalación del servidor paso a paso en [`deploy/README.md`](deploy/README.md).
+
+> **Propuesta en revisión (ADR-015, F3.5).** Hoy cada instalador lleva el servidor de su organización dentro del perfil firmado. El [ADR-015](https://github.com/AlcsPower/cercano/pull/2) propone una **aplicación genérica**, descargable y usable con cualquier servidor (modo libre), y un **agente Cercano** por organización que la vincula con una configuración firmada. Cuando se apruebe, este diagrama se actualizará.
 
 ---
 
@@ -37,15 +116,18 @@ El monorepo está organizado en módulos desacoplados y libres de dependencias p
 cercano/
 ├── builder/
 │   └── cercano-build/    # CLI y generador de paquetes Windows (.exe/.msi), Authenticode, SBOM y procedencia
+├── client/               # Script de build del cliente base y utilidades propias del cliente
 ├── control-plane/
 │   ├── audit-core/       # Crate Rust: Cadena criptográfica SHA-256 (RFC 8785) con DB SQLite append-only
-│   ├── cercano-api/      # API REST: Auth Argon2id, cola de compilación, revocación, sesiones y alarmas
+│   ├── cercano-api/      # API REST: auth, 2FA, RBAC, dispositivos, chat, políticas, builds, revocación y alarmas
 │   └── cercano-audit/    # Herramienta CLI: Exportación y verificación forense fuera de línea
-├── console-web/          # Consola Web administrativa: React 18 + Vite + Tailwind CSS (Diseño Apple/Emil)
+├── console-web/          # Consola Web administrativa: React 18 + Vite + Tailwind CSS
+├── deploy/               # docker compose, Dockerfiles, nginx y unidades systemd del servidor
 ├── vendor/               # Código base del cliente y servidor gestionado bajo parches limpios e idempotentes
-├── patches/              # Parches modulares con gobernanza estricta (001 a 007) per AGENTS.md
+├── patches/              # Parches sobre vendor/ (001 a 012), registrados en patches/INDEX.md
 ├── branding/             # Guía de marca, logotipos oficiales (SVG/PNG) e iconos de instalador (.ico)
-├── docs/                 # Documentación técnica, especificaciones RFC, guías de despliegue y ADRs
+├── docs/                 # Roadmap, arquitectura, planes, ADR, especificaciones, guías y estado
+├── tests/                # Pruebas e2e y laboratorio LAN
 └── tools/                # Utilidades de desarrollo, scripts de parches y verificación de licencias AGPL-3.0
 ```
 
@@ -88,7 +170,7 @@ cercano/
 
 ### 1. Clonar el repositorio
 ```bash
-git clone -b docs/F0-01-gobernanza https://github.com/AlcsPower/cercano.git
+git clone https://github.com/AlcsPower/cercano.git
 cd cercano
 ```
 
@@ -97,7 +179,7 @@ Todas las pruebas del core criptográfico, API, generador y CLI pueden ejecutars
 ```bash
 cargo test --workspace
 ```
-*(194 pruebas unitarias y de integración garantizan el funcionamiento y la resistencia contra manipulación).*
+*(Pruebas unitarias y de integración del núcleo criptográfico, la API, el generador y el CLI; el CI las ejecuta en cada PR).*
 
 ### 3. Ejecutar la Consola Web
 ```bash
