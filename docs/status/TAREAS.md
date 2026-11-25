@@ -88,8 +88,8 @@ Fuente: `docs/PLAN-F3.5-AGENTE.md` y `docs/adr/015-agente-y-cliente-generico.md`
 | ID | Tarea | Dep. | Rol | Verifica | Estado |
 |---|---|---|---|---|---|
 | F3.5-01 | ADR-015, plan y casos de prueba propuestos | — | Coordinador | Dueño + Seguridad | En verificación |
-| F3.5-02 | Spike S9: etiquetado de paquetes sin romper Authenticode | F3.5-01, F3-19 | Builder | Seguridad | Pendiente |
-| F3.5-03 | Contrato del canal local y formato de la etiqueta | F3.5-01 | Coordinador + Cliente + ControlPlane | Seguridad | Pendiente |
+| F3.5-02 | Spike S9: etiquetado de paquetes (fuera del plan: se usa configuración aparte) | — | Builder | Seguridad | Diferida |
+| F3.5-03 | Contrato del canal local y formato de la configuración | F3.5-01 | Coordinador + Cliente + ControlPlane | Seguridad | Pendiente |
 | F3.5-04 | Esqueleto de `agent/`: servicio, almacén fijado, logs y CLI | F3.5-03 | Cliente | QA | Pendiente |
 | F3.5-05 | Vinculación `POST /api/agent/enroll` y lado del agente | F3.5-04, F3-09, F3-13, F4.5-03 | ControlPlane + Cliente | Seguridad | Pendiente |
 | F3.5-06 | Canal local con verificación mutua de firma | F3.5-04 | Cliente | Seguridad | Pendiente |
@@ -97,7 +97,7 @@ Fuente: `docs/PLAN-F3.5-AGENTE.md` y `docs/adr/015-agente-y-cliente-generico.md`
 | F3.5-08 | Transporte del chat en el agente | F3.5-05, F3.5-06 | Cliente | QA | Pendiente |
 | F3.5-09 | Parche 013: puente con el agente y modos gestionado/libre/bloqueado | F3.5-06, F3-19a | Cliente | Seguridad | Pendiente |
 | F3.5-10 | Marca en tiempo de ejecución (sustituye F3-22) | F3.5-09 | Cliente | QA | Pendiente |
-| F3.5-11 | `cercano-build`: paquete genérico y comando `tag` | F3.5-02, F3.5-03, F3-20 | Builder | QA | Pendiente |
+| F3.5-11 | `cercano-build`: paquete genérico que lee `cercano-org.json` o `CERCANO_CONFIG` | F3.5-03, F3.5-04, F3-20 | Builder | QA | Pendiente |
 | F3.5-12 | Generador en el servidor (`cercano-api` + `console-web`) | F3.5-11, F3-07, F3-08, F4-07 | ControlPlane + Web | QA | Pendiente |
 | F3.5-13 | Guía de despliegue y diagnóstico con PowerShell | F3.5-04, F3.5-12 | Coordinador | QA | Pendiente |
 | F3.5-14 | Revisión de seguridad | F3.5-05…12 | Seguridad | Coordinador | Pendiente |

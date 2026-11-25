@@ -4,18 +4,21 @@
 **Depende de:** aprobación de ADR-015; F3-19a y F3-19 (cliente Windows real compilado en la máquina propia); F3-07, F3-08, F3-09, F3-13; F4-07; F4.5-03.
 
 **Objetivo (M2.5):** una misma aplicación Cercano, descargable, funciona con cualquier servidor. Cada
-organización genera desde su consola web un **paquete etiquetado** (agente + aplicación) que, sin
-recompilar ni volver a firmar, vincula el equipo a su servidor y aplica su rol, política, auditoría,
+organización genera desde su consola web una **configuración firmada** (`cercano-org.json` o código)
+que, junto al paquete genérico (agente + aplicación) y sin recompilar ni volver a firmar nada,
+vincula el equipo a su servidor y aplica su rol, política, auditoría,
 chat y marca. Sin agente, la aplicación funciona en **modo libre** con configuración manual.
 
 ## 1. Alcance
 
 **Dentro:** agente `cercano-agent` para Windows (servicio, vinculación, canal local, política,
 auditoría, latido, transporte del chat, diagnóstico por línea de comandos); puente en la aplicación y
-retirada de las direcciones y la clave compiladas; marca en tiempo de ejecución; etiquetado de
-paquetes en `cercano-build` y `cercano-api`; formulario en `console-web`; guía y revisión de seguridad.
+retirada de las direcciones y la clave compiladas; marca en tiempo de ejecución; paquete genérico en
+`cercano-build`; configuración firmada en `cercano-api`; formulario en `console-web`; guía y revisión
+de seguridad.
 
-**Fuera:** agente para macOS y Linux (se planifica al cerrar F3.5); actualización automática del agente;
+**Fuera:** instalador etiquetado de un solo archivo (diferido, ADR-015 §2.3); agente para macOS y
+Linux (se planifica al cerrar F3.5); actualización automática del agente;
 cliente web; cualquier cambio del protocolo de sesión con hbbs/hbbr.
 
 ## 2. Relación con F3
@@ -33,8 +36,8 @@ cliente web; cualquier cambio del protocolo de sesión con hbbs/hbbr.
 | ID | Tarea | Dep. | Rol | Verifica |
 |---|---|---|---|---|
 | F3.5-01 | ADR-015, plan y casos de prueba propuestos | — | Coordinador | Dueño + Seguridad |
-| F3.5-02 | Spike S9: etiquetado de paquetes sin romper Authenticode | F3.5-01, F3-19 | Builder | Seguridad |
-| F3.5-03 | Contrato del canal local y formato de la etiqueta (`docs/specs/agente-ipc.md`) | F3.5-01 | Coordinador + Cliente + ControlPlane | Seguridad |
+| F3.5-02 | ~~Spike S9: etiquetado de paquetes~~ **Diferida** (ADR-015 §2.3) | — | Builder | Seguridad |
+| F3.5-03 | Contrato del canal local y formato de la configuración (`docs/specs/agente-ipc.md`) | F3.5-01 | Coordinador + Cliente + ControlPlane | Seguridad |
 | F3.5-04 | Esqueleto de `agent/`: servicio Windows, almacén fijado, logs y CLI de diagnóstico | F3.5-03 | Cliente | QA |
 | F3.5-05 | Vinculación: `POST /api/agent/enroll` y lado del agente | F3.5-04, F3-09, F3-13, F4.5-03 | ControlPlane + Cliente | Seguridad |
 | F3.5-06 | Servidor del canal local con verificación mutua de firma | F3.5-04 | Cliente | Seguridad |
@@ -42,10 +45,10 @@ cliente web; cualquier cambio del protocolo de sesión con hbbs/hbbr.
 | F3.5-08 | Transporte del chat en el agente; la interfaz Flutter usa el canal local | F3.5-06, F3.5-05 | Cliente | QA |
 | F3.5-09 | Parche 013 del cliente: puente con el agente, estados gestionado/libre/bloqueado, sin direcciones ni clave compiladas | F3.5-06, F3-19a | Cliente | Seguridad |
 | F3.5-10 | Marca en tiempo de ejecución (sustituye F3-22) | F3.5-09 | Cliente | QA |
-| F3.5-11 | `cercano-build`: paquete genérico firmado y comando `tag` | F3.5-02, F3.5-03, F3-20 | Builder | QA |
-| F3.5-12 | Generador en el servidor: `cercano-api` etiqueta y `console-web` define los parámetros | F3.5-11, F3-07, F3-08, F4-07 | ControlPlane + Web | QA |
+| F3.5-11 | `cercano-build`: paquete genérico firmado que lee `cercano-org.json` o `CERCANO_CONFIG` | F3.5-03, F3.5-04, F3-20 | Builder | QA |
+| F3.5-12 | Generador en el servidor: `cercano-api` firma la configuración y `console-web` define los parámetros | F3.5-11, F3-07, F3-08, F4-07 | ControlPlane + Web | QA |
 | F3.5-13 | Guía de despliegue y diagnóstico con PowerShell (actualiza F3-11) | F3.5-04, F3.5-12 | Coordinador | QA |
-| F3.5-14 | Revisión de seguridad: canal local, confianza en el primer uso, etiquetado | F3.5-05…12 | Seguridad | Coordinador |
+| F3.5-14 | Revisión de seguridad: canal local, confianza en el primer uso, configuración | F3.5-05…12 | Seguridad | Coordinador |
 | F3.5-15 | E2E en Windows 10/11 y cierre de fase | F3.5-01…14 | QA | Coordinador |
 
 ### Detalle
@@ -57,24 +60,22 @@ parte por ADR-015», F3-22 a `Diferida`, y QA pasa los casos a `PLAN-DE-PRUEBAS.
 *CA:* el Coordinador, el Dueño y Seguridad aprueban por escrito; no queda contradicción entre ADR-005,
 ADR-015, el plan F3 y la arquitectura.
 
-**F3.5-02 Spike S9: etiquetado.**
-`docs/spikes/S9-etiquetado.md`. Comparar en Windows 10 y 11, con `EnableCertPaddingCheck` activado y
-desactivado, con SmartScreen y Defender: (A) etiqueta en un certificado o atributo no autenticado del
-PKCS#7 del `.exe`; (B) `.msi` firmado con propiedad `CERCANO_CONFIG` o `.mst`; (C) instalador genérico
-más `cercano-org.json` o código de configuración. Medir tamaño máximo de la etiqueta y documentar cómo
-la lee el instalador. Implementación propia o con dependencias de licencia compatible con AGPL; nada de
-código de procedencia dudosa.
-*CA:* para cada variante, `Get-AuthenticodeSignature` da `Valid` tras etiquetar y la instalación
-funciona; recomendación aprobada por el Coordinador; la variante C queda siempre como respaldo.
+**F3.5-02 Spike S9: etiquetado — Diferida.**
+El plan usa solo la configuración aparte (ADR-015 §2.3). Si más adelante se quiere un instalador de un
+solo archivo, se retoma como spike: etiqueta en la zona no autenticada del PKCS#7 o `.mst`, probada con
+`EnableCertPaddingCheck`, SmartScreen y Defender en Windows 10 y 11.
 
-**F3.5-03 Contrato del canal local y de la etiqueta.**
+**F3.5-03 Contrato del canal local y de la configuración.**
 `docs/specs/agente-ipc.md`: nombre de la tubería, DACL, verificación mutua (llamante: imagen en el
 directorio de instalación y mismo firmante; servidor: servicio `CercanoAgent` como `SYSTEM` y mismo
 firmante), mensajes con prefijo de longitud y tamaño máximo, versión de protocolo negociada,
 operaciones (`hello`, `get_config`, `get_branding`, `get_role`, `get_policy`, `chat.*`,
-`audit.submit`, `status`) y sus errores. Formato de la etiqueta: perfil firmado (esquema F3-01 más
-`profile_signing_public_key`, `enroll_token`, `branding`). JSON Schema y ejemplos válidos e inválidos.
-*CA:* el esquema valida los ejemplos; no existe ninguna operación de escritura de configuración desde
+`audit.submit`, `status`) y sus errores. Formato de la configuración (`cercano-org.json` y su código
+base64url): perfil firmado con el esquema F3-01 más `profile_signing_public_key`, `enroll_token` y
+`organization_name`, **sin logo**, con tamaño máximo que quepa en una línea de `msiexec` (objetivo
+propuesto: 4 KiB codificado). JSON Schema y ejemplos válidos e inválidos.
+*CA:* el esquema valida los ejemplos; un código de configuración de tamaño máximo pasa por
+`msiexec /i … CERCANO_CONFIG=<código>`; no existe ninguna operación de escritura de configuración desde
 la aplicación; Seguridad aprueba la lista de operaciones.
 
 **F3.5-04 Esqueleto del agente.**
@@ -132,43 +133,50 @@ el agente; detener el servicio del agente deja la aplicación bloqueada y no lib
 idempotente.
 
 **F3.5-10 Marca en tiempo de ejecución.**
-La aplicación muestra el nombre y el logo de la organización y el color de acento que entrega el agente,
-en la ventana principal, el instalador interactivo y el chat, con «Powered by Cercano» y el Acerca de
+El agente descarga logo y color de acento de `cercano-api` tras vincularse (el nombre viene en el
+perfil). La aplicación muestra lo que entrega el agente en la ventana principal y el chat (el
+instalador interactivo muestra el nombre), con «Powered by Cercano» y el Acerca de
 con repositorio y versión (lo que pedía F3-22). El icono del ejecutable y de la barra de tareas sigue
 siendo el de Cercano. Logo validado (PNG, dimensiones y tamaño máximo) al generar y al recibir.
-*CA:* cambiar la marca en la consola y regenerar el paquete cambia lo visible sin recompilar; en libre
-se ve Cercano; un logo inválido se rechaza al generar.
+*CA:* cambiar la marca en la consola cambia lo visible en los equipos ya instalados sin recompilar ni
+reinstalar; en libre se ve Cercano; un logo inválido se rechaza al subirlo y al recibirlo.
 
-**F3.5-11 `cercano-build`: paquete genérico y etiquetado.**
+**F3.5-11 `cercano-build`: paquete genérico.**
 El build de la máquina Windows (F3-19) produce el paquete genérico firmado (agente + aplicación, `.exe`
-y `.msi`). Nuevo subcomando `cercano-build tag --package <base> --profile <perfil.signed.json> --out
-<dir>` que aplica la variante elegida en S9 sin tocar las zonas firmadas, y se ejecuta en Linux.
-*CA:* el paquete etiquetado conserva `Valid` en `Get-AuthenticodeSignature`; el etiquetado es
-determinista; un perfil sin firma válida no se etiqueta; tiempo < 5 s (objetivo propuesto).
+y `.msi`), igual para todas las organizaciones. Al instalar, busca la configuración en este orden:
+propiedad `CERCANO_CONFIG` del `.msi`, `cercano-org.json` en la carpeta del instalador; sin ninguna,
+instala solo la aplicación en modo libre. Con configuración, la valida (firma y caducidad), muestra
+organización, host y huella en modo interactivo, e instala y vincula el agente.
+*CA:* `Get-AuthenticodeSignature` = `Valid` en `.exe` y `.msi`; una configuración alterada o caducada
+aborta la instalación sin dejar restos; sin configuración queda en modo libre.
 
 **F3.5-12 Generador en el servidor.**
-`cercano-api` usa `tag` en su servicio de build (F3-07); `console-web` amplía el formulario de F4-07
-con los parámetros del ADR-015 §2.11 y muestra hash y huella de clave en la descarga. Permisos
-`builder:create:soporte`/`tecnico`; auditoría `build.*`; descarga con caducidad.
-*CA:* desde la consola, en un servidor Linux sin herramientas de Windows, se obtiene un paquete que
-instala y vincula en Windows 11; sin permiso del rol pedido → 403 y `auth.denied`.
+`cercano-api` firma el perfil (servicio de build F3-07, ahora sin compilar ni empaquetar) y ofrece
+`cercano-org.json`, el código de configuración y el `.zip` con el instalador genérico; `console-web`
+amplía el formulario de F4-07 con los parámetros del ADR-015 §2.11 y muestra hash del instalador y
+huella de clave en la descarga. Permisos `builder:create:soporte`/`tecnico`; auditoría `build.*`;
+descarga con caducidad.
+*CA:* desde la consola, en un servidor Linux sin herramientas de Windows, se obtiene una configuración
+que, con el instalador genérico, instala y vincula en Windows 11; sin permiso del rol pedido → 403 y
+`auth.denied`.
 
 **F3.5-13 Guía de despliegue y diagnóstico.**
-Actualizar la guía de F3-11: paquete etiquetado, `.msi` con propiedad o `.mst` para GPO/Intune, modo
+Actualizar la guía de F3-11: instalador genérico con `cercano-org.json` o `.zip`, `.msi` con
+`CERCANO_CONFIG` para GPO/Intune, `cercano-agent enroll --config` para equipos ya instalados, modo
 libre, comprobación con `cercano-agent status --json | ConvertFrom-Json`, problemas habituales
 (tubería, vinculación, política caducada, revocación) y desinstalación.
 *CA:* un agente que no la escribió despliega y diagnostica en el laboratorio siguiéndola de cero.
 
 **F3.5-14 Revisión de seguridad.**
 Ampliar el modelo de amenazas (`ARQUITECTURA.md` §6 y `specs/threat-model-roles-elevation.md`):
-suplantación de la tubería, llamante no firmado, reetiquetado con servidor ajeno, robo del paquete,
-detener el agente para saltarse la política, rotación y robo de la clave fijada. *Fuzzing* del canal
-local y del lector de etiquetas. Informe `docs/status/informes/F3.5-14.md`.
+suplantación de la tubería, llamante no firmado, configuración ajena junto al instalador genérico,
+robo de la configuración (token de registro), detener el agente para saltarse la política, rotación y
+robo de la clave fijada. *Fuzzing* del canal local y del lector de configuración. Informe `docs/status/informes/F3.5-14.md`.
 *CA:* sin hallazgos críticos o altos abiertos; medios y bajos con plan.
 
 **F3.5-15 E2E y cierre.**
 En Windows 10 y 11, con y sin Defender: libre contra un servidor configurado a mano; gestionado
-`soporte` y `tecnico` con paquetes generados desde la consola; bloqueado al detener el agente;
+`soporte` y `tecnico` con configuraciones generadas desde la consola; bloqueado al detener el agente;
 revocación; chat; auditoría; desinstalación limpia. Informe `docs/status/informes/F3.5-15.md`.
 *CA:* casos TC-F3.5-* en verde; gate de la sección 5 cumplido.
 
@@ -178,8 +186,8 @@ revocación; chat; auditoría; desinstalación limpia. Informe `docs/status/info
 |---|---|---|
 | TC-F3.5-001 | Aplicación sin agente, servidor configurado a mano | Conecta en modo libre; se ve «No gestionado» |
 | TC-F3.5-002 | Aplicación sin agente ni configuración | Pide servidor; no intenta `127.0.0.1` |
-| TC-F3.5-003 | Paquete etiquetado, instalación interactiva | Muestra organización, host y huella antes de confirmar |
-| TC-F3.5-004 | Paquete etiquetado con un byte de la etiqueta alterado | Instalación rechazada; firma Authenticode intacta |
+| TC-F3.5-003 | Instalador genérico con `cercano-org.json`, instalación interactiva | Muestra organización, host y huella antes de confirmar |
+| TC-F3.5-004 | `cercano-org.json` o código con un byte alterado | Instalación rechazada sin restos; firma Authenticode intacta |
 | TC-F3.5-005 | Perfil nuevo firmado con otra clave tras la fijación | Rechazado y auditado |
 | TC-F3.5-006 | Token de registro caducado, agotado o revocado | Vinculación denegada y `agent.enroll_denied` |
 | TC-F3.5-007 | Proceso sin firmar se conecta a la tubería | Sin respuesta; registrado |
@@ -187,17 +195,17 @@ revocación; chat; auditoría; desinstalación limpia. Informe `docs/status/info
 | TC-F3.5-009 | Detener el servicio `CercanoAgent` | Aplicación bloqueada; no acepta conexiones entrantes nuevas |
 | TC-F3.5-010 | Política caducada sin red | Fallo cerrado (equivale a TC-F5-024) |
 | TC-F3.5-011 | Auditoría sin red y reconexión | Eventos enviados sin pérdida ni duplicados; cadena verificable |
-| TC-F3.5-012 | Cambio de marca en la consola y nuevo paquete | Nueva marca visible sin recompilar; icono de Cercano intacto |
+| TC-F3.5-012 | Cambio de marca en la consola | Nueva marca visible en equipos ya instalados sin reinstalar; icono de Cercano intacto |
 | TC-F3.5-013 | `cercano-agent export-diagnostics` | Sin claves, tokens ni secretos |
 | TC-F3.5-014 | Usuario estándar ejecuta `re-enroll` | Denegado |
-| TC-F3.5-015 | Paquete etiquetado con `EnableCertPaddingCheck` activado | `Get-AuthenticodeSignature` = `Valid` (o variante C documentada) |
+| TC-F3.5-015 | `msiexec /i cercano.msi /qn CERCANO_CONFIG=<código de tamaño máximo>` | Instala y vincula en silencio |
 
 ## 5. Gate F3.5 (M2.5)
 
 - El mismo binario de la aplicación funciona en modo libre con un servidor cualquiera y en modo
-  gestionado con un paquete generado desde la consola, en Windows 10 y 11.
-- El servidor genera paquetes sin compilar, sin herramientas de Windows y sin el certificado de firma
-  de código; los paquetes conservan la firma Authenticode válida.
+  gestionado con una configuración generada desde la consola, en Windows 10 y 11.
+- El servidor genera configuraciones sin compilar, sin herramientas de Windows y sin el certificado de
+  firma de código; los binarios publicados son los mismos que salen de la máquina de compilación.
 - Ninguna clave privada, token ni credencial en artefactos, repositorio, logs o salidas de diagnóstico
   (verificación automática).
 - Revisión de seguridad sin hallazgos críticos o altos abiertos.

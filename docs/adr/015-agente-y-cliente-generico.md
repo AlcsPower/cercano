@@ -41,7 +41,7 @@ de acceso remoto debe poder auditarse y desactivarse por política.
    |---|---|---|
    | Qué es | Interfaz de escritorio: conexión remota y chat | Servicio de Windows `CercanoAgent` sin interfaz gráfica, como `LocalSystem` |
    | Configuración propia | Ninguna embebida | Perfil firmado de la organización, claves fijadas, credencial del dispositivo |
-   | Compilación | Una por versión y plataforma, la misma para todo el mundo | Una por versión y plataforma, la misma para todo el mundo; lo particular va en una etiqueta (decisión 3) |
+   | Compilación | Una por versión y plataforma, la misma para todo el mundo | Una por versión y plataforma, la misma para todo el mundo; lo particular va en un archivo o código de configuración aparte (decisión 3) |
    | Habla con el servidor | Solo el flujo de la sesión remota con hbbs/hbbr | `cercano-api`: vinculación, política, revocación, auditoría, latido, chat |
    | Sin la otra pieza | Modo libre (decisión 6) | No sirve de nada |
 
@@ -53,21 +53,25 @@ de acceso remoto debe poder auditarse y desactivarse por política.
    configuración necesaria para conectarse (hosts y clave pública del servidor). Así no se añaden
    latencia ni un punto de fallo al camino crítico.
 
-3. **El servidor «genera» el agente etiquetándolo, sin recompilar ni volver a firmar.** El binario del
-   agente y el paquete de instalación (agente + aplicación) se compilan y firman una vez en la máquina
-   de compilación (F3-19). `cercano-api` añade al paquete firmado una **etiqueta** con el perfil
-   firmado de la organización, en una zona que Authenticode no cubre, de modo que la firma de código
-   sigue siendo válida. La integridad de la etiqueta la garantiza la firma Ed25519 del propio perfil,
-   no Authenticode. El mecanismo concreto lo elige el spike S9 (F3.5-02):
-   - **A.** Etiqueta en un certificado o atributo no autenticado del PKCS#7 del `.exe` (técnica de
-     instaladores «etiquetados»), compatible con `EnableCertPaddingCheck` activado.
-   - **B.** `.msi` genérico firmado más una propiedad `CERCANO_CONFIG` o un `.mst` para GPO/Intune.
-   - **C.** Respaldo siempre disponible: instalador genérico firmado más un archivo de configuración
-     `cercano-org.json` a su lado, o `cercano-agent enroll --config <código>`.
+3. **El servidor genera una configuración, no un binario.** El paquete de instalación (agente +
+   aplicación, `.exe` y `.msi`) se compila y firma una vez en la máquina de compilación (F3-19) y es
+   el mismo para todas las organizaciones. Lo particular de cada una es la **configuración de la
+   organización**: el perfil firmado (sin logo, para que quepa en una línea de comandos), que
+   `cercano-api` entrega de tres formas equivalentes:
+   - archivo `cercano-org.json` junto al instalador (el instalador lo lee de su misma carpeta);
+   - código de configuración (el mismo perfil en base64url) para
+     `cercano-agent enroll --config <código>` o `msiexec /i cercano.msi CERCANO_CONFIG=<código>` en
+     GPO/Intune;
+   - un `.zip` con el instalador genérico firmado y el `cercano-org.json`.
 
-   Con esto el servidor no necesita compilador, WiX, Windows ni el certificado de firma de código.
+   Ningún binario se modifica, así que la firma Authenticode no se toca. La integridad de la
+   configuración la garantiza la firma Ed25519 del perfil. El servidor no necesita compilador, WiX,
+   Windows ni el certificado de firma de código.
 
-4. **La confianza se fija al instalar, no al compilar.** La etiqueta lleva el perfil firmado con la
+   *Diferido:* meter la configuración dentro del instalador firmado («instalador etiquetado») para
+   entregar un solo archivo. Se retoma con un spike propio si la experiencia de despliegue lo pide.
+
+4. **La confianza se fija al instalar, no al compilar.** La configuración lleva el perfil firmado con la
    clave de la organización y la propia clave pública de verificación de perfiles. En la primera
    instalación el agente:
    - verifica la firma del perfil contra la clave incluida y su caducidad;
@@ -124,9 +128,11 @@ de acceso remoto debe poder auditarse y desactivarse por política.
    Se quedan en la aplicación: modos soporte y técnico de la interfaz (parche 006, con el rol leído
    del agente), elevación (parche 007) y escalado `cercano://` (parche 010).
 
-9. **La marca se aplica en tiempo de ejecución.** El agente entrega `organization_name`, el logo (PNG
-   validado: tipo, dimensiones y tamaño máximo) y el color de acento; la aplicación los muestra en la
-   ventana, el instalador interactivo y el chat, con «Powered by Cercano». No se modifican recursos de
+9. **La marca se aplica en tiempo de ejecución.** El perfil trae `organization_name`; el logo (PNG
+   validado: tipo, dimensiones y tamaño máximo) y el color de acento los descarga el agente de
+   `cercano-api` tras vincularse, por HTTPS contra el servidor fijado. La aplicación los recibe del
+   agente y los muestra en la ventana y el chat, con «Powered by Cercano»; el instalador interactivo
+   muestra el nombre de la organización. No se modifican recursos de
    los binarios. Conforme a la decisión del 2026-11-16, el icono del ejecutable, de la barra de tareas
    y de «Agregar o quitar programas» sigue siendo el logo de Cercano. Esto sustituye el enfoque de
    F3-22 (marca leída del perfil embebido en el cliente).
@@ -137,8 +143,9 @@ de acceso remoto debe poder auditarse y desactivarse por política.
     salida incluye secretos, tokens ni claves privadas.
 
 11. **Generador desde la consola web.** El formulario de F4-07 define los parámetros (rol, servidor,
-    marca, política inicial, caducidad, grupo); `cercano-api` firma el perfil, etiqueta el paquete y
-    lo ofrece en descarga autenticada con caducidad, mostrando hash y huella de clave. Se reutilizan el
+    marca, política inicial, caducidad, grupo); `cercano-api` firma el perfil y ofrece, en descarga
+    autenticada con caducidad, el `cercano-org.json`, el código de configuración y el `.zip` con el
+    instalador genérico, mostrando el hash del instalador y la huella de la clave. Se reutilizan el
     servicio de build (F3-07), la auditoría `build.*` (F3-08) y la revocación (F3-09).
 
 12. **Plataformas.** Windows primero (decisión D2). macOS (launchd y socket local con verificación de
@@ -152,7 +159,9 @@ de acceso remoto debe poder auditarse y desactivarse por política.
 - Un solo binario de aplicación por versión, descargable y usable con cualquier servidor: el objetivo
   de uso libre.
 - Cambiar servidor, marca o rol de una organización no exige compilar ni volver a firmar nada; el
-  servidor genera el paquete en segundos y sin herramientas de Windows.
+  servidor solo firma un JSON, en milisegundos y sin herramientas de Windows.
+- Ningún truco sobre la firma de código: los binarios publicados son exactamente los que salen de la
+  máquina de compilación.
 - El certificado de firma de código no sale de la máquina de compilación.
 - La lógica de Cercano sale de `vendor/` hacia `agent/`: menos parches, menos deriva con upstream.
 - El diagnóstico en campo se hace con comandos, sin abrir la aplicación ni pedirle nada a la persona
@@ -160,9 +169,9 @@ de acceso remoto debe poder auditarse y desactivarse por política.
 
 **Negativas y riesgos**
 
-- **Confianza en el primer uso.** Quien distribuya un paquete etiquetado con su propio servidor obtiene
-  un instalador firmado por Cercano que apunta a él (el mismo riesgo que ya tiene el proyecto de origen
-  al configurar por nombre de archivo). Se mitiga con la confirmación visible de organización, host y
+- **Confianza en el primer uso.** Quien distribuya el instalador genérico con un `cercano-org.json` o
+  un código propio consigue que apunte a su servidor (el mismo riesgo que ya tiene el proyecto de
+  origen al configurar por nombre de archivo). Se mitiga con la confirmación visible de organización, host y
   huella en la instalación interactiva, la descarga autenticada desde la consola propia y la guía de
   despliegue.
 - **Superficie local nueva.** La tubería es una frontera de privilegios (servicio `SYSTEM` ↔ usuario).
@@ -170,8 +179,9 @@ de acceso remoto debe poder auditarse y desactivarse por política.
 - **Dos procesos que mantener sincronizados.** Las versiones de agente y aplicación pueden desalinearse.
   Se mitiga con versión de protocolo negociada y empaquetado conjunto.
 - **Trabajo rehecho.** Partes de los parches 003, 005, 008 y 012 se mudan al agente, y F3-22 se rehace.
-- **Riesgo de la técnica de etiquetado.** Si ninguna variante de S9 resiste `EnableCertPaddingCheck`,
-  queda la opción C (archivo de configuración o código), menos cómoda pero sin riesgo de firma.
+- **Dos piezas que entregar.** Instalador y configuración viajan por separado (o juntos en un `.zip`);
+  si el `cercano-org.json` se pierde, el agente queda sin vincular y la aplicación bloqueada hasta
+  ejecutar `cercano-agent enroll`.
 
 ## 4. Alternativas consideradas
 
@@ -180,6 +190,7 @@ de acceso remoto debe poder auditarse y desactivarse por política.
 | Mantener ADR-005 (perfil embebido en el cliente) | Cada organización recibe un binario distinto; no hay producto descargable de uso libre. |
 | Recompilar por organización en el servidor | Exige el toolchain de Windows (Flutter, MSVC, vcpkg) y el certificado de firma en cada servidor; viola AGENTS.md §7 y la decisión de F3-19. |
 | Volver a firmar en el servidor tras modificar el binario | Igual que la anterior: la clave de firma de código tendría que vivir en el servidor. |
+| Etiquetar el instalador firmado (zona no autenticada del PKCS#7 o `.mst`) | **Diferida**, no descartada: da un solo archivo, pero exige un spike frente a `EnableCertPaddingCheck` y SmartScreen y código de etiquetado propio. La configuración aparte resuelve lo mismo sin ese riesgo. |
 | Solo configuración manual, como el proyecto de origen | Sirve para el modo libre, pero no da roles, política, auditoría ni chat gestionados; se conserva como modo libre. |
 | Integrar el agente en el servicio heredado del cliente | Más parches en `vendor/` y más deriva; mezcla la lógica de Cercano con la de upstream. |
 | Pasar el flujo de la sesión por el agente | Añade latencia y un punto de fallo sin beneficio de seguridad: el protocolo ya cifra de extremo a extremo. |
