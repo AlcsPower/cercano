@@ -238,7 +238,14 @@ pub fn gen_version() {
         }
     }
     // generate build date
-    let build_date = format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+    // Cercano (TC-F3-021): SOURCE_DATE_EPOCH (UTC) keeps BUILD_DATE reproducible.
+    println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
+    let build_date = std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|s| s.parse::<i64>().ok())
+        .and_then(|t| chrono::DateTime::from_timestamp(t, 0))
+        .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
+        .unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
     file.write_all(
         format!("#[allow(dead_code)]\npub const BUILD_DATE: &str = \"{build_date}\";\n").as_bytes(),
     )
