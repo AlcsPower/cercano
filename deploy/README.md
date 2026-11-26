@@ -44,9 +44,14 @@ Los servicios comparten el volumen de datos persistente montado en `/opt/cercano
 3. **Clave de firma de checkpoints de auditoría (`audit_signing_key`):**
    - `cercano-api` la crea en el primer arranque (semilla Ed25519, permisos `0600`) y firma un checkpoint de la cadena cada `CERCANO_AUDIT_CHECKPOINT_INTERVAL_SECS` segundos (300 por defecto).
    - Consérvela junto con los respaldos: sin esta clave no se pueden verificar los checkpoints emitidos.
-4. **Seguridad y permisos:**
+4. **Clave de firma de perfiles (`profile_signing_key`, `CERCANO_BUILD_SIGNING_KEY_PATH`):**
+   - Clave privada Ed25519 de 32 bytes binarios con la que el generador de instaladores firma cada perfil. Es obligatoria: sin ella los builds fallan.
+   - Créela una vez en el volumen de datos, con permisos `0600` y propietaria `1000:1000`: `head -c 32 /dev/urandom > profile_signing_key`.
+   - Guárdela en el gestor de secretos: quien la tenga puede firmar perfiles que los clientes aceptan como legítimos.
+   - `CERCANO_ALLOW_DEV_SIGNING_KEY=1` permite firmar sin ella con una clave de desarrollo **pública**; solo para pruebas, nunca en un despliegue.
+5. **Seguridad y permisos:**
    - Todos los contenedores de backend se ejecutan sin privilegios de `root`, bajo el usuario del sistema `cercano` (UID `1000:1000`).
-5. **Respaldos (`CERCANO_BACKUPS_DIR`, por defecto `./data/backups`, permisos `0700`):**
+6. **Respaldos (`CERCANO_BACKUPS_DIR`, por defecto `./data/backups`, permisos `0700`):**
    - Copiar la BD con `sqlite3 .backup` (nunca `cp`/`tar` en caliente) y los adjuntos por separado; procedimiento completo en `docs/guias/respaldos-y-migracion.md`.
    - El directorio debe estar en disco local y, preferiblemente, en un montaje distinto del volumen de datos.
 

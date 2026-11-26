@@ -246,8 +246,20 @@ pub fn parse_signing_key(bytes: &[u8]) -> Result<SigningKey, BuildError> {
     ))
 }
 
-/// Carga la clave de firma desde un archivo o retorna la clave determinista de desarrollo.
+/// Variable de entorno que permite firmar con la clave pública de desarrollo (solo pruebas).
+pub const ALLOW_DEV_SIGNING_KEY_ENV: &str = "CERCANO_ALLOW_DEV_SIGNING_KEY";
+
+/// Carga la clave de firma desde un archivo. Sin archivo falla, salvo que
+/// `CERCANO_ALLOW_DEV_SIGNING_KEY=1` permita la clave de desarrollo, que es pública.
 pub fn load_signing_key(path: Option<&Path>) -> Result<SigningKey, BuildError> {
+    let allow_dev_key = std::env::var(ALLOW_DEV_SIGNING_KEY_ENV).as_deref() == Ok("1");
+    load_signing_key_with(path, allow_dev_key)
+}
+
+fn load_signing_key_with(
+    path: Option<&Path>,
+    allow_dev_key: bool,
+) -> Result<SigningKey, BuildError> {
     match path {
         Some(p) => {
             let data = fs::read(p).map_err(|source| BuildError::Io {
@@ -256,7 +268,12 @@ pub fn load_signing_key(path: Option<&Path>) -> Result<SigningKey, BuildError> {
             })?;
             parse_signing_key(&data)
         }
-        None => Ok(SigningKey::from_bytes(&DEFAULT_DEV_SIGNING_KEY_BYTES)),
+        None if allow_dev_key => {
+            Ok(SigningKey::from_bytes(&DEFAULT_DEV_SIGNING_KEY_BYTES))
+        }
+        None => Err(BuildError::InvalidSigningKeyFormat(format!(
+            "falta la clave de firma (--signing-key); la clave de desarrollo es pública y solo se usa con {ALLOW_DEV_SIGNING_KEY_ENV}=1"
+        ))),
     }
 }
 
@@ -604,4 +621,18 @@ pub fn execute_build(options: &BuildOptions) -> Result<Option<BuildResult>, Buil
         provenance_path,
         elapsed_ms,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn without_key_path_signing_fails_unless_dev_key_allowed() {
+        assert!(matches!(
+            load_signing_key_with(None, false),
+            Err(BuildError::InvalidSigningKeyFormat(_))
+        ));
+        assert!(load_signing_key_with(None, true).is_ok());
+    }
 }

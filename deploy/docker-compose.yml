@@ -44,6 +44,8 @@ services:
       - CERCANO_TRUSTED_PROXIES=172.16.0.0/12
       - CERCANO_AUDIT_KEY_PATH=/opt/cercano/data/audit_signing_key
       - CERCANO_AUDIT_CHECKPOINT_INTERVAL_SECS=300
+      # Clave privada de firma de perfiles (32 bytes). Sin ella el generador de instaladores no firma.
+      - CERCANO_BUILD_SIGNING_KEY_PATH=/opt/cercano/data/profile_signing_key
     # Enlaza a localhost del host para administración directa y expone internamente a cercano-web
     ports:
       - "127.0.0.1:21114:21114"

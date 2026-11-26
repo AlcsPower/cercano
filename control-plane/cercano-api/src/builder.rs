@@ -137,6 +137,9 @@ impl BuildQueue {
 
         let builds_dir = PathBuf::from(&config.builds_dir);
         let signing_key_path = config.build_signing_key_path.clone();
+        if signing_key_path.is_none() && !dev_signing_key_allowed() {
+            error!("CERCANO_BUILD_SIGNING_KEY_PATH no está configurado: los builds fallarán hasta configurarlo");
+        }
 
         let sem_clone = semaphore.clone();
         let builds_dir_clone = builds_dir.clone();
@@ -210,7 +213,19 @@ pub fn compute_sha256(bytes: &[u8]) -> String {
     s
 }
 
+/// `CERCANO_ALLOW_DEV_SIGNING_KEY=1` permite firmar con la clave de desarrollo (solo pruebas).
+pub fn dev_signing_key_allowed() -> bool {
+    std::env::var("CERCANO_ALLOW_DEV_SIGNING_KEY").as_deref() == Ok("1")
+}
+
 pub fn load_signing_key(path: Option<&str>) -> Result<SigningKey, BuildServiceError> {
+    load_signing_key_with(path, dev_signing_key_allowed())
+}
+
+fn load_signing_key_with(
+    path: Option<&str>,
+    allow_dev_key: bool,
+) -> Result<SigningKey, BuildServiceError> {
     match path {
         Some(p) => {
             let data = fs::read(p).map_err(|source| BuildServiceError::Io {
@@ -227,7 +242,12 @@ pub fn load_signing_key(path: Option<&str>) -> Result<SigningKey, BuildServiceEr
                 ))
             }
         }
-        None => Ok(SigningKey::from_bytes(&DEFAULT_DEV_SIGNING_KEY_BYTES)),
+        // La clave de desarrollo es pública: solo con opt-in explícito (pruebas).
+        None if allow_dev_key => Ok(SigningKey::from_bytes(&DEFAULT_DEV_SIGNING_KEY_BYTES)),
+        None => Err(BuildServiceError::InvalidSigningKey(
+            "Falta CERCANO_BUILD_SIGNING_KEY_PATH: sin clave configurada no se firman perfiles"
+                .to_string(),
+        )),
     }
 }
 
@@ -589,5 +609,19 @@ async fn process_build_task(
 
             error!(job_id = %task.job_id, error = %err_msg, "Trabajo de compilación falló");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn without_key_path_signing_fails_unless_dev_key_allowed() {
+        assert!(matches!(
+            load_signing_key_with(None, false),
+            Err(BuildServiceError::InvalidSigningKey(_))
+        ));
+        assert!(load_signing_key_with(None, true).is_ok());
     }
 }
