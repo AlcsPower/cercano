@@ -64,6 +64,9 @@ jobs:
           fi
 
       - name: Run tests
+        env:
+          # Las pruebas firman con la clave de desarrollo (pública); en producción se exige una clave.
+          CERCANO_ALLOW_DEV_SIGNING_KEY: "1"
         run: |
           if [ -f Cargo.toml ]; then
             cargo test --workspace --all-targets --all-features
