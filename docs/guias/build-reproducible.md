@@ -42,7 +42,8 @@ Para garantizar que dos compilaciones sucesivas produzcan el mismo hash en difer
 2. **Dependencias congeladas:**
    - El archivo `Cargo.lock` debe estar versionado y no modificarse. Las compilaciones en CI utilizan `--locked`.
 3. **Aislamiento de variables de entorno:**
-   - El script `builder/build-base.sh` unifica y normaliza las variables relevantes (`SOURCE_DATE_EPOCH`, `CARGO_INCREMENTAL`, `RUSTFLAGS`).
+   - El script `builder/build-base.sh` unifica y normaliza las variables relevantes (`SOURCE_DATE_EPOCH`, `CARGO_INCREMENTAL`, `RUSTFLAGS`, `CXXFLAGS`).
+   - `CXXFLAGS` siempre lleva `-include cstdint` (antepuesto a lo que ya tuviera el entorno): `libwebm`, compilada por la dependencia git `webm-sys` de `vendor/client`, usa `uint32_t`/`uint64_t` sin incluir `<cstdint>` y no compila con GCC ≥ 13. Es un flag constante, no introduce no-determinismo, y queda registrado en `build-info.json` (`cxxflags`). Se aplica en el script, no en el workflow, para que una compilación local reproduzca el mismo binario que CI.
 
 ---
 
@@ -174,10 +175,12 @@ bash builder/build-base.sh --verify
 ```
 
 El script realiza de manera autónoma:
-1. Crea un directorio temporal aislado `/tmp/cercano-repro-1-XXXXXX`.
+1. Vacía `target/repro` (siempre la misma ruta: las rutas de `OUT_DIR` de los build scripts acaban en el binario, así que dos rutas distintas producen hashes distintos).
 2. Compila el binario en Release y calcula el hash $H_1$.
-3. Crea un segundo directorio temporal aislado `/tmp/cercano-repro-2-XXXXXX`.
-4. Compila nuevamente el binario en Release y calcula el hash $H_2$.
+3. Vuelve a vaciar `target/repro`.
+4. Compila de nuevo desde cero en la misma ruta y calcula el hash $H_2$. Si no coinciden, muestra cuántos bytes difieren y las cadenas distintas (`strings`).
+
+El código C/C++ de los build scripts recibe `-ffile-prefix-map` (en `CFLAGS`/`CXXFLAGS`) con las mismas equivalencias que `--remap-path-prefix`.
 5. Compara $H_1$ y $H_2$:
    - Si $H_1 == H_2$, confirma la reproducibilidad bit-a-bit con código de salida `0`.
    - Si $H_1 \ne H_2$, reporta el error y detiene el proceso con código `1`.
@@ -224,6 +227,7 @@ El workflow de GitHub Actions está configurado en `.github/workflows/base-binar
 2. **Pasos:**
    - Comprobación de licencias AGPL-3.0 (`tools/check-license-headers.sh`).
    - Aplicación de parches ordenados (`tools/apply-patches`).
+   - Instalación de `libvpx`, `libyuv`, `opus` y `aom` (triplet `x64-linux`, estáticas) con vcpkg fijado al commit `9e593bb1…` (el mismo baseline de `vendor/client/vcpkg.json`) y sus overlay ports; exporta `VCPKG_ROOT`, que `scrap` y `magnum-opus` necesitan. En local hay que hacer lo mismo antes de `build-base.sh`.
    - Compilación con verificación doble (`--verify`) y generación de SBOM (`--sbom`).
    - Verificación de sumas SHA-256 (`sha256sum -c SHA256SUMS`).
    - Validación estructural del SBOM SPDX.
