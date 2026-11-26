@@ -180,6 +180,10 @@ jobs:
 
       - name: Generate Signed Installers with cercano-build
         shell: bash
+        env:
+          # Instaladores de laboratorio: el perfil se firma con la clave de desarrollo, que es pública.
+          # No distribuir estos artefactos; un despliegue real firma con su propia clave (--signing-key).
+          CERCANO_ALLOW_DEV_SIGNING_KEY: "1"
         run: |
           SERVER_IP="${{ github.event.inputs.target_server_ip || '172.16.8.163' }}"
           echo "Generando instaladores apuntando al servidor: $SERVER_IP"
