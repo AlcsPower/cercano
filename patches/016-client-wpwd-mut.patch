@@ -1,0 +1,22 @@
+From: Agente-Cliente <cercano-dev@local>
+Subject: [PATCH] fix(client): F3-16 wpwd mutable para el borrado seguro en create_process_with_logon
+Date: 2026-11-25
+Component: vendor/client
+Task: F3-16
+
+El parche 007 sobrescribe con ceros y vacia `wpwd` tras CreateProcessWithLogonW,
+pero la variable se declaraba sin `mut`; el build de Windows fallaba con E0596.
+---
+diff --git a/vendor/client/src/platform/windows.rs b/vendor/client/src/platform/windows.rs
+index bdd63f7..817bde5 100644
+--- a/vendor/client/src/platform/windows.rs
++++ b/vendor/client/src/platform/windows.rs
+@@ -3026,7 +3026,7 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
+         let user_split = user.split("\\").collect::<Vec<&str>>();
+         let wuser = wide_string(user_split.get(1).unwrap_or(&user));
+         let wpc = wide_string(user_split.get(0).unwrap_or(&""));
+-        let wpwd = wide_string(pwd);
++        let mut wpwd = wide_string(pwd);
+         let cmd = if arg.is_empty() {
+             format!("\"{}\"", exe)
+         } else {
