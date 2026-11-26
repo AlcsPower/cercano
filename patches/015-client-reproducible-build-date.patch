@@ -1,0 +1,31 @@
+From: Agente-Builder <cercano-dev@local>
+Subject: [PATCH] fix(client): F3-03 BUILD_DATE reproducible con SOURCE_DATE_EPOCH
+Date: 2026-11-25
+Component: vendor/client
+Task: F3-03
+
+hbb_common::gen_version() incrustaba chrono::Local::now() (precision de minuto) en
+BUILD_DATE, por lo que dos compilaciones del mismo commit daban hashes distintos
+(TC-F3-021). Si SOURCE_DATE_EPOCH esta definido se usa esa fecha en UTC; si no,
+se mantiene el comportamiento original.
+
+---diff --git a/vendor/client/libs/hbb_common/src/lib.rs b/vendor/client/libs/hbb_common/src/lib.rs
+index 5039545..5290274 100644
+--- a/vendor/client/libs/hbb_common/src/lib.rs
++++ b/vendor/client/libs/hbb_common/src/lib.rs
+@@ -238,7 +238,14 @@ pub fn gen_version() {
+         }
+     }
+     // generate build date
+-    let build_date = format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
++    // Cercano (TC-F3-021): SOURCE_DATE_EPOCH (UTC) keeps BUILD_DATE reproducible.
++    println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
++    let build_date = std::env::var("SOURCE_DATE_EPOCH")
++        .ok()
++        .and_then(|s| s.parse::<i64>().ok())
++        .and_then(|t| chrono::DateTime::from_timestamp(t, 0))
++        .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
++        .unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
+     file.write_all(
+         format!("#[allow(dead_code)]\npub const BUILD_DATE: &str = \"{build_date}\";\n").as_bytes(),
+     )

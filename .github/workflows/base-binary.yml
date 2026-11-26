@@ -54,9 +54,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libgtk-3-dev libxcb-randr0-dev libxdo-dev libxfixes-dev libpam0g-dev \
-            libasound2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libasound2-dev libpulse-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libsodium-dev pkg-config \
-            libvpx-dev libyuv-dev libaom-dev libopus-dev clang libclang-dev
+            libvpx-dev libyuv-dev libaom-dev libopus-dev clang libclang-dev nasm
           if [ ! -f /usr/share/pkgconfig/libyuv.pc ] && [ ! -f /usr/lib/x86_64-linux-gnu/pkgconfig/libyuv.pc ]; then
             printf '%s\n' \
               'prefix=/usr' \
@@ -76,6 +76,23 @@ jobs:
 
       - name: Apply patches
         run: bash tools/apply-patches
+
+      # scrap y magnum-opus buscan libvpx/libyuv/aom/opus bajo VCPKG_ROOT. Mismo commit fijado y mismos
+      # overlay ports que vendor/client/vcpkg.json y el build de Windows, para que las librerías sean deterministas.
+      - name: Setup vcpkg with GitHub Actions cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ runner.temp }}/vcpkg
+          vcpkgGitCommitId: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+          doNotCache: false
+
+      - name: Install vcpkg dependencies (x64-linux)
+        run: |
+          # Modo clásico (fuera del manifiesto) para no compilar ffmpeg, que solo usa la feature hwcodec.
+          "$VCPKG_ROOT/vcpkg" install libvpx libyuv opus aom \
+            --triplet x64-linux \
+            --overlay-ports=vendor/client/res/vcpkg
+          echo "VCPKG_ROOT=$VCPKG_ROOT" >> "$GITHUB_ENV"
 
       - name: Build reproducible base binary and SBOM
         run: |

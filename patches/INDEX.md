@@ -30,6 +30,8 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `014-client-technician-display-name.patch` | F4.5-17 | `vendor/client` | El chat muestra el nombre visible del técnico asignado («Atendido por», remitente y aviso de reasignación) con respaldo «un técnico de <organización>»; nunca el login | `flutter/lib/cercano_chat/*`, `flutter/test/cercano_chat_model_test.dart`, `src/cercano_chat.rs` | 2026-11-25 | Agente-Cliente |
+| `015-client-reproducible-build-date.patch` | F3-03 | `vendor/client` | `BUILD_DATE` toma `SOURCE_DATE_EPOCH` (UTC) si está definido, en lugar de la hora local de compilación (TC-F3-021) | `libs/hbb_common/src/lib.rs` | 2026-11-25 | Agente-Builder |
+| `016-client-wpwd-mut.patch` | F3-16 | `vendor/client` | `wpwd` mutable en `create_process_with_logon` para que compile el borrado seguro de 007 (E0596 en el build de Windows) | `src/platform/windows.rs` | 2026-11-25 | Agente-Cliente |
 
 ---
 
@@ -292,6 +294,32 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Archivos modificados:**
   - `src/cercano_profile.rs`
 - **Estrategia de actualización (upstream sync):** Funcionalidad contenida en `cercano_profile.rs` sin alterar código base heredado de RustDesk.
+
+### [015-client-reproducible-build-date.patch] Tarea F3-03: BUILD_DATE reproducible
+
+- **Archivo:** `patches/015-client-reproducible-build-date.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-03`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Builder`
+- **Motivo / Justificación:** `hbb_common::gen_version()` (llamada desde `vendor/client/build.rs`) escribía `chrono::Local::now()` con precisión de minuto en `BUILD_DATE`. Por eso dos compilaciones del mismo commit daban hashes distintos y fallaba TC-F3-021 en el job del binario base. No hay punto de extensión: la constante se genera dentro de esa función. Con `SOURCE_DATE_EPOCH` definido (lo fija `builder/build-base.sh` a la fecha del commit) se usa esa fecha en UTC; sin él, el comportamiento no cambia.
+- **Archivos modificados:**
+  - `libs/hbb_common/src/lib.rs`
+- **Estrategia de actualización (upstream sync):** Cambio de una sola expresión en `gen_version()`. Si upstream añade soporte para `SOURCE_DATE_EPOCH`, este parche se elimina.
+
+---
+
+### [016-client-wpwd-mut.patch] Tarea F3-16: `wpwd` mutable para el borrado seguro
+
+- **Archivo:** `patches/016-client-wpwd-mut.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-16`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** El parche 007 sobrescribe con ceros y vacía `wpwd` (la contraseña en UTF-16) tras `CreateProcessWithLogonW`, pero la variable se declaraba sin `mut` y el build de Windows fallaba con E0596. Se numera 016 porque 013, 014 y 015 están reservados por PR abiertos.
+- **Archivos modificados:**
+  - `src/platform/windows.rs` (una línea: `let wpwd` → `let mut wpwd`)
+- **Estrategia de actualización (upstream sync):** Va junto con 007; si upstream cambia `create_process_with_logon`, reaplicar ambos.
 
 ---
 
