@@ -297,6 +297,26 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/cercano_profile.rs`
 - **Estrategia de actualización (upstream sync):** Funcionalidad contenida en `cercano_profile.rs` sin alterar código base heredado de RustDesk.
 
+### [013-client-desktop-ui-design.patch] Tarea F3-23: Interfaz de escritorio según el diseño objetivo
+
+- **Archivo:** `patches/013-client-desktop-ui-design.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-23`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** El Dueño aprobó `docs/diseno/app-soporte.html` como diseño objetivo. La interfaz heredada muestra a la persona usuaria el panel de conexión saliente y el texto «Con tecnología de RustDesk», que incumple AGENTS.md §6. La pantalla de soporte y el diálogo de consentimiento viven en un módulo nuevo (`cercano_ui.dart`); el código heredado solo recibe enganches de una línea: rol `soporte` → pantalla nueva, solicitud entrante pendiente con aprobación por clic → diálogo nuevo, pie en los demás roles. El rol llega a Flutter como opción integrada `cercano-role`, escrita al aplicar el perfil firmado (sin FFI nueva ni IPC).
+- **Archivos modificados:**
+  - `flutter/lib/cercano_ui/cercano_ui.dart` (nuevo)
+  - `flutter/lib/desktop/pages/desktop_home_page.dart`
+  - `flutter/lib/desktop/pages/server_page.dart`
+  - `flutter/lib/desktop/pages/desktop_setting_page.dart`
+  - `flutter/lib/desktop/widgets/tabbar_widget.dart`
+  - `src/cercano_profile.rs`
+  - `src/lang.rs`, `src/lang/en.rs`, `src/lang/es.rs`, `src/lang/template.rs`
+- **Estrategia de actualización (upstream sync):** Reaplicar los enganches en `_DesktopHomePageState.build` y `buildConnectionCard`; si upstream cambia `Client` o `ServerModel.sendLoginResponse`, ajustar `CercanoConsentCard`. Comprobar que `translate` siga sustituyendo «RustDesk» por el nombre de la app y que `powered_by_me` no vuelva a quedar excluida.
+
+---
+
 ### [015-client-reproducible-build-date.patch] Tarea F3-03: BUILD_DATE reproducible
 
 - **Archivo:** `patches/015-client-reproducible-build-date.patch`
@@ -322,26 +342,6 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 - **Archivos modificados:**
   - `src/platform/windows.rs` (una línea: `let wpwd` → `let mut wpwd`)
 - **Estrategia de actualización (upstream sync):** Va junto con 007; si upstream cambia `create_process_with_logon`, reaplicar ambos.
-
----
-
-### [013-client-desktop-ui-design.patch] Tarea F3-23: Interfaz de escritorio según el diseño objetivo
-
-- **Archivo:** `patches/013-client-desktop-ui-design.patch`
-- **Componente:** `vendor/client`
-- **Tarea:** `F3-23`
-- **Fecha:** `2026-11-25`
-- **Autor/Rol:** `Agente-Cliente`
-- **Motivo / Justificación:** El Dueño aprobó `docs/diseno/app-soporte.html` como diseño objetivo. La interfaz heredada muestra a la persona usuaria el panel de conexión saliente y el texto «Con tecnología de RustDesk», que incumple AGENTS.md §6. La pantalla de soporte y el diálogo de consentimiento viven en un módulo nuevo (`cercano_ui.dart`); el código heredado solo recibe enganches de una línea: rol `soporte` → pantalla nueva, solicitud entrante pendiente con aprobación por clic → diálogo nuevo, pie en los demás roles. El rol llega a Flutter como opción integrada `cercano-role`, escrita al aplicar el perfil firmado (sin FFI nueva ni IPC).
-- **Archivos modificados:**
-  - `flutter/lib/cercano_ui/cercano_ui.dart` (nuevo)
-  - `flutter/lib/desktop/pages/desktop_home_page.dart`
-  - `flutter/lib/desktop/pages/server_page.dart`
-  - `flutter/lib/desktop/pages/desktop_setting_page.dart`
-  - `flutter/lib/desktop/widgets/tabbar_widget.dart`
-  - `src/cercano_profile.rs`
-  - `src/lang.rs`, `src/lang/en.rs`, `src/lang/es.rs`, `src/lang/template.rs`
-- **Estrategia de actualización (upstream sync):** Reaplicar los enganches en `_DesktopHomePageState.build` y `buildConnectionCard`; si upstream cambia `Client` o `ServerModel.sendLoginResponse`, ajustar `CercanoConsentCard`. Comprobar que `translate` siga sustituyendo «RustDesk» por el nombre de la app y que `powered_by_me` no vuelva a quedar excluida.
 
 ---
 
