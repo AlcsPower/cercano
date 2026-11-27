@@ -425,6 +425,15 @@ pub const MIGRATIONS: &[Migration] = &[
             ON federated_identities(user_id);
         "#,
     },
+    Migration {
+        version: 10,
+        name: "010_user_display_name",
+        // F4.5-17: nombre visible del técnico (el login nunca llega al dispositivo).
+        sql: r#"
+        ALTER TABLE users ADD COLUMN display_name TEXT;
+        ALTER TABLE chat_messages ADD COLUMN sender_display_name TEXT;
+        "#,
+    },
 ];
 
 /// Initializes SQLite database pool and ensures parent directory exists.
@@ -593,7 +602,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 9);
+        assert_eq!(rows.len(), 10);
         assert_eq!(rows[0].get::<i64, _>("version"), 1);
         assert_eq!(rows[0].get::<String, _>("name"), "001_initial_schema");
         assert_eq!(rows[1].get::<i64, _>("version"), 2);
@@ -615,6 +624,7 @@ mod tests {
             rows[8].get::<String, _>("name"),
             "009_identity_groups_policies_idp"
         );
+        assert_eq!(rows[9].get::<String, _>("name"), "010_user_display_name");
 
         // Verify build_jobs table exists
         let build_jobs = sqlx::query("SELECT count(*) as cnt FROM build_jobs")
@@ -718,7 +728,7 @@ mod tests {
             .fetch_all(&pool)
             .await
             .unwrap();
-        assert_eq!(rows.len(), 9);
+        assert_eq!(rows.len(), 10);
     }
 
     #[tokio::test]

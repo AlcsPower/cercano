@@ -79,6 +79,18 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
               children: [
                 _buildHeader(context, model, accentColor),
                 if (_showNotice) _buildNotice(context, model),
+                if (model.technicianNotice != null)
+                  Semantics(
+                    liveRegion: true,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        model.technicianNotice!,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: model.isLoading
                       ? const Center(child: CircularProgressIndicator())
@@ -129,6 +141,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (model.branding.organizationName.isNotEmpty)
                 Text(
                   model.branding.organizationName,
                   style: TextStyle(
@@ -146,17 +159,21 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: model.isOnline ? Colors.emerald : Colors.amber,
+                  color: model.isOnline ? Colors.green : Colors.amber,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 6),
               Text(
-                model.isOnline ? 'En línea' : 'Reconectando',
+                !model.isOnline
+                    ? 'Reconectando'
+                    : model.conversation?.isAssigned == true
+                        ? 'Atendido por ${model.assignedTechnicianLabel}'
+                        : 'En línea',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: model.isOnline ? Colors.emerald.shade700 : Colors.amber.shade800,
+                  color: model.isOnline ? Colors.green.shade700 : Colors.amber.shade800,
                 ),
               ),
             ],
@@ -331,13 +348,13 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
             ),
             child: Column(
               crossAxisAlignment:
-                  isMine ? CrossCrossAlignment.end : CrossCrossAlignment.start,
+                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                if (!isMine && msg.senderName != null)
+                if (!isMine)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Text(
-                      msg.senderName!,
+                      messageSenderLabel(msg.senderName),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,

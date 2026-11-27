@@ -146,7 +146,7 @@ Fuente: `docs/PLAN-F4.5-CHAT.md` v1.1. Backend y consola dependen de F4-05/06; e
 | F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador | Hecho |
 | F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | Hecho |
 | F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA | Hecho |
-| F4.5-17 | Nombre visible del técnico en el chat del cliente: campo `display_name` en usuarios (migración aditiva), editable en la consola; la API entrega `assigned_display_name` al dispositivo y deja de enviarle `assigned_username`, también en el `sender_name` de los mensajes (nunca el login); el cliente muestra «Atendido por <técnico>» y el nombre en sus mensajes | F4.5-16 | ControlPlane + Web + Cliente | QA | Pendiente |
+| F4.5-17 | Nombre visible del técnico en el chat del cliente: campo `display_name` en usuarios (migración aditiva), editable en la consola; la API entrega `assigned_display_name` al dispositivo y deja de enviarle `assigned_username`, también en el `sender_name` de los mensajes (nunca el login); el cliente muestra «Atendido por <técnico>» y el nombre en sus mensajes | F4.5-16 | ControlPlane + Web + Cliente | QA | En verificación |
 
 ## F5 — Identidad y control de acceso
 

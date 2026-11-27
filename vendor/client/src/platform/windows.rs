@@ -3026,7 +3026,7 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
         let user_split = user.split("\\").collect::<Vec<&str>>();
         let wuser = wide_string(user_split.get(1).unwrap_or(&user));
         let wpc = wide_string(user_split.get(0).unwrap_or(&""));
-        let wpwd = wide_string(pwd);
+        let mut wpwd = wide_string(pwd);
         let cmd = if arg.is_empty() {
             format!("\"{}\"", exe)
         } else {
