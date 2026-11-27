@@ -664,6 +664,11 @@ fn apply_profile_to_config(
         overwrite.insert("key".to_string(), server_public_key.to_string());
     }
     overwrite.insert("role".to_string(), info.role.clone());
+    // Flutter lee el rol sin IPC con mainGetBuildinOption (F3-23).
+    config::BUILTIN_SETTINGS
+        .write()
+        .unwrap()
+        .insert("cercano-role".to_string(), info.role.clone());
     overwrite.insert(
         "allow-incoming".to_string(),
         info.allow_incoming.to_string(),
