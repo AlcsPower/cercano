@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cercano.local/schemas/cercano-org.schema.json",
+  "title": "Cercano — configuración de la organización (cercano-org.json)",
+  "description": "Configuración firmada que vincula el agente genérico a una organización (ADR-015 §2.3, F3.5-03, docs/specs/agente-ipc.md §9). El código de configuración es este mismo JSON compacto en base64url sin relleno, de 4096 caracteres como máximo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "config_version",
+    "organization_name",
+    "profile_signing_public_key",
+    "enroll_token",
+    "signed_profile",
+    "config_signature"
+  ],
+  "properties": {
+    "config_version": {
+      "description": "Versión del formato. Un agente rechaza versiones que no conoce.",
+      "const": 1
+    },
+    "organization_name": {
+      "description": "Nombre visible de la organización (instalador interactivo y marca). Sin logo: el logo lo descarga el agente tras vincularse.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "profile_signing_public_key": {
+      "description": "Clave pública Ed25519 (32 bytes, base64 estándar con relleno) que verifica signed_profile y config_signature. Se fija en la primera instalación.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]{43}=$"
+    },
+    "enroll_token": {
+      "description": "Token de registro de un solo propósito (caducidad, límite de usos, revocable). Secreto de bajo privilegio: nunca se registra en logs ni en diagnósticos.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "signed_profile": {
+      "description": "Sobre firmado del perfil F3-01 (SignedCercanoProfile en cercano-api), sin logo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "signature", "algorithm"],
+      "properties": {
+        "profile": {
+          "allOf": [
+            { "$ref": "https://cercano.local/schemas/cercano-profile.schema.json" },
+            {
+              "properties": {
+                "identity": {
+                  "description": "La configuración no lleva logo ni icono.",
+                  "not": { "required": ["icon"] }
+                }
+              }
+            }
+          ]
+        },
+        "signature": {
+          "description": "Ed25519 sobre el JSON canónico (RFC 8785, audit-core) de profile; base64 estándar de 64 bytes.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        },
+        "algorithm": { "const": "ed25519" },
+        "key_id": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9._-]+$" }
+      }
+    },
+    "config_signature": {
+      "description": "Ed25519 sobre el JSON canónico (RFC 8785) del objeto completo sin config_signature, con la misma clave; base64 estándar de 64 bytes. Protege organization_name, enroll_token y la propia clave.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]{86}==$"
+    }
+  }
+}

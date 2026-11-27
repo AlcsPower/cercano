@@ -1,0 +1,99 @@
+[
+  {
+    "op": "hello",
+    "request": { "id": 1, "op": "hello", "params": { "protocol_versions": [1], "client_name": "cercano-app", "client_version": "1.4.0" } },
+    "response": { "id": 1, "ok": true, "result": { "protocol_version": 1, "agent_version": "0.1.0", "state": "managed", "max_frame_bytes": 65536 } }
+  },
+  {
+    "op": "get_config",
+    "request": { "id": 2, "op": "get_config", "params": {} },
+    "response": { "id": 2, "ok": true, "result": { "profile_id": "0192e300-1111-7111-8111-000000000001", "rendezvous_server": "cercano.lan:21116", "relay_server": "relay.lan:21117", "server_public_key": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=" } }
+  },
+  {
+    "op": "get_branding",
+    "request": { "id": 3, "op": "get_branding", "params": {} },
+    "response": { "id": 3, "ok": true, "result": { "organization_name": "Ministerio de Ejemplo", "accent_color": "#1F6FEB", "logo": null } }
+  },
+  {
+    "op": "get_role",
+    "request": { "id": 4, "op": "get_role", "params": {} },
+    "response": { "id": 4, "ok": true, "result": { "role": "soporte" } }
+  },
+  {
+    "op": "get_policy",
+    "request": { "id": 5, "op": "get_policy", "params": {} },
+    "response": { "id": 5, "ok": true, "result": {
+      "policy": { "allow_incoming": true, "allow_outgoing": false, "unattended_access": false, "require_approval": true, "hide_network_settings": true, "allow_file_transfer": true, "chat": { "enabled": true } },
+      "source": "server", "fetched_at": "2026-11-25T15:00:00Z", "valid_until": "2026-11-26T15:00:00Z" } }
+  },
+  {
+    "op": "chat.list_conversations",
+    "request": { "id": 6, "op": "chat.list_conversations", "params": { "limit": 20 } },
+    "response": { "id": 6, "ok": true, "result": { "conversations": [
+      { "conversation_id": "5d1c3f7e-2a44-4b7e-9d7f-1d2c3b4a5e6f", "status": "active", "unread": 2, "last_message_at": "2026-11-25T15:02:00Z", "technician_name": "Ana Pérez" }
+    ] } }
+  },
+  {
+    "op": "chat.get_messages",
+    "request": { "id": 7, "op": "chat.get_messages", "params": { "conversation_id": "5d1c3f7e-2a44-4b7e-9d7f-1d2c3b4a5e6f", "after_seq": 10, "limit": 50 } },
+    "response": { "id": 7, "ok": true, "result": { "messages": [
+      { "seq": 11, "message_id": "8a0b6c2d-1e3f-4a5b-8c7d-9e0f1a2b3c4d", "sender_type": "technician", "sender_name": "Ana Pérez", "body": "Hola, ya veo su equipo.", "created_at": "2026-11-25T15:02:00Z", "attachment": null }
+    ] } }
+  },
+  {
+    "op": "chat.send_message",
+    "request": { "id": 8, "op": "chat.send_message", "params": { "conversation_id": null, "body": "La impresora no responde." } },
+    "response": { "id": 8, "ok": true, "result": { "conversation_id": "5d1c3f7e-2a44-4b7e-9d7f-1d2c3b4a5e6f", "message_id": "9b1c7d3e-2f40-4b6c-9d8e-0f1a2b3c4d5e", "seq": 12 } }
+  },
+  {
+    "op": "chat.mark_read",
+    "request": { "id": 9, "op": "chat.mark_read", "params": { "conversation_id": "5d1c3f7e-2a44-4b7e-9d7f-1d2c3b4a5e6f", "up_to_seq": 12 } },
+    "response": { "id": 9, "ok": true, "result": {} }
+  },
+  {
+    "op": "chat.subscribe",
+    "request": { "id": 10, "op": "chat.subscribe", "params": {} },
+    "response": { "id": 10, "ok": true, "result": {} }
+  },
+  {
+    "op": "chat.get_attachment",
+    "request": { "id": 11, "op": "chat.get_attachment", "params": { "attachment_id": "0c2d8e4f-3a51-4c7d-8e9f-1a2b3c4d5e6f", "offset": 0, "length": 32768 } },
+    "response": { "id": 11, "ok": true, "result": { "data_base64": "iVBORw0KGgo=", "eof": true } }
+  },
+  {
+    "op": "audit.submit",
+    "request": { "id": 12, "op": "audit.submit", "params": { "events": [
+      { "event_id": "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f", "ts": "2026-11-25T15:03:00.123Z", "action": "conn.accepted", "outcome": "success", "trace_id": "sess-42", "subject": { "type": "session", "id": "sess-42" }, "details": { "peer_id": "123456789" } }
+    ] } },
+    "response": { "id": 12, "ok": true, "result": { "accepted": 1, "duplicates": 0 } }
+  },
+  {
+    "op": "status",
+    "request": { "id": 13, "op": "status", "params": {} },
+    "response": { "id": 13, "ok": true, "result": { "state": "managed", "agent_version": "0.1.0", "protocol_version": 1, "server_reachable": true, "policy_valid_until": "2026-11-26T15:00:00Z", "last_heartbeat_at": "2026-11-25T15:04:00Z", "audit_queue_len": 0 } }
+  },
+  {
+    "op": "get_policy",
+    "request": { "id": 14, "op": "get_policy", "params": {} },
+    "response": { "id": 14, "ok": false, "error": { "code": "policy_expired", "message": "La política caducó y no hay conexión con el servidor." } }
+  },
+  {
+    "op": "hello",
+    "request": { "id": 1, "op": "hello", "params": { "protocol_versions": [2, 3], "client_name": "cercano-app", "client_version": "2.0.0" } },
+    "response": { "id": 1, "ok": false, "error": { "code": "unsupported_version", "message": "El agente admite las versiones de protocolo: 1." } }
+  },
+  {
+    "op": "audit.submit",
+    "request": { "id": 15, "op": "audit.submit", "params": { "events": [ { "event_id": "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f", "ts": "2026-11-25T15:03:00Z", "action": "conn.accepted", "outcome": "success" } ] } },
+    "response": { "id": 15, "ok": false, "error": { "code": "rate_limited", "message": "Demasiadas peticiones.", "retry_after_ms": 500 } }
+  },
+  {
+    "event": { "event": "chat.message", "data": { "conversation_id": "5d1c3f7e-2a44-4b7e-9d7f-1d2c3b4a5e6f", "message": { "seq": 13, "message_id": "aa1c7d3e-2f40-4b6c-9d8e-0f1a2b3c4d5e", "sender_type": "technician", "sender_name": "Ana Pérez", "body": "¿Puede reiniciarla?", "created_at": "2026-11-25T15:05:00Z" } } }
+  },
+  {
+    "event": { "event": "state", "data": { "state": "revoked" } }
+  },
+  {
+    "response": { "id": null, "ok": false, "error": { "code": "bad_frame", "message": "La trama no es JSON UTF-8 válido." } }
+  }
+]
