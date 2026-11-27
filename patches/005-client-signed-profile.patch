@@ -11,10 +11,10 @@ salientes, tecnico sin desatendido), y aplicar la configuracion en OVERWRITE_SET
 ---
 diff --git a/vendor/client/src/cercano_profile.rs b/vendor/client/src/cercano_profile.rs
 new file mode 100644
-index 0000000..d7bf7d7
+index 0000000..356ecaf
 --- /dev/null
 +++ b/vendor/client/src/cercano_profile.rs
-@@ -0,0 +1,469 @@
+@@ -0,0 +1,470 @@
 +// Copyright (C) 2026 Cercano Contributors
 +//
 +// This file is part of Cercano.

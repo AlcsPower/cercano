@@ -93,7 +93,6 @@ index b1e523d..b418951 100644
  }
  
  fn get_direct_port() -> i32 {
-     let mut port = Config::get_option("direct-access-port")
 diff --git a/vendor/server/libs/hbb_common/src/config.rs b/vendor/server/libs/hbb_common/src/config.rs
 index 86d273d..a7a8f6b 100644
 --- a/vendor/server/libs/hbb_common/src/config.rs
