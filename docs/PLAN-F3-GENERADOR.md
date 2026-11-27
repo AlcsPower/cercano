@@ -122,9 +122,10 @@ Se compila un binario base por versión. El generador añade/empaqueta un *perfi
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador |
 | F3-19a | Reconciliar `hbb_common` y el manifiesto del cliente; `cargo check` de `vendor/client` en Linux dentro del CI; CI general en verde | F3-03 | Builder + Cliente | QA |
 | F3-19 | Cliente Windows real: workflow `windows-latest` que compila `vendor/client` (Flutter + Rust + vcpkg) y publica la base | F3-19a | Builder + Cliente | QA |
-| F3-22 | Marca visible: logo y nombre de la empresa desde el perfil, «Powered by Cercano» y Acerca de con repo y versión | F3-19a, F3-02 | Cliente | QA |
+| F3-22 | Marca visible: logo y nombre de la empresa desde el perfil, «Powered by Cercano» y Acerca de con repo y versión. **Diferida: la sustituye F3.5-10 (ADR-015)** | F3-19a, F3-02 | Cliente | QA |
 | F3-20 | Fail-closed: el generador y la API rechazan empaquetar sin binario base real; el stub solo con `--allow-stub` y marcado | F3-05, F3-07 | Builder + ControlPlane | Seguridad |
 | F3-21 | Prueba de humo en Windows 10/11: instalar `.exe`/`.msi`, abrir, perfil verificado, conexión, desinstalar | F3-19, F3-20 | QA | Coordinador |
+| F3-23 | Interfaz de escritorio según el diseño objetivo (`docs/diseno/`): pantalla de soporte, diálogo de consentimiento y pie sin mención a RustDesk | F3-14, F3-15, F3-19 | Cliente | QA |
 
 ### Detalle
 
@@ -221,6 +222,10 @@ Con `--base-dir` valida además que existan `cercano.exe`, `librustdesk.dll`, `f
 **F3-21 Prueba de humo en Windows.**
 En CI (`windows-latest`): instalar el `.msi` en silencio, lanzar `cercano.exe` y comprobar que el proceso sigue vivo tras 10 s; fallar el job si no. Luego, manualmente: instalar, abrir, comprobar `soporte`/`tecnico`, perfil verificado y revocación, conectar y desinstalar con `.exe` y `.msi`, en Windows 10 y 11, con y sin Defender activo. Informe `docs/status/informes/F3-21.md`.
 *CA:* TC-F3-094 en verde en ambas versiones.
+
+**F3-23 Interfaz según el diseño objetivo.** *(Pedido del Dueño, 2026-11-25.)*
+Parche nuevo sobre `vendor/client` (Flutter: `desktop_home_page.dart` y el diálogo de conexión entrante), registrado en `patches/INDEX.md`, que aplica `docs/diseno/README.md`. En rol `soporte`: cabecera con la organización, ID grande, código de un solo uso, equipo, «Chat de soporte» y «Ajustes», aviso de solo recepción, y sin panel de conexión saliente, historial, favoritos ni libreta. Diálogo de consentimiento con técnico, ticket y permisos. Pie «Powered by Cercano · AGPL-3.0» en todos los roles: se quita «Con tecnología de RustDesk» (`powered_by_me` en `src/lang/*.rs`), que incumple AGENTS.md §6. El rol `tecnico` conserva sus paneles con el mismo estilo. Mientras no exista el agente (F3.5), la marca sale del perfil firmado; cuando exista, de F3.5-10.
+*CA:* capturas del instalador real del CI en rol `soporte` y `tecnico` comparadas con `docs/diseno/app-soporte.html`; ninguna cadena visible contiene «RustDesk»; la matriz de la sección 1 sigue cumpliéndose.
 
 **Gate F3 (M2):** flujo completo demostrado en el laboratorio para ambos roles; la matriz de la sección 1 verificada por QA; ninguna clave privada ni credencial presente en artefactos, repositorio ni auditoría (verificación automática); revisión de seguridad sin hallazgos altos; SBOM y firmas verificables; elevación entregada desactivada por defecto; **instalador que abre y funciona en Windows 10/11 con el cliente real (F3-19…21)**.
 

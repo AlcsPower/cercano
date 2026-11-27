@@ -110,7 +110,7 @@ pub struct ChatConversation {
     pub contact_first_name: String,
     pub contact_last_name: String,
     pub assigned_user_id: Option<String>,
-    pub assigned_username: Option<String>,
+    pub assigned_display_name: Option<String>,
     pub other_last_read_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,

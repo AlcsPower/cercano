@@ -1,0 +1,434 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cercano.local/schemas/agente-ipc.schema.json",
+  "title": "Cercano — mensajes del canal local agente ↔ aplicación (protocolo 1)",
+  "description": "Carga útil JSON de una trama del canal \\\\.\\pipe\\cercano-agent (F3.5-03, docs/specs/agente-ipc.md). Una trama es una petición de la aplicación, una respuesta del agente o un evento del agente. Los resultados de cada operación se validan con definitions/results/<op>.",
+  "oneOf": [
+    { "$ref": "#/definitions/request" },
+    { "$ref": "#/definitions/response_ok" },
+    { "$ref": "#/definitions/response_error" },
+    { "$ref": "#/definitions/event" }
+  ],
+  "definitions": {
+    "request_id": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "empty": { "type": "object", "additionalProperties": false, "properties": {} },
+    "op": {
+      "description": "Lista cerrada de operaciones. Ninguna escribe configuración, claves ni vinculación.",
+      "enum": [
+        "hello",
+        "get_config",
+        "get_branding",
+        "get_role",
+        "get_policy",
+        "chat.list_conversations",
+        "chat.get_messages",
+        "chat.send_message",
+        "chat.mark_read",
+        "chat.subscribe",
+        "chat.get_attachment",
+        "audit.submit",
+        "status"
+      ]
+    },
+    "agent_state": {
+      "description": "managed: vinculado y con política vigente. El resto llevan a la aplicación al estado bloqueado.",
+      "enum": ["managed", "unenrolled", "revoked", "policy_expired", "error"]
+    },
+    "error_code": {
+      "enum": [
+        "bad_frame",
+        "frame_too_large",
+        "handshake_required",
+        "unsupported_version",
+        "unknown_op",
+        "invalid_params",
+        "not_enrolled",
+        "revoked",
+        "policy_expired",
+        "forbidden_by_policy",
+        "not_found",
+        "rate_limited",
+        "server_unreachable",
+        "internal"
+      ]
+    },
+
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "op", "params"],
+      "properties": {
+        "id": { "$ref": "#/definitions/request_id" },
+        "op": { "$ref": "#/definitions/op" },
+        "params": { "type": "object" }
+      },
+      "allOf": [
+        { "if": { "properties": { "op": { "const": "hello" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/params/hello" } } } },
+        { "if": { "properties": { "op": { "const": "get_config" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/empty" } } } },
+        { "if": { "properties": { "op": { "const": "get_branding" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/empty" } } } },
+        { "if": { "properties": { "op": { "const": "get_role" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/empty" } } } },
+        { "if": { "properties": { "op": { "const": "get_policy" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/empty" } } } },
+        { "if": { "properties": { "op": { "const": "chat.list_conversations" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/params/chat.list_conversations" } } } },
+        { "if": { "properties": { "op": { "const": "chat.get_messages" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/params/chat.get_messages" } } } },
+        { "if": { "properties": { "op": { "const": "chat.send_message" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/params/chat.send_message" } } } },
+        { "if": { "properties": { "op": { "const": "chat.mark_read" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/params/chat.mark_read" } } } },
+        { "if": { "properties": { "op": { "const": "chat.subscribe" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/empty" } } } },
+        { "if": { "properties": { "op": { "const": "chat.get_attachment" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/params/chat.get_attachment" } } } },
+        { "if": { "properties": { "op": { "const": "audit.submit" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/params/audit.submit" } } } },
+        { "if": { "properties": { "op": { "const": "status" } } }, "then": { "properties": { "params": { "$ref": "#/definitions/empty" } } } }
+      ]
+    },
+
+    "response_ok": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ok", "result"],
+      "properties": {
+        "id": { "$ref": "#/definitions/request_id" },
+        "ok": { "const": true },
+        "result": { "type": "object" }
+      }
+    },
+
+    "response_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ok", "error"],
+      "properties": {
+        "id": {
+          "description": "null solo cuando no se pudo leer el id de la petición (bad_frame, frame_too_large).",
+          "oneOf": [{ "$ref": "#/definitions/request_id" }, { "type": "null" }]
+        },
+        "ok": { "const": false },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "$ref": "#/definitions/error_code" },
+            "message": { "type": "string", "maxLength": 512 },
+            "retry_after_ms": { "type": "integer", "minimum": 0, "maximum": 3600000 }
+          }
+        }
+      }
+    },
+
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "data"],
+      "properties": {
+        "event": { "enum": ["chat.message", "chat.conversation", "state"] },
+        "data": { "type": "object" }
+      },
+      "allOf": [
+        { "if": { "properties": { "event": { "const": "chat.message" } } }, "then": { "properties": { "data": { "$ref": "#/definitions/events/chat.message" } } } },
+        { "if": { "properties": { "event": { "const": "chat.conversation" } } }, "then": { "properties": { "data": { "$ref": "#/definitions/events/chat.conversation" } } } },
+        { "if": { "properties": { "event": { "const": "state" } } }, "then": { "properties": { "data": { "$ref": "#/definitions/events/state" } } } }
+      ]
+    },
+
+    "params": {
+      "hello": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocol_versions", "client_name", "client_version"],
+        "properties": {
+          "protocol_versions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          },
+          "client_name": { "type": "string", "pattern": "^[a-z0-9-]{1,32}$" },
+          "client_version": { "type": "string", "pattern": "^[0-9A-Za-z.+-]{1,32}$" }
+        }
+      },
+      "chat.list_conversations": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "include_closed": { "type": "boolean" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      },
+      "chat.get_messages": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conversation_id"],
+        "properties": {
+          "conversation_id": { "$ref": "#/definitions/uuid" },
+          "after_seq": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        }
+      },
+      "chat.send_message": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["body"],
+        "properties": {
+          "conversation_id": {
+            "description": "Ausente o null: el agente abre una conversación nueva.",
+            "oneOf": [{ "$ref": "#/definitions/uuid" }, { "type": "null" }]
+          },
+          "body": { "type": "string", "minLength": 1, "maxLength": 4000 }
+        }
+      },
+      "chat.mark_read": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conversation_id", "up_to_seq"],
+        "properties": {
+          "conversation_id": { "$ref": "#/definitions/uuid" },
+          "up_to_seq": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "chat.get_attachment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["attachment_id", "offset", "length"],
+        "properties": {
+          "attachment_id": { "$ref": "#/definitions/uuid" },
+          "offset": { "type": "integer", "minimum": 0 },
+          "length": { "type": "integer", "minimum": 1, "maximum": 32768 }
+        }
+      },
+      "audit.submit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["events"],
+        "properties": {
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": { "$ref": "#/definitions/client_audit_event" }
+          }
+        }
+      }
+    },
+
+    "client_audit_event": {
+      "description": "Evento del cliente (parche 004). El agente añade source, actor de dispositivo, hash y prev_hash; la aplicación no puede fijarlos.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "ts", "action", "outcome"],
+      "properties": {
+        "event_id": { "$ref": "#/definitions/uuid" },
+        "ts": { "$ref": "#/definitions/timestamp" },
+        "action": { "type": "string", "maxLength": 64, "pattern": "^(conn|elev|chat|client)\\.[a-z_]+(\\.[a-z_]+)*$" },
+        "outcome": { "enum": ["success", "failure", "denied"] },
+        "trace_id": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9._-]+$" },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id"],
+          "properties": {
+            "type": { "type": "string", "pattern": "^[a-z_]{1,32}$" },
+            "id": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        },
+        "details": { "type": "object", "maxProperties": 32 }
+      }
+    },
+
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversation_id", "status", "unread", "last_message_at"],
+      "properties": {
+        "conversation_id": { "$ref": "#/definitions/uuid" },
+        "status": { "enum": ["waiting", "assigned", "active", "closed"] },
+        "unread": { "type": "integer", "minimum": 0 },
+        "last_message_at": { "oneOf": [{ "$ref": "#/definitions/timestamp" }, { "type": "null" }] },
+        "technician_name": { "description": "Nombre visible del técnico asignado (assigned_display_name, F4.5-17), nunca su usuario de inicio de sesión.", "oneOf": [{ "type": "string", "maxLength": 128 }, { "type": "null" }] }
+      }
+    },
+
+    "message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "message_id", "sender_type", "body", "created_at"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 0 },
+        "message_id": { "$ref": "#/definitions/uuid" },
+        "sender_type": { "enum": ["client", "technician", "system"] },
+        "sender_name": { "description": "Para un técnico, su nombre visible; nunca su usuario de inicio de sesión (F4.5-17).", "oneOf": [{ "type": "string", "maxLength": 128 }, { "type": "null" }] },
+        "body": { "type": "string", "maxLength": 4000 },
+        "created_at": { "$ref": "#/definitions/timestamp" },
+        "attachment": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["attachment_id", "file_name", "mime", "size_bytes"],
+              "properties": {
+                "attachment_id": { "$ref": "#/definitions/uuid" },
+                "file_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+                "mime": { "enum": ["image/png", "image/jpeg", "application/pdf"] },
+                "size_bytes": { "type": "integer", "minimum": 0 }
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    "results": {
+      "hello": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocol_version", "agent_version", "state", "max_frame_bytes"],
+        "properties": {
+          "protocol_version": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "agent_version": { "type": "string", "maxLength": 32 },
+          "state": { "$ref": "#/definitions/agent_state" },
+          "max_frame_bytes": { "type": "integer", "minimum": 1024, "maximum": 65536 }
+        }
+      },
+      "get_config": {
+        "description": "Solo lo necesario para conectar con hbbs/hbbr. Nunca la URL de la API, tokens ni claves privadas.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["profile_id", "rendezvous_server", "relay_server", "server_public_key"],
+        "properties": {
+          "profile_id": { "$ref": "#/definitions/uuid" },
+          "rendezvous_server": { "type": "string", "maxLength": 255, "pattern": "^[a-zA-Z0-9.-]+(:[0-9]{1,5})?$" },
+          "relay_server": { "type": "string", "maxLength": 255, "pattern": "^[a-zA-Z0-9.-]+(:[0-9]{1,5})?$" },
+          "server_public_key": { "type": "string", "minLength": 40, "maxLength": 60, "pattern": "^[A-Za-z0-9+/=_-]+$" }
+        }
+      },
+      "get_branding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["organization_name", "accent_color", "logo"],
+        "properties": {
+          "organization_name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "accent_color": { "oneOf": [{ "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }, { "type": "null" }] },
+          "logo": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["mime", "sha256", "data_base64"],
+                "properties": {
+                  "mime": { "const": "image/png" },
+                  "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "data_base64": { "type": "string", "maxLength": 43692, "pattern": "^[A-Za-z0-9+/]*={0,2}$" }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "get_role": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role"],
+        "properties": { "role": { "enum": ["soporte", "tecnico"] } }
+      },
+      "get_policy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["policy", "source", "valid_until"],
+        "properties": {
+          "policy": { "$ref": "https://cercano.local/schemas/cercano-profile.schema.json#/properties/policy" },
+          "source": { "enum": ["server", "profile"] },
+          "fetched_at": { "oneOf": [{ "$ref": "#/definitions/timestamp" }, { "type": "null" }] },
+          "valid_until": { "$ref": "#/definitions/timestamp" }
+        }
+      },
+      "chat.list_conversations": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conversations"],
+        "properties": {
+          "conversations": { "type": "array", "maxItems": 100, "items": { "$ref": "#/definitions/conversation" } }
+        }
+      },
+      "chat.get_messages": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["messages"],
+        "properties": {
+          "messages": { "type": "array", "maxItems": 200, "items": { "$ref": "#/definitions/message" } }
+        }
+      },
+      "chat.send_message": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conversation_id", "message_id", "seq"],
+        "properties": {
+          "conversation_id": { "$ref": "#/definitions/uuid" },
+          "message_id": { "$ref": "#/definitions/uuid" },
+          "seq": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "chat.mark_read": { "$ref": "#/definitions/empty" },
+      "chat.subscribe": { "$ref": "#/definitions/empty" },
+      "chat.get_attachment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data_base64", "eof"],
+        "properties": {
+          "data_base64": { "type": "string", "maxLength": 43692, "pattern": "^[A-Za-z0-9+/]*={0,2}$" },
+          "eof": { "type": "boolean" }
+        }
+      },
+      "audit.submit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["accepted", "duplicates"],
+        "properties": {
+          "accepted": { "type": "integer", "minimum": 0, "maximum": 50 },
+          "duplicates": { "type": "integer", "minimum": 0, "maximum": 50 }
+        }
+      },
+      "status": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state", "agent_version", "protocol_version", "server_reachable", "policy_valid_until", "last_heartbeat_at", "audit_queue_len"],
+        "properties": {
+          "state": { "$ref": "#/definitions/agent_state" },
+          "agent_version": { "type": "string", "maxLength": 32 },
+          "protocol_version": { "type": "integer", "minimum": 1 },
+          "server_reachable": { "oneOf": [{ "type": "boolean" }, { "type": "null" }] },
+          "policy_valid_until": { "oneOf": [{ "$ref": "#/definitions/timestamp" }, { "type": "null" }] },
+          "last_heartbeat_at": { "oneOf": [{ "$ref": "#/definitions/timestamp" }, { "type": "null" }] },
+          "audit_queue_len": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+
+    "events": {
+      "chat.message": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conversation_id", "message"],
+        "properties": {
+          "conversation_id": { "$ref": "#/definitions/uuid" },
+          "message": { "$ref": "#/definitions/message" }
+        }
+      },
+      "chat.conversation": { "$ref": "#/definitions/conversation" },
+      "state": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state"],
+        "properties": { "state": { "$ref": "#/definitions/agent_state" } }
+      }
+    }
+  }
+}

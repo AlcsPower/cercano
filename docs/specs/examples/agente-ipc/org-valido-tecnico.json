@@ -1,0 +1,56 @@
+{
+  "config_version": 1,
+  "organization_name": "Ministerio de Ejemplo",
+  "profile_signing_public_key": "Q2VyY2Fub0VqZW1wbG9DbGF2ZVB1YmxpY2EwMDAwMDE=",
+  "enroll_token": "EJEMPLO_token_de_registro_tecnico_000000001",
+  "signed_profile": {
+    "profile": {
+      "schema_version": "1.0.0",
+      "profile_id": "0192e300-2222-7222-8222-000000000002",
+      "created_at": "2026-11-09T10:00:00Z",
+      "role": "tecnico",
+      "server": {
+        "rendezvous_server": "cercano.lan:21116",
+        "relay_server": "relay.lan:21117",
+        "api_server": "https://cercano.lan:21114",
+        "server_public_key": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+      },
+      "identity": {
+        "app_name": "Cercano Técnico",
+        "about_text": "Cercano Técnico - Consola de soporte TI. Licenciado bajo AGPL-3.0."
+      },
+      "policy": {
+        "allow_incoming": false,
+        "allow_outgoing": true,
+        "unattended_access": false,
+        "require_approval": false,
+        "allow_file_transfer": true,
+        "allow_clipboard": true,
+        "allow_audio": true,
+        "allow_terminal": true,
+        "allow_port_forward": true,
+        "hide_network_settings": true,
+        "enable_elevation": true,
+        "unattended_elevation": false
+      },
+      "installation": {
+        "mode": "portable",
+        "auto_start": false,
+        "create_desktop_shortcut": true,
+        "silent": true
+      },
+      "identification": {
+        "device_group": "Equipo-TI",
+        "default_owner": "admin@cercano.lan"
+      },
+      "expiration": {
+        "expires_at": "2027-02-09T10:00:00Z",
+        "max_uses": 5
+      }
+    },
+    "signature": "Q2VyY2Fub0VqZW1wbG9GaXJtYU5vVmFsaWRhLTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA==",
+    "algorithm": "ed25519",
+    "key_id": "org-ejemplo-2026"
+  },
+  "config_signature": "Q2VyY2Fub0VqZW1wbG9GaXJtYU5vVmFsaWRhLTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA=="
+}

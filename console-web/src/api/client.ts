@@ -660,6 +660,7 @@ class CercanoApiClient {
       {
         id: 'u-op-01',
         username: 'operador_soporte',
+        display_name: 'Juan Pérez',
         role: 'operator',
         is_active: true,
         totp_enabled: false,
@@ -678,7 +679,12 @@ class CercanoApiClient {
     ];
   }
 
-  public async createUser(user: { username: string; password?: string; role: string }): Promise<void> {
+  public async createUser(user: {
+    username: string;
+    password?: string;
+    role: string;
+    display_name?: string;
+  }): Promise<void> {
     if (this.isConnectedToLiveApi) {
       const res = await fetch('/api/users', {
         method: 'POST',
@@ -687,7 +693,7 @@ class CercanoApiClient {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Error al crear usuario');
+        throw new Error(err.message || err.error || 'Error al crear usuario');
       }
     }
   }
@@ -701,7 +707,7 @@ class CercanoApiClient {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Error al actualizar usuario');
+        throw new Error(err.message || err.error || 'Error al actualizar usuario');
       }
     }
   }

@@ -29,9 +29,11 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `010-client-remote-escalation.patch` | F4.5-12 | `vendor/client` | Soporte del esquema `cercano://connect?device=&trace=` en Flutter y CLI, y propagación de `trace` hacia `conn_audit_ref` | `flutter/lib/common.dart`, `src/core_main.rs`, `src/rendezvous_mediator.rs`, `src/server.rs` | 2026-11-16 | Agente-Cliente |
 | `011-client-policy-chat.patch` | F4.5-13 | `vendor/client` | Soporte de `policy.chat` (`enabled`, `allow_attachments`, `allow_remote_escalation`) y helpers de verificación | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
 | `012-client-effective-policy.patch` | F5-06 | `vendor/client` | Descarga, cacheo acotado y aplicación de política efectiva central, degradación offline fail-closed (TC-F5-024) y protección contra adulteración local (TC-F5-025) | `src/cercano_profile.rs` | 2026-11-16 | Agente-Cliente |
+| `013-client-desktop-ui-design.patch` | F3-23 | `vendor/client` | Interfaz según el diseño objetivo: pantalla de soporte sin conexión saliente, diálogo de consentimiento con permisos, pie «Powered by Cercano · AGPL-3.0» y sin cadenas visibles con RustDesk | `flutter/lib/cercano_ui/*`, `flutter/lib/desktop/*`, `src/cercano_profile.rs`, `src/lang*` | 2026-11-25 | Agente-Cliente |
 | `015-client-reproducible-build-date.patch` | F3-03 | `vendor/client` | `BUILD_DATE` toma `SOURCE_DATE_EPOCH` (UTC) si está definido, en lugar de la hora local de compilación (TC-F3-021) | `libs/hbb_common/src/lib.rs` | 2026-11-25 | Agente-Builder |
 | `016-client-wpwd-mut.patch` | F3-16 | `vendor/client` | `wpwd` mutable en `create_process_with_logon` para que compile el borrado seguro de 007 (E0596 en el build de Windows) | `src/platform/windows.rs` | 2026-11-25 | Agente-Cliente |
 | `017-client-chat-dart-compile.patch` | F3-17 | `vendor/client` | El chat Flutter (009) compila en Windows: import de `bind`, `Colors.green` en lugar de `Colors.emerald`, errata `CrossAxisAlignment` | `flutter/lib/cercano_chat/cercano_chat_model.dart`, `flutter/lib/cercano_chat/cercano_chat_page.dart` | 2026-11-26 | Agente-Builder |
+| `018-client-technician-display-name.patch` | F4.5-17 | `vendor/client` | El chat muestra el nombre visible del técnico asignado («Atendido por», remitente y aviso de reasignación) con respaldo «un técnico de <organización>»; nunca el login | `flutter/lib/cercano_chat/*`, `flutter/test/cercano_chat_model_test.dart`, `src/cercano_chat.rs` | 2026-11-27 | Agente-Cliente |
 
 ---
 
@@ -295,6 +297,26 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/cercano_profile.rs`
 - **Estrategia de actualización (upstream sync):** Funcionalidad contenida en `cercano_profile.rs` sin alterar código base heredado de RustDesk.
 
+### [013-client-desktop-ui-design.patch] Tarea F3-23: Interfaz de escritorio según el diseño objetivo
+
+- **Archivo:** `patches/013-client-desktop-ui-design.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F3-23`
+- **Fecha:** `2026-11-25`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** El Dueño aprobó `docs/diseno/app-soporte.html` como diseño objetivo. La interfaz heredada muestra a la persona usuaria el panel de conexión saliente y el texto «Con tecnología de RustDesk», que incumple AGENTS.md §6. La pantalla de soporte y el diálogo de consentimiento viven en un módulo nuevo (`cercano_ui.dart`); el código heredado solo recibe enganches de una línea: rol `soporte` → pantalla nueva, solicitud entrante pendiente con aprobación por clic → diálogo nuevo, pie en los demás roles. El rol llega a Flutter como opción integrada `cercano-role`, escrita al aplicar el perfil firmado (sin FFI nueva ni IPC).
+- **Archivos modificados:**
+  - `flutter/lib/cercano_ui/cercano_ui.dart` (nuevo)
+  - `flutter/lib/desktop/pages/desktop_home_page.dart`
+  - `flutter/lib/desktop/pages/server_page.dart`
+  - `flutter/lib/desktop/pages/desktop_setting_page.dart`
+  - `flutter/lib/desktop/widgets/tabbar_widget.dart`
+  - `src/cercano_profile.rs`
+  - `src/lang.rs`, `src/lang/en.rs`, `src/lang/es.rs`, `src/lang/template.rs`
+- **Estrategia de actualización (upstream sync):** Reaplicar los enganches en `_DesktopHomePageState.build` y `buildConnectionCard`; si upstream cambia `Client` o `ServerModel.sendLoginResponse`, ajustar `CercanoConsentCard`. Comprobar que `translate` siga sustituyendo «RustDesk» por el nombre de la app y que `powered_by_me` no vuelva a quedar excluida.
+
+---
+
 ### [015-client-reproducible-build-date.patch] Tarea F3-03: BUILD_DATE reproducible
 
 - **Archivo:** `patches/015-client-reproducible-build-date.patch`
@@ -335,6 +357,21 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `flutter/lib/cercano_chat/cercano_chat_model.dart` (un import)
   - `flutter/lib/cercano_chat/cercano_chat_page.dart` (color y errata)
 - **Estrategia de actualización (upstream sync):** Va junto con 009; si se reescribe, corregir en el propio 009.
+
+### [018-client-technician-display-name.patch] Tarea F4.5-17: Nombre visible del técnico en el chat
+
+- **Archivo:** `patches/018-client-technician-display-name.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F4.5-17`
+- **Fecha:** `2026-11-27`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** `docs/specs/chat.md` §14 exige que la persona usuaria vea el nombre visible del técnico («Atendido por <técnico>», remitente de sus mensajes y aviso «Ahora te atiende <técnico>» al reasignar). La API deja de enviar `assigned_username` al dispositivo y envía `assigned_display_name`; el parche adapta el DTO Rust y el modelo/página Flutter del chat (parche 009), con respaldo «un técnico de <organization_name>».
+- **Archivos modificados:**
+  - `vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart`
+  - `vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart`
+  - `vendor/client/flutter/test/cercano_chat_model_test.dart`
+  - `vendor/client/src/cercano_chat.rs`
+- **Estrategia de actualización (upstream sync):** Cambios confinados al módulo aislado `cercano_chat`; no toca código heredado de RustDesk. Se aplica después de 017 (toca las mismas líneas de `cercano_chat_page.dart`); antes se numeraba 014.
 
 ---
 

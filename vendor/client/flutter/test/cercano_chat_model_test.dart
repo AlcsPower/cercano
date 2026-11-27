@@ -89,7 +89,7 @@ void main() {
         'contact_first_name': 'Maria',
         'contact_last_name': 'Lopez',
         'assigned_user_id': 'u-2',
-        'assigned_username': 'Tecnico 2',
+        'assigned_display_name': 'Tecnico 2',
         'other_last_read_at': '2026-11-16T10:05:00Z',
         'created_at': '2026-11-16T10:00:00Z',
         'updated_at': '2026-11-16T10:05:00Z',
@@ -124,6 +124,48 @@ void main() {
 
       expect(model.isMessageRead(conv.messages[0]), isTrue);
       expect(model.isMessageRead(conv.messages[1]), isFalse);
+    });
+
+    // F4.5-17: nombre visible del técnico, respaldo y aviso de reasignación.
+    test('Technician display name, fallback and reassignment notice', () {
+      ChatConversation conv(String? userId, String? name) =>
+          ChatConversation.fromJson({
+            'id': 'c-1',
+            'status': 'assigned',
+            'assigned_user_id': userId,
+            'assigned_display_name': name,
+            // El servidor ya no lo envía; aunque llegara, no se usa.
+            'assigned_username': 'login_secreto',
+          });
+
+      expect(conv('u-1', 'Juan Pérez').assignedDisplayName, equals('Juan Pérez'));
+      expect(technicianLabel('Juan Pérez', 'Acme'), equals('Juan Pérez'));
+      expect(technicianLabel(null, 'Acme'), equals('un técnico de Acme'));
+      expect(technicianLabel('  ', 'Acme'), equals('un técnico de Acme'));
+      expect(technicianLabel(null, ''), equals('un técnico de soporte'));
+      expect(messageSenderLabel('Juan Pérez'), equals('Juan Pérez'));
+      expect(messageSenderLabel(null), equals('Técnico'));
+      expect(messageSenderLabel('  '), equals('Técnico'));
+      expect(
+          ChatBranding.fromJson({'support_name': 'Mesa TI', 'organization_name': null})
+              .teamName,
+          equals('Mesa TI'));
+      expect(
+          technicianLabel(null,
+              ChatBranding.fromJson({'support_name': '', 'organization_name': ''}).teamName),
+          equals('un técnico de soporte'));
+
+      expect(reassignmentNotice(null, conv('u-1', 'Juan'), 'Acme'), isNull);
+      expect(reassignmentNotice(conv('u-1', 'Juan'), conv('u-1', 'Juan'), 'Acme'),
+          isNull);
+      expect(reassignmentNotice(conv('u-1', 'Juan'), conv('u-2', 'Ana'), 'Acme'),
+          equals('Ahora te atiende Ana'));
+      expect(reassignmentNotice(conv('u-1', 'Juan'), conv('u-2', null), 'Acme'),
+          equals('Ahora te atiende un técnico de Acme'));
+
+      final model = CercanoChatModel();
+      model.conversation = conv('u-1', null);
+      expect(model.assignedTechnicianLabel, isNot(contains('login_secreto')));
     });
   });
 }

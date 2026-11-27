@@ -77,9 +77,32 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-18 | Revisión de seguridad de roles y elevación | F3-13…17 | Seguridad | Coordinador | Hecho |
 | F3-19a | Reconciliar `hbb_common`/manifiesto del cliente; `cargo check` en CI; CI en verde | F3-03 | Builder + Cliente | QA | Pendiente |
 | F3-19 | Cliente Windows real (workflow `windows-latest`) | F3-19a | Builder + Cliente | QA | Pendiente |
-| F3-22 | Marca visible: empresa (logo y nombre), «Powered by Cercano», Acerca de | F3-19a, F3-02 | Cliente | QA | Pendiente |
+| F3-22 | Marca visible: empresa (logo y nombre), «Powered by Cercano», Acerca de (sustituida por F3.5-10, ADR-015) | F3-19a, F3-02 | Cliente | QA | Diferida |
 | F3-20 | Fail-closed: sin binario base real no se empaqueta (`--allow-stub`) | F3-05, F3-07 | Builder + ControlPlane | Seguridad | Pendiente |
 | F3-21 | Prueba de humo en Windows 10/11 | F3-19, F3-20 | QA | Coordinador | Pendiente |
+| F3-23 | Interfaz de escritorio según el diseño objetivo (`docs/diseno/`); sin «Con tecnología de RustDesk» | F3-14, F3-15, F3-19 | Cliente | QA | En verificación |
+
+## F3.5 — Agente Cercano y aplicación genérica
+
+Fuente: `docs/PLAN-F3.5-AGENTE.md` y `docs/adr/015-agente-y-cliente-generico.md` (aprobado por el Dueño el 2026-11-25). F3-22 queda `Diferida` (sustituida por F3.5-10). F3.5-01 sigue en verificación hasta que lo ratifiquen el Coordinador y Seguridad; las demás tareas empiezan después.
+
+| ID | Tarea | Dep. | Rol | Verifica | Estado |
+|---|---|---|---|---|---|
+| F3.5-01 | ADR-015, plan y casos de prueba propuestos | — | Coordinador | Dueño + Seguridad | En verificación |
+| F3.5-02 | Spike S9: etiquetado de paquetes (fuera del plan: se usa configuración aparte) | — | Builder | Seguridad | Diferida |
+| F3.5-03 | Contrato del canal local y formato de la configuración | F3.5-01 | Coordinador + Cliente + ControlPlane | Seguridad | En verificación |
+| F3.5-04 | Esqueleto de `agent/`: servicio, almacén fijado, logs y CLI | F3.5-03 | Cliente | QA | En verificación |
+| F3.5-05 | Vinculación `POST /api/agent/enroll` y lado del agente | F3.5-04, F3-09, F3-13, F4.5-03 | ControlPlane + Cliente | Seguridad | Pendiente |
+| F3.5-06 | Canal local con verificación mutua de firma | F3.5-04 | Cliente | Seguridad | Pendiente |
+| F3.5-07 | Política, latido y cola de auditoría en el agente | F3.5-05, F3.5-06 | Cliente | QA | Pendiente |
+| F3.5-08 | Transporte del chat en el agente | F3.5-05, F3.5-06 | Cliente | QA | Pendiente |
+| F3.5-09 | Parche 013: puente con el agente y modos gestionado/libre/bloqueado | F3.5-06, F3-19a | Cliente | Seguridad | Pendiente |
+| F3.5-10 | Marca en tiempo de ejecución (sustituye F3-22) | F3.5-09 | Cliente | QA | Pendiente |
+| F3.5-11 | `cercano-build`: paquete genérico que lee `cercano-org.json` o `CERCANO_CONFIG` | F3.5-03, F3.5-04, F3-20 | Builder | QA | Pendiente |
+| F3.5-12 | Generador en el servidor (`cercano-api` + `console-web`) | F3.5-11, F3-07, F3-08, F4-07 | ControlPlane + Web | QA | Pendiente |
+| F3.5-13 | Guía de despliegue y diagnóstico con PowerShell | F3.5-04, F3.5-12 | Coordinador | QA | Pendiente |
+| F3.5-14 | Revisión de seguridad | F3.5-05…12 | Seguridad | Coordinador | Pendiente |
+| F3.5-15 | E2E en Windows 10/11 y cierre | F3.5-01…14 | QA | Coordinador | Pendiente |
 
 ## F4 — Consola web, RBAC y 2FA
 
@@ -123,6 +146,7 @@ Fuente: `docs/PLAN-F4.5-CHAT.md` v1.1. Backend y consola dependen de F4-05/06; e
 | F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador | Hecho |
 | F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | Hecho |
 | F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA | Hecho |
+| F4.5-17 | Nombre visible del técnico en el chat del cliente: campo `display_name` en usuarios (migración aditiva), editable en la consola; la API entrega `assigned_display_name` al dispositivo y deja de enviarle `assigned_username`, también en el `sender_name` de los mensajes (nunca el login); el cliente muestra «Atendido por <técnico>» y el nombre en sus mensajes | F4.5-16 | ControlPlane + Web + Cliente | QA | En verificación |
 
 ## F5 — Identidad y control de acceso
 

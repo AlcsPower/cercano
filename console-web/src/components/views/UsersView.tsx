@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useEffect, useState } from 'react';
-import { Users as UsersIcon, Shield, UserPlus, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Users as UsersIcon, Shield, UserPlus, Trash2, CheckCircle2, XCircle, AlertCircle, Pencil } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { UserDetail, RoleDetail, UserRole } from '../../types';
 import { AppleButton } from '../common/AppleButton';
@@ -14,6 +14,7 @@ export const UsersView: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newDisplayName, setNewDisplayName] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('operator');
   const [error, setError] = useState<string | null>(null);
 
@@ -42,10 +43,27 @@ export const UsersView: React.FC = () => {
         username: newUsername.trim(),
         password: newPassword,
         role: newRole,
+        display_name: newDisplayName.trim() || undefined,
       });
       setShowAddModal(false);
       setNewUsername('');
       setNewPassword('');
+      setNewDisplayName('');
+      loadData();
+    } catch (err: unknown) {
+      if (err instanceof Error) setError(err.message);
+    }
+  };
+
+  // F4.5-17: el nombre visible es lo que ve la persona usuaria en el chat; vacío lo borra.
+  const handleEditDisplayName = async (user: UserDetail) => {
+    const value = prompt(
+      `Nombre visible de ${user.username} en el chat (vacío para quitarlo):`,
+      user.display_name ?? '',
+    );
+    if (value === null) return;
+    try {
+      await apiClient.updateUser(user.id, { display_name: value });
       loadData();
     } catch (err: unknown) {
       if (err instanceof Error) setError(err.message);
@@ -156,6 +174,7 @@ export const UsersView: React.FC = () => {
               <thead className="bg-black/[0.02] dark:bg-white/[0.02] text-cercano-slate dark:text-gray-400 font-medium border-b border-black/5 dark:border-white/[0.04]">
                 <tr>
                   <th className="py-3.5 px-5">Usuario</th>
+                  <th className="py-3.5 px-4">Nombre visible</th>
                   <th className="py-3.5 px-4">Rol</th>
                   <th className="py-3.5 px-4 text-center">Estado</th>
                   <th className="py-3.5 px-4 text-center">2FA Configurado</th>
@@ -168,6 +187,21 @@ export const UsersView: React.FC = () => {
                   <tr key={u.id} className="hover:bg-black/[0.01] dark:hover:bg-white/[0.01]">
                     <td className="py-3.5 px-5 font-semibold text-cercano-night dark:text-white">
                       {u.username}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <button
+                        type="button"
+                        onClick={() => handleEditDisplayName(u)}
+                        aria-label={`Editar nombre visible de ${u.username}`}
+                        className="inline-flex items-center gap-1.5 hover:text-cercano-blue focus:outline-none focus:ring-1 focus:ring-cercano-blue rounded"
+                      >
+                        {u.display_name ? (
+                          <span className="text-cercano-night dark:text-white">{u.display_name}</span>
+                        ) : (
+                          <span className="text-gray-400 italic">Sin nombre</span>
+                        )}
+                        <Pencil size={12} aria-hidden="true" />
+                      </button>
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="font-mono px-2 py-0.5 rounded bg-black/5 dark:bg-white/5">
@@ -232,6 +266,20 @@ export const UsersView: React.FC = () => {
                   className="w-full px-3.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs focus:ring-2 focus:ring-cercano-blue"
                   placeholder="ej. operador01"
                   required
+                />
+              </div>
+              <div>
+                <label htmlFor="new-display-name" className="block text-xs font-semibold mb-1">
+                  Nombre visible en el chat (opcional)
+                </label>
+                <input
+                  id="new-display-name"
+                  type="text"
+                  value={newDisplayName}
+                  onChange={(e) => setNewDisplayName(e.target.value)}
+                  maxLength={64}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs focus:ring-2 focus:ring-cercano-blue"
+                  placeholder="ej. Juan Pérez"
                 />
               </div>
               <div>

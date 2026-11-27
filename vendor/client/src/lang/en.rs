@@ -201,7 +201,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-2fa-desc", "Please set up your authenticator now. You can use an authenticator app such as Authy, Microsoft or Google Authenticator on your phone or desktop.\n\nScan the QR code with your app and enter the code that your app shows to enable two-factor authentication."),
         ("wrong-2fa-code", "Can't verify the code. Check that code and local time settings are correct"),
         ("enter-2fa-title", "Two-factor authentication"),
-        ("powered_by_me", "Powered by RustDesk"),
+        ("powered_by_me", "Powered by Cercano · AGPL-3.0"),
         ("outgoing_only_desk_tip", "This is a customized edition.\nYou can connect to other devices, but other devices cannot connect to your device."),
         ("preset_password_warning", "This customized edition comes with a preset password. Anyone knowing this password could gain full control of your device. If you did not expect this, uninstall the software immediately."),
         ("share_warning_tip", "The fields above are shared and visible to others."),
@@ -292,5 +292,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_empty_tip", "With API Server empty, your custom server defaults to HTTP. Contact your administrator to enable HTTPS."),
         ("android-logs-folder-tip", "Choose Android → media to store log files."),
         ("install-directory-not-empty-tip", "The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder."),
+        ("cercano-receive-only-tip", "This app only receives support: it cannot connect to other computers. Every session is recorded in your organization's audit log."),
+        ("cercano-id-tip", "Give it to the technician helping you. Nobody can get in without your approval."),
+        ("cercano-end-session-tip", "You can end the session at any time from the active session indicator."),
     ].iter().cloned().collect();
 }
