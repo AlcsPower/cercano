@@ -33,6 +33,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
 | `015-client-reproducible-build-date.patch` | F3-03 | `vendor/client` | `BUILD_DATE` toma `SOURCE_DATE_EPOCH` (UTC) si está definido, en lugar de la hora local de compilación (TC-F3-021) | `libs/hbb_common/src/lib.rs` | 2026-11-25 | Agente-Builder |
 | `016-client-wpwd-mut.patch` | F3-16 | `vendor/client` | `wpwd` mutable en `create_process_with_logon` para que compile el borrado seguro de 007 (E0596 en el build de Windows) | `src/platform/windows.rs` | 2026-11-25 | Agente-Cliente |
 | `017-client-chat-dart-compile.patch` | F3-17 | `vendor/client` | El chat Flutter (009) compila en Windows: import de `bind`, `Colors.green` en lugar de `Colors.emerald`, errata `CrossAxisAlignment` | `flutter/lib/cercano_chat/cercano_chat_model.dart`, `flutter/lib/cercano_chat/cercano_chat_page.dart` | 2026-11-26 | Agente-Builder |
+| `018-client-technician-display-name.patch` | F4.5-17 | `vendor/client` | El chat muestra el nombre visible del técnico asignado («Atendido por», remitente y aviso de reasignación) con respaldo «un técnico de <organización>»; nunca el login | `flutter/lib/cercano_chat/*`, `flutter/test/cercano_chat_model_test.dart`, `src/cercano_chat.rs` | 2026-11-27 | Agente-Cliente |
 
 ---
 
@@ -356,6 +357,21 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `flutter/lib/cercano_chat/cercano_chat_model.dart` (un import)
   - `flutter/lib/cercano_chat/cercano_chat_page.dart` (color y errata)
 - **Estrategia de actualización (upstream sync):** Va junto con 009; si se reescribe, corregir en el propio 009.
+
+### [018-client-technician-display-name.patch] Tarea F4.5-17: Nombre visible del técnico en el chat
+
+- **Archivo:** `patches/018-client-technician-display-name.patch`
+- **Componente:** `vendor/client`
+- **Tarea:** `F4.5-17`
+- **Fecha:** `2026-11-27`
+- **Autor/Rol:** `Agente-Cliente`
+- **Motivo / Justificación:** `docs/specs/chat.md` §14 exige que la persona usuaria vea el nombre visible del técnico («Atendido por <técnico>», remitente de sus mensajes y aviso «Ahora te atiende <técnico>» al reasignar). La API deja de enviar `assigned_username` al dispositivo y envía `assigned_display_name`; el parche adapta el DTO Rust y el modelo/página Flutter del chat (parche 009), con respaldo «un técnico de <organization_name>».
+- **Archivos modificados:**
+  - `vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart`
+  - `vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart`
+  - `vendor/client/flutter/test/cercano_chat_model_test.dart`
+  - `vendor/client/src/cercano_chat.rs`
+- **Estrategia de actualización (upstream sync):** Cambios confinados al módulo aislado `cercano_chat`; no toca código heredado de RustDesk. Se aplica después de 017 (toca las mismas líneas de `cercano_chat_page.dart`); antes se numeraba 014.
 
 ---
 
