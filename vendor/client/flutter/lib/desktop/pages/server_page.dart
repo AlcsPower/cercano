@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/cercano_ui/cercano_ui.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
@@ -362,7 +363,17 @@ class ConnectionManagerState extends State<ConnectionManager>
 
 Widget buildConnectionCard(Client client) {
   return Consumer<ServerModel>(
-    builder: (context, value, child) => Column(
+    builder: (context, value, child) => _isCercanoConsent(client, value)
+        ? CercanoConsentCard(
+            client: client,
+            onAccept: () => checkClickTime(client.id, () {
+              value.sendLoginResponse(client, true);
+              windowManager.minimize();
+            }),
+            onReject: () => checkClickTime(client.id,
+                () => bind.cmCloseConnection(connId: client.id)),
+          )
+        : Column(
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       key: ValueKey(client.id),
@@ -384,6 +395,13 @@ Widget buildConnectionCard(Client client) {
     ).paddingSymmetric(vertical: 4.0, horizontal: 8.0),
   );
 }
+
+// Solicitud de escritorio remoto pendiente que la persona aprueba con un clic (F3-23).
+bool _isCercanoConsent(Client client, ServerModel model) =>
+    !client.authorized &&
+    !client.disconnected &&
+    client.type_() == ClientType.remote &&
+    model.approveMode != 'password';
 
 class _AppIcon extends StatelessWidget {
   const _AppIcon({Key? key}) : super(key: key);

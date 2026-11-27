@@ -80,7 +80,7 @@ Estados: `Pendiente` · `En curso` · `En verificación` · `Hecho` · `Bloquead
 | F3-22 | Marca visible: empresa (logo y nombre), «Powered by Cercano», Acerca de (sustituida por F3.5-10, ADR-015) | F3-19a, F3-02 | Cliente | QA | Diferida |
 | F3-20 | Fail-closed: sin binario base real no se empaqueta (`--allow-stub`) | F3-05, F3-07 | Builder + ControlPlane | Seguridad | Pendiente |
 | F3-21 | Prueba de humo en Windows 10/11 | F3-19, F3-20 | QA | Coordinador | Pendiente |
-| F3-23 | Interfaz de escritorio según el diseño objetivo (`docs/diseno/`); sin «Con tecnología de RustDesk» | F3-14, F3-15, F3-19 | Cliente | QA | Pendiente |
+| F3-23 | Interfaz de escritorio según el diseño objetivo (`docs/diseno/`); sin «Con tecnología de RustDesk» | F3-14, F3-15, F3-19 | Cliente | QA | En verificación |
 
 ## F3.5 — Agente Cercano y aplicación genérica
 
@@ -146,7 +146,7 @@ Fuente: `docs/PLAN-F4.5-CHAT.md` v1.1. Backend y consola dependen de F4-05/06; e
 | F4.5-14 | E2E, seguridad, carga básica y cierre | F4.5-02…13 | QA + Seguridad | Coordinador | Hecho |
 | F4.5-15 | Guía de despliegue y operación | F4.5-14 | Coordinador | QA | Hecho |
 | F4.5-16 | Marca del chat configurable desde la consola | F4.5-02, F4.5-08, F4.5-11 | Web + ControlPlane | Seguridad/QA | Hecho |
-| F4.5-17 | Nombre visible del técnico en el chat del cliente: campo `display_name` en usuarios (migración aditiva), editable en la consola; la API entrega `assigned_display_name` al dispositivo y deja de enviarle `assigned_username`, también en el `sender_name` de los mensajes (nunca el login); el cliente muestra «Atendido por <técnico>» y el nombre en sus mensajes | F4.5-16 | ControlPlane + Web + Cliente | QA | Pendiente |
+| F4.5-17 | Nombre visible del técnico en el chat del cliente: campo `display_name` en usuarios (migración aditiva), editable en la consola; la API entrega `assigned_display_name` al dispositivo y deja de enviarle `assigned_username`, también en el `sender_name` de los mensajes (nunca el login); el cliente muestra «Atendido por <técnico>» y el nombre en sus mensajes | F4.5-16 | ControlPlane + Web + Cliente | QA | En verificación |
 
 ## F5 — Identidad y control de acceso
 

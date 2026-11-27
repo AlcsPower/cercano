@@ -253,7 +253,8 @@ CREATE INDEX IF NOT EXISTS idx_chat_reads_reader
 
 - **Snapshot del equipo:** `chat_conversations` guarda `device_name`, `device_hostname` y `device_os` y **no tiene FK a `devices`**. Borrar un dispositivo no borra el historial de conversaciones. `chat_devices` sí tiene FK a `devices` (la identidad muere con el dispositivo).
 - **Snapshot del contacto:** `contact_first_name` y `contact_last_name` se congelan al crear la conversación para que el técnico vea el nombre natural y el historial no cambie si la persona edita su nombre local después. Son datos personales: se borran con la conversación y no se auditan.
-- **Snapshot del remitente:** `sender_name` congela el nombre visible del técnico o del equipo, para que el historial siga siendo legible si el usuario se renombra o se elimina.
+- **Snapshot del remitente:** `sender_name` congela el nombre del técnico (su login, para la consola) o del equipo, para que el historial siga siendo legible si el usuario se renombra o se elimina. `sender_display_name` (migración 010, F4.5-17) congela el **nombre visible** del técnico (`users.display_name`) al enviar; es lo único que el dispositivo recibe como `sender_name` en mensajes de técnico (`null` si no había nombre visible, incluidos los mensajes anteriores a la migración).
+- **Nombre visible del técnico (F4.5-17):** `users.display_name` (nullable, ≤ 64 caracteres; letras, números, espacios, `.`, `'`, `-`) se edita en la consola o en `POST`/`PATCH /api/users`; cadena vacía lo borra. Las respuestas a un dispositivo llevan `assigned_display_name` y **nunca** `assigned_username`. Los eventos SSE solo llevan IDs y estado, sin nombres.
 - **Sin FK para el remitente:** `sender_id` es un string; la conversación debe sobrevivir al borrado del usuario.
 - **Idempotencia:** `client_message_id` (UUIDv7 generado por el cliente) evita duplicados en reintentos. Un único índice parcial cubre la combinación.
 - **Una conversación abierta por dispositivo:** lo garantiza la lógica de `POST /conversations` dentro de una transacción, no un constraint, porque la definición de «abierta» es un conjunto de estados.
@@ -493,6 +494,7 @@ Permiso: `chat:manage_branding` (solo `admin`; ver `PLAN-F4-CONSOLA.md` §3). Va
   "status": "waiting",
   "assigned_user_id": null,
   "assigned_username": null,
+  "assigned_display_name": null,
   "contact_first_name": "Ana",
   "contact_last_name": "Pérez",
   "created_at": "2026-11-09T10:20:00.000Z",

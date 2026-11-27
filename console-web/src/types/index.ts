@@ -233,6 +233,7 @@ export interface ChatConversation {
   status: ChatStatus;
   assigned_user_id?: string | null;
   assigned_username?: string | null;
+  assigned_display_name?: string | null;
   contact_first_name?: string | null;
   contact_last_name?: string | null;
   created_at: string;
@@ -336,6 +337,8 @@ export interface IdpItem {
 }
 
 export interface UserDetail extends User {
+  /** Nombre visible que ve la persona usuaria del chat (F4.5-17). */
+  display_name?: string | null;
   is_active: boolean;
   totp_enabled: boolean;
   is_2fa_required: boolean;

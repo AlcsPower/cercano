@@ -1083,3 +1083,143 @@ async fn test_tc_f4_5_087_policy_chat_enforcement() {
     .await;
     assert_eq!(s_esc_denied, StatusCode::FORBIDDEN);
 }
+
+/// F4.5-17: el dispositivo ve el nombre visible del técnico y nunca su login.
+#[tokio::test]
+async fn test_tc_f4_5_17_device_never_receives_technician_username() {
+    let env = setup().await;
+    let admin_tok = bootstrap_admin_session(&env).await;
+    let tech_tok = create_technician_session(&env, &admin_tok, "jperez_login").await;
+    let tech_id: String =
+        sqlx::query_scalar("SELECT id FROM users WHERE username = 'jperez_login'")
+            .fetch_one(&env.db)
+            .await
+            .unwrap();
+
+    let (dev_token, _) = create_authenticated_device(&env, "device_c_017").await;
+    let (_, create_body) = request_raw(
+        &env,
+        "POST",
+        "/api/chat/conversations",
+        Some(&dev_token),
+        Some(json!({
+            "contact_first_name": "Ana",
+            "contact_last_name": "Ruiz",
+            "body": "Hola"
+        })),
+    )
+    .await;
+    let conv_id = create_body["id"].as_str().unwrap().to_string();
+    let conv_uri = format!("/api/chat/conversations/{conv_id}");
+
+    let (s, _) = request_raw(
+        &env,
+        "POST",
+        &format!("{conv_uri}/claim"),
+        Some(&tech_tok),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+
+    // Sin nombre visible: el dispositivo recibe null (respaldo en el cliente).
+    let (_, msg) = request_raw(
+        &env,
+        "POST",
+        &format!("{conv_uri}/messages"),
+        Some(&tech_tok),
+        Some(json!({ "body": "Antes del nombre" })),
+    )
+    .await;
+    assert_eq!(
+        msg["sender_name"], "jperez_login",
+        "la consola conserva el login"
+    );
+
+    // Validación del nombre visible.
+    for bad in ["<script>".to_string(), "x".repeat(65)] {
+        let (s, b) = request_raw(
+            &env,
+            "PATCH",
+            &format!("/api/users/{tech_id}"),
+            Some(&admin_tok),
+            Some(json!({ "display_name": bad })),
+        )
+        .await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "{bad}");
+        assert_eq!(b["error"], "validation_error");
+    }
+
+    // La consola guarda y devuelve el nombre visible (espacios normalizados).
+    let (s, user) = request_raw(
+        &env,
+        "PATCH",
+        &format!("/api/users/{tech_id}"),
+        Some(&admin_tok),
+        Some(json!({ "display_name": "  Juan   Pérez " })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(user["display_name"], "Juan Pérez");
+    let (_, users) = request_raw(&env, "GET", "/api/users", Some(&admin_tok), None).await;
+    assert!(users
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|u| u["display_name"] == "Juan Pérez"));
+
+    let (_, _) = request_raw(
+        &env,
+        "POST",
+        &format!("{conv_uri}/messages"),
+        Some(&tech_tok),
+        Some(json!({ "body": "Ya con nombre" })),
+    )
+    .await;
+
+    // Vista del dispositivo: nombre visible y ningún rastro del login.
+    let (s, detail) = request_raw(&env, "GET", &conv_uri, Some(&dev_token), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(detail["assigned_display_name"], "Juan Pérez");
+    assert!(detail.get("assigned_username").is_none());
+    let tech_names: Vec<&Value> = detail["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|m| m["sender_type"] == "technician")
+        .map(|m| &m["sender_name"])
+        .collect();
+    assert_eq!(tech_names.len(), 2);
+    assert!(tech_names.contains(&&Value::Null));
+    assert!(tech_names.contains(&&json!("Juan Pérez")));
+    assert!(!detail.to_string().contains("jperez_login"));
+
+    // Vista de la consola: conserva el login para el equipo técnico.
+    let (_, console) = request_raw(&env, "GET", &conv_uri, Some(&admin_tok), None).await;
+    assert_eq!(console["assigned_username"], "jperez_login");
+    assert_eq!(console["assigned_display_name"], "Juan Pérez");
+
+    // Cierre desde el dispositivo: tampoco devuelve el login.
+    let (s, closed) = request_raw(
+        &env,
+        "POST",
+        &format!("{conv_uri}/close"),
+        Some(&dev_token),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(!closed.to_string().contains("jperez_login"));
+    assert_eq!(closed["assigned_display_name"], "Juan Pérez");
+
+    // Borrar el nombre visible con cadena vacía.
+    let (_, user) = request_raw(
+        &env,
+        "PATCH",
+        &format!("/api/users/{tech_id}"),
+        Some(&admin_tok),
+        Some(json!({ "display_name": "" })),
+    )
+    .await;
+    assert!(user["display_name"].is_null());
+}
