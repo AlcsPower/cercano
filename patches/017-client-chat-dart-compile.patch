@@ -1,0 +1,53 @@
+From: Agente-Builder <cercano-dev@local>
+Subject: [PATCH] fix(client): chat Flutter compila en Windows (import de bind, Colors.green, CrossAxisAlignment)
+Date: 2026-11-26
+Component: vendor/client
+Task: F3-17
+
+El parche 009 dejo tres errores de Dart que rompian flutter build windows:
+cercano_chat_model.dart usaba bind sin importar platform_model.dart; cercano_chat_page.dart
+usaba Colors.emerald (inexistente) y la errata CrossCrossAlignment.
+---
+diff --git a/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart b/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart
+index 4511dbe..bd3b064 100644
+--- a/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart
++++ b/vendor/client/flutter/lib/cercano_chat/cercano_chat_model.dart
+@@ -4,6 +4,7 @@
+ import 'dart:convert';
+ import 'package:flutter/foundation.dart';
+ import 'package:flutter_hbb/common.dart';
++import 'package:flutter_hbb/models/platform_model.dart';
+ import 'cercano_chat_ffi_bridge.dart';
+ 
+ class ChatBranding {
+diff --git a/vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart b/vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart
+index f3c0b84..1b8e505 100644
+--- a/vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart
++++ b/vendor/client/flutter/lib/cercano_chat/cercano_chat_page.dart
+@@ -146,7 +146,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
+                 width: 8,
+                 height: 8,
+                 decoration: BoxDecoration(
+-                  color: model.isOnline ? Colors.emerald : Colors.amber,
++                  color: model.isOnline ? Colors.green : Colors.amber,
+                   shape: BoxShape.circle,
+                 ),
+               ),
+@@ -156,7 +156,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
+                 style: TextStyle(
+                   fontSize: 12,
+                   fontWeight: FontWeight.w600,
+-                  color: model.isOnline ? Colors.emerald.shade700 : Colors.amber.shade800,
++                  color: model.isOnline ? Colors.green.shade700 : Colors.amber.shade800,
+                 ),
+               ),
+             ],
+@@ -331,7 +331,7 @@ class _CercanoChatPageState extends State<CercanoChatPage> {
+             ),
+             child: Column(
+               crossAxisAlignment:
+-                  isMine ? CrossCrossAlignment.end : CrossCrossAlignment.start,
++                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+               children: [
+                 if (!isMine && msg.senderName != null)
+                   Padding(
