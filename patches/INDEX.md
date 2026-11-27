@@ -82,6 +82,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `vendor/server/libs/hbb_common/Cargo.toml`
   - `vendor/server/libs/hbb_common/src/config.rs`
 - **Estrategia de actualización (upstream sync):** Revisar claves de bundle en Flutter y macOS/Windows runners al actualizar de Flutter Rust Bridge / upstream tag. Verificar que `hbb_common::config::APP_NAME` se mantenga como el punto central de derivación de directorios locales.
+- **Corrección (2026-11-27, F4.5-10):** se quitó el hunk que apuntaba `hbb_common` a `../server/libs/hbb_common` en `vendor/client/Cargo.toml`; F3-19a (71aff6f) lo devolvió a `libs/hbb_common` en `vendor/` y el parche ya no se podía revertir.
 
 ---
 
@@ -104,6 +105,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `vendor/client/src/rendezvous_mediator.rs`
   - `vendor/server/libs/hbb_common/src/config.rs`
 - **Estrategia de actualización (upstream sync):** Verificar la compatibilidad del formato del payload JSON enviado por `sync.rs` contra la especificación OpenAPI de `cercano-api` (`/api/devices/heartbeat`).
+- **Corrección (2026-11-27, F4.5-10):** se quitó una línea de contexto sobrante del hunk de `rendezvous_mediator.rs` que no entraba en su conteo.
 
 ---
 
@@ -134,6 +136,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/common.rs`
   - `src/lib.rs`
 - **Estrategia de actualización (upstream sync):** El módulo `cercano_profile` es puramente aditivo; se engancha en `load_custom_client()` en `src/common.rs`. Al actualizar upstream, verificar que `config::OVERWRITE_SETTINGS` y `config::APP_NAME` continúen existiendo en `hbb_common`.
+- **Corrección (2026-11-27, F4.5-10):** la cabecera de `cercano_profile.rs` declaraba 469 líneas en vez de 470; además el parche repetía íntegra la sección de `src/server/connection.rs` de la 004 (hooks de auditoría), que se eliminó porque no se aplicaba tras la 004.
 
 ---
 
@@ -210,6 +213,7 @@ Los parches se almacenan en este directorio (`patches/*.patch`) y se aplican med
   - `src/lib.rs`
   - `src/flutter_ffi.rs`
 - **Estrategia de actualización (upstream sync):** La lógica de chat está completamente encapsulada en `src/cercano_chat.rs`. En `src/lib.rs` y `src/flutter_ffi.rs` solo se añaden declaraciones públicas que no colisionan con llamadas existentes de RustDesk.
+- **Corrección (2026-11-27, F4.5-10):** la cabecera de `cercano_chat.rs` declaraba 654 líneas en vez de 652 y `git apply` rechazaba el parche como corrupto; el contenido ya coincidía con `vendor/`.
 
 ---
 

@@ -26,10 +26,10 @@ index 28e8b1f..1f9abab 100644
  # https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
 diff --git a/vendor/client/src/cercano_chat.rs b/vendor/client/src/cercano_chat.rs
 new file mode 100644
-index 0000000..1124bcb
+index 0000000..4b3bab2
 --- /dev/null
 +++ b/vendor/client/src/cercano_chat.rs
-@@ -0,0 +1,654 @@
+@@ -0,0 +1,652 @@
 +// Copyright (C) 2026 Cercano Contributors
 +//
 +// This file is part of Cercano.
