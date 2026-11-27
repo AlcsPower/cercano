@@ -71,6 +71,7 @@ jobs:
           ~/.cargo/bin/flutter_rust_bridge_codegen \
             --rust-input ./src/flutter_ffi.rs \
             --dart-output ./flutter/lib/generated_bridge.dart \
+            --class-name Rustdesk \
             --c-output ./flutter/macos/Runner/bridge_generated.h
 
       - name: Upload Bridge Artifacts
